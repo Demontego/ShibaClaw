@@ -8,6 +8,53 @@
 .input-wrapper {
     max-width: var(--chat-width);
     margin: 0 auto;
+    container-type: inline-size;
+    container-name: input-container;
+}
+
+@container input-container (max-width: 740px) {
+    .input-hint {
+        display: none;
+    }
+    #active-model-display {
+        max-width: 90px;
+    }
+    .btn-input-action {
+        padding: 3px 6px;
+        gap: 3px;
+    }
+    #btn-context span:not(.material-icons-round),
+    #btn-stop span:not(.material-icons-round) {
+        display: none;
+    }
+}
+
+:root[data-layout-mode="narrow"] .input-hint {
+    display: none;
+}
+
+:root[data-layout-mode="narrow"] #active-model-display {
+    max-width: 90px;
+}
+
+:root[data-layout-mode="narrow"] .btn-input-action {
+    padding: 3px 6px;
+    gap: 3px;
+}
+
+:root[data-layout-mode="narrow"] #btn-context span:not(.material-icons-round),
+:root[data-layout-mode="narrow"] #btn-stop span:not(.material-icons-round) {
+    display: none;
+}
+
+@container input-container (max-width: 560px) {
+    #active-model-display {
+        max-width: 70px;
+    }
+    #active-reasoning-display,
+    #active-kb-display {
+        display: none;
+    }
 }
 
 .thinking-indicator {

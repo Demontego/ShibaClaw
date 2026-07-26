@@ -37,12 +37,13 @@
 ---
 
 <details open>
-<summary>📢 <b>What's new — v0.9.11</b> (click to expand)</summary>
+<summary>📢 <b>What's new — v0.9.12</b> (click to expand)</summary>
 
-**Latest release (2026-07-22):**
+**Latest release (2026-07-26):**
 
-- **Command Injection Vulnerability Fix in ExecTool** — Resolved a critical command injection vulnerability (CWE-78) in shell execution by replacing shell-based execution with safe `shlex` argument parsing and direct process execution (`create_subprocess_exec`).
-- **Dependency Security Vulnerabilities** — Resolved security vulnerabilities in bridge npm dependencies by updating overrides for `protobufjs` (v7.6.5) and `sharp` (v0.35.3).
+- **Dynamic Reasoning & Thinking Effort Across Providers** — Expanded reasoning/thinking model pattern detection and API capability extraction across OpenAI, Anthropic (Claude 3.7+ extended thinking), Gemini, DeepSeek R1, Qwen QwQ, Grok-3, Kimi, and open reasoning models.
+- **WebUI Chat Footer & Compact Thinking Popover** — Single-line layout fix for chat input controls and compact glassmorphic reasoning effort selector dropdown.
+- **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window.
 - **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks.
 - **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.
 - **Cloud RAG Dependencies** — Corrected Cloud RAG dependency bounds and default embedding model configuration.

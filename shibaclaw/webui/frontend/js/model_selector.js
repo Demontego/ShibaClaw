@@ -322,6 +322,7 @@ window.updateReasoningSelectorDisplay = updateReasoningSelectorDisplay;
 
 async function updateModelSelectorDisplay(modelId) {
     const display = document.getElementById("active-model-display");
+    const btn = document.getElementById("btn-model-select");
     if (!display) return;
     let resolvedModelId = modelId;
     if (!resolvedModelId) {
@@ -336,8 +337,19 @@ async function updateModelSelectorDisplay(modelId) {
 
     await ensureAvailableModels();
     const match = findAvailableModel(resolvedModelId);
-    display.textContent = match ? (match.name || match.raw_id || match.id) : (resolvedModelId || "Default");
+    const fullName = match ? (match.name || match.raw_id || match.id) : (resolvedModelId || "Default");
+    display.textContent = fullName;
+
+    if (btn) {
+        const providerText = match && (match.provider_label || match.provider) ? ` (${match.provider_label || match.provider})` : "";
+        const rawIdText = match && match.raw_id && match.raw_id !== fullName ? ` • ${match.raw_id}` : "";
+        btn.title = `Active Model: ${fullName}${providerText}${rawIdText}`;
+    }
+
     updateReasoningSelectorDisplay(_activeSessionReasoningEffort, resolvedModelId);
+    if (typeof refreshTokenBadge === "function") {
+        refreshTokenBadge();
+    }
 }
 
 
@@ -503,6 +515,9 @@ function setupModelSelector() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ model: model.id })
                 });
+                if (typeof refreshTokenBadge === "function") {
+                    refreshTokenBadge();
+                }
             }
         });
     }

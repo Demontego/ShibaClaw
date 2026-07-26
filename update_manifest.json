@@ -1,26 +1,26 @@
 {
-    "version": "0.9.11",
-    "release_notes": "Security fixes for ExecTool command injection (CWE-78) and dependency vulnerabilities, agent loop & steering stability fixes, WebUI token estimation fix, and Cloud RAG dependency corrections.",
+    "version": "0.9.12",
+    "release_notes": "Dynamic thinking/reasoning effort support across all LLM providers and models, Anthropic extended thinking integration, OpenRouter API parameter extraction, single-line WebUI chat footer layout fix, and compact reasoning effort popover UI.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped version to 0.9.6."
+            "note": "Bumped version to 0.9.12."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v0.9.6 release notes."
+            "note": "Added v0.9.12 release notes."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated documentation version to 0.9.6."
+            "note": "Updated documentation version to 0.9.12."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Bumped packaged update manifest to v0.9.6."
+            "note": "Bumped packaged update manifest to v0.9.12."
         },
         {
             "path": "shibaclaw/webui/frontend/index.html",

@@ -40,7 +40,7 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Novedades — v0.9.11</b> (haz clic para expandir)</summary>
+<summary>📢 <b>Novedades — v0.9.12</b> (haz clic para expandir)</summary>
 
 **Última versión (2026-07-22):**
 

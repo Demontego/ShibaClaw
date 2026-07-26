@@ -40,7 +40,7 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Neuigkeiten — v0.9.11</b> (zum Ausklappen klicken)</summary>
+<summary>📢 <b>Neuigkeiten — v0.9.12</b> (zum Ausklappen klicken)</summary>
 
 **Neueste Version (2026-07-22):**
 

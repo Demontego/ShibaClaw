@@ -40,7 +40,7 @@
 > リリースノートは [CHANGELOG.md](./CHANGELOG.md) にあります。
 
 <details open>
-<summary>📢 <b>最新情報 — v0.9.11</b>（クリックで展開）</summary>
+<summary>📢 <b>最新情報 — v0.9.12</b>（クリックで展開）</summary>
 
 **最新リリース（2026-07-22）：**
 

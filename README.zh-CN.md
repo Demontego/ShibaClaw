@@ -40,7 +40,7 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>📢 <b>最新动态 — v0.9.11</b>（点击展开）</summary>
+<summary>📢 <b>最新动态 — v0.9.12</b>（点击展开）</summary>
 
 **最新版本（2026-07-22）：**
 
