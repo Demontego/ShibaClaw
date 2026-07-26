@@ -153,10 +153,17 @@ class OpenAIThinker(Thinker):
                     kwargs.update(overrides)
                     return
 
-    async def get_available_models(self) -> list[dict[str, str]]:
+    async def get_available_models(self) -> list[dict[str, Any]]:
         try:
             res = await self._client.models.list()
-            return [{"id": m.id, "name": getattr(m, "name", m.id)} for m in res.data]
+            models = []
+            for m in res.data:
+                entry: dict[str, Any] = {"id": m.id, "name": getattr(m, "name", m.id)}
+                supported = getattr(m, "supported_parameters", None) or getattr(m, "supported_params", None)
+                if supported and isinstance(supported, list):
+                    entry["supported_parameters"] = supported
+                models.append(entry)
+            return models
         except Exception as e:
             logger.error("Failed to fetch models from OpenAI/compatible provider: {}", e)
             return []

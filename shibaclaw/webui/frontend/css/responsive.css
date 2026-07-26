@@ -132,6 +132,14 @@
         padding-bottom: max(8px, env(safe-area-inset-bottom));
     }
 
+    .input-hint {
+        display: none;
+    }
+
+    #active-model-display {
+        max-width: 110px;
+    }
+
     .sidebar-backdrop {
         display: block;
         position: fixed;

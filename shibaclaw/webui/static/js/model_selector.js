@@ -104,7 +104,13 @@ function findAvailableModel(modelId) {
     if (!modelId) {
         return null;
     }
-    return _availableModels.find(m => m.id === modelId || m.raw_id === modelId) || null;
+    const cleanId = String(modelId).trim().toLowerCase();
+    const rawName = cleanId.split("/").pop();
+    return _availableModels.find(m => {
+        const mId = (m.id || "").toLowerCase();
+        const mRaw = (m.raw_id || "").toLowerCase();
+        return mId === cleanId || mRaw === cleanId || mRaw === rawName || mId.endsWith("/" + rawName);
+    }) || null;
 }
 
 function createModelListItem(model, currentModelId, onSelect) {
@@ -139,6 +145,181 @@ function renderModelList(list, models, currentModelId, onSelect, extraItems = []
     allItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
 }
 
+let _activeSessionReasoningEffort = null;
+
+function checkModelSupportsReasoning(modelId) {
+    if (!modelId) return false;
+    const model = findAvailableModel(modelId);
+    if (model && typeof model.supports_reasoning === "boolean") {
+        return model.supports_reasoning;
+    }
+    const mid = String(modelId).toLowerCase().trim();
+    const raw = mid.split("/").pop();
+    const base = raw.split(":")[0];
+
+    // 1. OpenAI o-series & Azure/OpenRouter o-deployments (o1, o3, o4)
+    if (base.startsWith("o1") || base.startsWith("o3") || base.startsWith("o4") || base.includes("-o1") || base.includes("o1-") || base.includes("-o3") || base.includes("o3-") || base.includes("-o4") || base.includes("o4-")) {
+        return true;
+    }
+    // 2. Anthropic Claude 3.7+
+    if (base.includes("claude-3-7") || base.includes("claude-3.7") || base.includes("claude-4")) {
+        return true;
+    }
+    // 3. Gemini thinking models
+    if (base.includes("thinking") || base.includes("gemini-2.5") || base.includes("gemini-3")) {
+        return true;
+    }
+    // 4. DeepSeek R1 / Reasoner models
+    if (base.includes("deepseek-r1") || base.includes("reasoner") || base.includes("-r1") || base.includes("r1-") || raw.includes("r1:") || base === "r1") {
+        return true;
+    }
+    // 5. Qwen QwQ / QvQ
+    if (base.includes("qwq") || base.includes("qvq")) {
+        return true;
+    }
+    // 6. Grok 3 / xAI
+    if (base.includes("grok-3") || base.includes("grok-beta")) {
+        return true;
+    }
+    // 7. Kimi / Moonshot
+    if (base.includes("kimi-k1.5") || base.includes("kimi-k2") || (base.includes("kimi") && (base.includes("1.5") || base.includes("2")))) {
+        return true;
+    }
+    // 8. GLM zero
+    if (base.includes("glm-4-zero") || base.includes("glm-zero")) {
+        return true;
+    }
+    // 9. Generic open reasoning models & keywords
+    if (base.includes("marco-o1") || base.includes("sky-t1") || base.includes("smallthinker") || base.includes("reasoning") || base.includes("think") || base.includes("thought")) {
+        return true;
+    }
+
+    return false;
+}
+
+function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) {
+    if (typeof reasoningEffort !== "undefined" && reasoningEffort !== null) {
+        _activeSessionReasoningEffort = reasoningEffort;
+    }
+    const currentModel = modelId || state.activeModelId || "";
+    const btn = document.getElementById("btn-reasoning-select");
+    const display = document.getElementById("active-reasoning-display");
+    const menu = document.getElementById("reasoning-dropdown-menu");
+    const list = document.getElementById("reasoning-dropdown-list");
+    if (!display || !btn) return;
+
+    const supports = checkModelSupportsReasoning(currentModel);
+    if (!supports) {
+        display.textContent = "Effort: N/A";
+        btn.title = "Reasoning effort not supported for current model";
+        btn.classList.add("disabled");
+        btn.style.opacity = "0.5";
+        btn.style.cursor = "not-allowed";
+        if (menu) menu.style.display = "none";
+        return;
+    }
+
+    btn.classList.remove("disabled");
+    btn.style.opacity = "";
+    btn.style.cursor = "";
+    btn.title = "Change reasoning effort for active session";
+
+    const effortStr = _activeSessionReasoningEffort ? String(_activeSessionReasoningEffort).toLowerCase() : "";
+    let label = "Default";
+    if (effortStr === "low") label = "Low";
+    else if (effortStr === "medium") label = "Medium";
+    else if (effortStr === "high") label = "High";
+
+    display.textContent = "Effort: " + label;
+
+    if (list) {
+        renderReasoningDropdownList(list, effortStr);
+    }
+}
+
+function renderReasoningDropdownList(container, currentEffort) {
+    container.innerHTML = "";
+    const options = [
+        { value: "", label: "Default", desc: "Use provider default effort" },
+        { value: "low", label: "Low", desc: "Faster, lower reasoning depth" },
+        { value: "medium", label: "Medium", desc: "Balanced reasoning effort" },
+        { value: "high", label: "High", desc: "Deep reasoning, higher accuracy" }
+    ];
+
+    options.forEach(opt => {
+        const item = document.createElement("div");
+        const isSelected = (opt.value === currentEffort) || (!opt.value && !currentEffort);
+        item.className = "model-item" + (isSelected ? " selected" : "");
+        item.title = opt.desc;
+        item.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; cursor: pointer; border-radius: 6px; font-size: 12px; font-weight: 500; min-height: 28px; transition: background 0.15s ease;";
+        
+        const nameEl = document.createElement("span");
+        nameEl.className = "model-item-name";
+        nameEl.style.cssText = "font-size: 12px; font-weight: 500; color: var(--text-primary);";
+        nameEl.textContent = opt.label;
+
+        item.appendChild(nameEl);
+
+        if (isSelected) {
+            const checkEl = document.createElement("span");
+            checkEl.className = "material-icons-round";
+            checkEl.style.cssText = "font-size: 14px; color: var(--shiba-gold); margin-left: 8px;";
+            checkEl.textContent = "check";
+            item.appendChild(checkEl);
+        }
+
+        item.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const val = opt.value || null;
+            _activeSessionReasoningEffort = val;
+            updateReasoningSelectorDisplay(val, state.activeModelId);
+            const menu = document.getElementById("reasoning-dropdown-menu");
+            if (menu) menu.style.display = "none";
+
+            if (state.sessionId) {
+                try {
+                    await authFetch("/api/sessions/" + encodeURIComponent(state.sessionId), {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ reasoning_effort: val })
+                    });
+                } catch (err) {
+                    console.error("Failed to update session reasoning effort", err);
+                }
+            }
+        });
+
+        container.appendChild(item);
+    });
+}
+
+function setupReasoningSelector() {
+    const btn = document.getElementById("btn-reasoning-select");
+    const menu = document.getElementById("reasoning-dropdown-menu");
+    if (!btn || !menu) return;
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (btn.classList.contains("disabled")) return;
+        const isHidden = menu.style.display === "none";
+        if (isHidden) {
+            menu.style.display = "block";
+            updateReasoningSelectorDisplay(_activeSessionReasoningEffort, state.activeModelId);
+        } else {
+            menu.style.display = "none";
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+            menu.style.display = "none";
+        }
+    });
+}
+
+window.checkModelSupportsReasoning = checkModelSupportsReasoning;
+window.updateReasoningSelectorDisplay = updateReasoningSelectorDisplay;
+
 async function updateModelSelectorDisplay(modelId) {
     const display = document.getElementById("active-model-display");
     if (!display) return;
@@ -156,7 +337,9 @@ async function updateModelSelectorDisplay(modelId) {
     await ensureAvailableModels();
     const match = findAvailableModel(resolvedModelId);
     display.textContent = match ? (match.name || match.raw_id || match.id) : (resolvedModelId || "Default");
+    updateReasoningSelectorDisplay(_activeSessionReasoningEffort, resolvedModelId);
 }
+
 
 function closeSettingsModelMenus(exceptMenu = null) {
     SETTINGS_MODEL_PICKERS.forEach(cfg => {
@@ -326,5 +509,9 @@ function setupModelSelector() {
 }
 document.addEventListener("DOMContentLoaded", () => {
     setupSettingsModelPickers();
-    setTimeout(setupModelSelector, 500);
+    setTimeout(() => {
+        setupModelSelector();
+        setupReasoningSelector();
+    }, 500);
 });
+

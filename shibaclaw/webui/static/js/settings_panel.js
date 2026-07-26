@@ -653,11 +653,49 @@ function populateSettings(cfg) {
     $("s-agent-maxTokens").value = d.maxTokens ?? 8192;
     $("s-agent-ctxTokens").value = d.contextWindowTokens ?? 65536;
     $("s-agent-maxIter").value = d.maxToolIterations ?? 40;
-    $("s-agent-toolTimeout").value = d.toolTimeout ?? 660;
-    $("s-agent-loopWallTimeout").value = d.loopWallTimeout ?? 600;
-    $("s-agent-subagentTimeout").value = d.subagentTimeout ?? 600;
+    $("s-agent-toolTimeout").value = d.toolTimeout ?? 0;
+    $("s-agent-loopWallTimeout").value = d.loopWallTimeout ?? 0;
+    $("s-agent-subagentTimeout").value = d.subagentTimeout ?? 0;
     $("s-agent-workspace").value = d.workspace || "~/.shibaclaw/workspace";
     $("s-agent-reasoning").value = d.reasoningEffort || "";
+    void syncSettingsReasoningDropdown(d.model || "");
+
+async function syncSettingsReasoningDropdown(modelId = null) {
+    const el = $("s-agent-reasoning");
+    if (!el) return;
+    const selectedModel = modelId || $("s-agent-model")?.value || "";
+    const currentVal = el.value;
+
+    let supports = false;
+    if (typeof window.checkModelSupportsReasoning === "function") {
+        supports = window.checkModelSupportsReasoning(selectedModel);
+    } else {
+        const mid = selectedModel.toLowerCase();
+        const raw = mid.split("/").pop();
+        if (raw.startsWith("o1") || raw.startsWith("o3") || raw.includes("claude-3-7") || raw.includes("thinking") || raw.includes("r1") || raw.includes("think") || raw.includes("reasoner")) {
+            supports = true;
+        }
+    }
+
+    if (supports) {
+        el.disabled = false;
+        el.style.opacity = "";
+        el.innerHTML = `
+            <option value="">Default (Inherit / Provider default)</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+        `;
+        el.value = currentVal || "";
+    } else {
+        el.innerHTML = `<option value="">Not Supported for this model</option>`;
+        el.value = "";
+        el.disabled = true;
+        el.style.opacity = "0.6";
+    }
+}
+window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
+
 
     // RAG settings
     const rg = cfg.rag || {};
@@ -864,7 +902,7 @@ function populateSettings(cfg) {
     $("s-tool-proxy").value = tw.proxy || "";
     const te = cfg.tools?.exec || {};
     $("s-tool-execEnable").checked = te.enable !== false;
-    $("s-tool-execTimeout").value = te.timeout ?? 60;
+    $("s-tool-execTimeout").value = te.timeout ?? 0;
     $("s-tool-restrict").checked = !!cfg.tools?.restrictToWorkspace;
 
 

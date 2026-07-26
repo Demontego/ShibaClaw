@@ -566,12 +566,26 @@ class ShibaBrain:
                 "content": static_prompt + "\n\n---\n\n" + live_block,
             }
 
+            session_reasoning_effort = None
+            if session_key and hasattr(self, "sessions") and self.sessions:
+                try:
+                    sess = self.sessions.get_or_create(session_key)
+                    session_reasoning_effort = sess.metadata.get("reasoning_effort")
+                except Exception:
+                    pass
+
+            call_kwargs = {}
+            if session_reasoning_effort:
+                call_kwargs["reasoning_effort"] = session_reasoning_effort
+
             response = await active_provider.chat_with_retry_streaming(
                 messages=messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
+                **call_kwargs,
             )
+
 
             if response.has_tool_calls:
                 if on_progress:

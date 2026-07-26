@@ -684,6 +684,9 @@ function _syncSessionUI(data, loadSeq, sessionId) {
     if (typeof updateModelSelectorDisplay === "function") {
         updateModelSelectorDisplay(data.model || "");
     }
+    if (typeof window.updateReasoningSelectorDisplay === "function") {
+        window.updateReasoningSelectorDisplay(data.reasoning_effort || null, data.model || "");
+    }
     if (typeof window.setActiveKBs === "function") {
         window.setActiveKBs(data.knowledge_bases || []);
     }

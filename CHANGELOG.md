@@ -1,10 +1,19 @@
 ## [0.9.12] - 2026-07-23
 
 ### Added
+- **Dynamic Reasoning & Thinking Effort Support Across Providers** — Expanded reasoning/thinking model pattern detection and API capability extraction across all LLM providers and model formats:
+  - **OpenAI & Azure OpenAI**: Full reasoning effort support for `o1`, `o3`, `o4`, `o1-mini`, `o1-preview`, `o3-mini`, `o3-high`, and custom Azure deployments (`-o1`, `o1-`, `-o3`, `o3-`).
+  - **Anthropic**: Extended thinking support for Claude 3.7+ (`claude-3-7-sonnet`, `claude-3.7-sonnet`). Automatically maps `reasoning_effort` (low/medium/high) to Anthropic's API parameter `thinking={"type": "enabled", "budget_tokens": ...}` with automatic token budget and temperature adjustments.
+  - **Gemini / Google**: Dynamic reasoning effort support for `gemini-2.0-flash-thinking-exp`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.6-flash`, `gemini-3-flash`.
+  - **DeepSeek & Qwen**: Comprehensive support for DeepSeek R1 models (`deepseek-r1`, `deepseek/r1`, `r1:8b`, `deepseek-reasoner`) and Qwen QwQ/QvQ models (`qwq-32b`, `qwen/qwq-32b`, `qvq-72b`).
+  - **xAI, Moonshot Kimi, Zhipu GLM & Open Models**: Native reasoning effort support for Grok 3 (`grok-3`, `grok-3-think`), Kimi (`kimi-k1.5`, `kimi-k2`), GLM Zero (`glm-4-zero`), Marco-o1, Sky-T1, and SmallThinker.
+- **API Model Parameter Metadata Extraction** — `OpenAIProvider.get_available_models()` and WebUI settings model normalizer now extract `supported_parameters` directly from provider API responses (e.g. OpenRouter), enabling instant reasoning effort detection for new models without requiring client updates.
 - **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window (e.g. 1M/2M for Gemini 2.5/3.6, 200k for Claude 3.5/3.7, 128k for GPT-4o, DeepSeek, Qwen, and Llama).
 - **Default No-Timeout (Infinite) Mode & Visual Info Tooltips** — Standardized all default timeout configuration values (`tool_timeout`, `loop_wall_timeout`, `subagent_timeout`, `exec_timeout`, `mcp.tool_timeout`, `mcp.callback_timeout`) to `0` (no timeout / infinite execution). Added interactive native info icons (ℹ️) with `0 = no timeout (infinito)` tooltips across WebUI settings forms and MCP editor modals.
 
 ### Fixed
+- **WebUI Chat Footer Layout & Single-Line Overflow** — Resolved an issue in the WebUI chat input area where footer controls (Model selector, Reasoning Effort, KBs, Context, Stop, Token Badge, Shift+Enter hint) wrapped onto multiple lines ("vanno a capo") on default and narrow viewports. Added `flex-wrap: nowrap`, text truncation (`text-overflow: ellipsis; max-width: 135px`) for long model names (e.g. `NVIDIA: Nemotron 3 Ultra (free)`), and responsive layout rules.
+- **Sleek Compact Reasoning Effort Popover Menu** — Redesigned the Reasoning Effort dropdown menu from bulky multi-line boxes into a compact, single-line glassmorphism popover (`backdrop-filter: blur(12px)`) with gold checkmarks for selected options. Fixed clipping caused by container `overflow: hidden`.
 - **WebUI Context Token Badge Visual Overflow** — Resolved an issue where sessions exceeding default `65536` historical tokens displayed an inaccurate red `172%` usage badge in the WebUI. The badge and context modal now scale dynamically against the active model's real context limit and active prompt context, matching VS Code / Antigravity IDE compact display behavior.
 - **Agent CLI Console ImportError** — Resolved an `ImportError` for `console` in `shibaclaw/cli/agent.py` by replacing direct `console` import references with `get_console()` helper calls for interactive agent CLI output (#148).
 
