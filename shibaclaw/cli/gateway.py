@@ -465,7 +465,7 @@ async def gateway_command(
                     payload = msg.get("payload", {})
                     await _handle_ws_request(websocket, request_id, action, payload)
 
-        except websockets.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
             logger.debug("WS handler error: {}", e)
@@ -547,7 +547,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                     async def _on_ws_response_token(token_text):
@@ -562,7 +562,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                     try:
@@ -606,7 +606,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
                     except Exception as e:
                         try:
@@ -620,7 +620,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                 task = asyncio.create_task(_run_chat(ws, request_id, payload))
@@ -782,7 +782,7 @@ async def gateway_command(
             else:
                 await ws.send(_err(f"unknown action: {action}"))
 
-        except websockets.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
             try:
