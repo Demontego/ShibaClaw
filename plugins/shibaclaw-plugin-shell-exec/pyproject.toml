@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shibaclaw-plugin-shell-exec"
+version = "0.1.0"
+description = "Secure shell execution for Rinat and Nikolay"
+dependencies = []
+
+[project.entry-points."shibaclaw.plugins"]
+shell_exec = "shell_exec:setup"
