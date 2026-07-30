@@ -87,6 +87,236 @@ _RE_MD_BOLD_ITALIC = re.compile(r"\*\*\*(.+?)\*\*\*")
 _RE_MD_ITALIC = re.compile(r"(?<![^\W_])_([^_]+)_(?![^\W_])")
 _RE_MD_BULLET = re.compile(r"^[-*]\s+", flags=re.MULTILINE)
 
+# Rich Messages auto-blocks heuristics (math / GFM tables / image collages).
+_RE_RICH_DISPLAY_MATH = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_RE_RICH_MATH_FENCE = re.compile(r"```math\s*\n([\s\S]*?)```", re.IGNORECASE)
+_RE_RICH_IMG = re.compile(
+    r"!\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+\"([^\"]*)\")?\)"
+)
+_RE_RICH_TABLE_SEP_LINE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+
+
+def _rich_should_use_blocks(text: str) -> bool:
+    """True when content has constructs better sent as explicit rich blocks."""
+    if not text:
+        return False
+    if _RE_RICH_DISPLAY_MATH.search(text) or _RE_RICH_MATH_FENCE.search(text):
+        return True
+    if "<tg-collage>" in text.lower() or "<tg-slideshow>" in text.lower():
+        return True
+    imgs = _RE_RICH_IMG.findall(text)
+    if len(imgs) >= 2:
+        return True
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        if "|" in line and _RE_RICH_TABLE_SEP_LINE.match(lines[i + 1] or ""):
+            return True
+    return False
+
+
+def _rich_parse_table_block(lines: list[str], start: int) -> tuple[dict[str, Any] | None, int]:
+    """Parse a GFM pipe-table starting at *start*. Returns (block, next_index)."""
+    if start >= len(lines) or "|" not in lines[start]:
+        return None, start
+    if start + 1 >= len(lines) or not _RE_RICH_TABLE_SEP_LINE.match(lines[start + 1]):
+        return None, start
+    rows: list[list[str]] = []
+    i = start
+    while i < len(lines) and "|" in lines[i]:
+        if i == start + 1 and _RE_RICH_TABLE_SEP_LINE.match(lines[i]):
+            i += 1
+            continue
+        cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+        rows.append(cells)
+        i += 1
+        if i < len(lines) and not lines[i].strip():
+            break
+    if not rows:
+        return None, start
+    width = max(len(r) for r in rows)
+    sep = lines[start + 1]
+    aligns: list[str] = []
+    for raw in sep.strip().strip("|").split("|"):
+        cell = raw.strip()
+        if cell.startswith(":") and cell.endswith(":"):
+            aligns.append("center")
+        elif cell.endswith(":"):
+            aligns.append("right")
+        else:
+            aligns.append("left")
+    while len(aligns) < width:
+        aligns.append("left")
+    cells_out: list[list[dict[str, Any]]] = []
+    for r_idx, row in enumerate(rows):
+        padded = row + [""] * (width - len(row))
+        cells_out.append(
+            [
+                {
+                    "text": cell,
+                    "align": aligns[c_idx],
+                    "valign": "top",
+                    **({"is_header": True} if r_idx == 0 else {}),
+                }
+                for c_idx, cell in enumerate(padded)
+            ]
+        )
+    return {
+        "type": "table",
+        "cells": cells_out,
+        "is_bordered": True,
+    }, i
+
+
+def _rich_flush_prose(buf: list[str], blocks: list[dict[str, Any]]) -> None:
+    """Turn accumulated prose lines into heading/pre/paragraph/divider blocks."""
+    chunk = "\n".join(buf).strip("\n")
+    buf.clear()
+    if not chunk.strip():
+        return
+    for part in re.split(r"\n{2,}", chunk):
+        part = part.strip("\n")
+        if not part.strip():
+            continue
+        lines = part.splitlines()
+        if len(lines) == 1 and lines[0].strip() in ("---", "***", "___"):
+            blocks.append({"type": "divider"})
+            continue
+        m = re.match(r"^(#{1,6})\s+(.+)$", lines[0].strip())
+        if m and len(lines) == 1:
+            blocks.append(
+                {
+                    "type": "heading",
+                    "text": m.group(2).strip(),
+                    "size": min(6, len(m.group(1))),
+                }
+            )
+            continue
+        if lines[0].startswith("```"):
+            lang = lines[0][3:].strip() or None
+            body_lines = lines[1:]
+            if body_lines and body_lines[-1].strip() == "```":
+                body_lines = body_lines[:-1]
+            block: dict[str, Any] = {"type": "pre", "text": "\n".join(body_lines)}
+            if lang:
+                block["language"] = lang
+            blocks.append(block)
+            continue
+        blocks.append({"type": "paragraph", "text": part})
+
+
+def build_rich_message_body(text: str) -> dict[str, Any]:
+    """Build InputRichMessage body: markdown by default, blocks for math/table/collage.
+
+    ponytail: only switch to blocks when heuristics fire; prose stays as paragraph strings.
+    """
+    src = text or ""
+    if not _rich_should_use_blocks(src):
+        return {"markdown": src}
+
+    # Normalize math fences to $$ for one scanner.
+    normalized = _RE_RICH_MATH_FENCE.sub(lambda m: f"$${m.group(1).strip()}$$", src)
+
+    blocks: list[dict[str, Any]] = []
+    prose: list[str] = []
+    lines = normalized.splitlines(keepends=False)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Display math on its own or embedded — peel $$...$$ from the line stream.
+        if "$$" in line or (line.strip().startswith("$$")):
+            # Consume a math block that may span lines.
+            joined = "\n".join(lines[i:])
+            m = _RE_RICH_DISPLAY_MATH.search(joined)
+            if m and m.start() == 0:
+                _rich_flush_prose(prose, blocks)
+                blocks.append(
+                    {
+                        "type": "mathematical_expression",
+                        "expression": m.group(1).strip(),
+                    }
+                )
+                consumed = m.end()
+                # Advance by number of lines covered.
+                covered = joined[:consumed].count("\n") + 1
+                i += covered
+                continue
+            # Math not at start of remaining text — fall through to prose with split below.
+
+        table, next_i = _rich_parse_table_block(lines, i)
+        if table is not None:
+            _rich_flush_prose(prose, blocks)
+            blocks.append(table)
+            i = next_i
+            continue
+
+        # Cluster of consecutive image markdowns → collage (need ≥2).
+        imgs: list[tuple[str, str, str]] = []
+        j = i
+        while j < len(lines):
+            im = _RE_RICH_IMG.fullmatch(lines[j].strip())
+            if not im:
+                break
+            imgs.append((im.group(1) or "", im.group(2), im.group(3) or ""))
+            j += 1
+        if len(imgs) >= 2:
+            _rich_flush_prose(prose, blocks)
+            photo_blocks: list[dict[str, Any]] = []
+            for alt, url, _title in imgs:
+                photo: dict[str, Any] = {
+                    "type": "photo",
+                    "photo": {"type": "photo", "media": url},
+                }
+                if alt:
+                    photo["caption"] = {"text": alt}
+                photo_blocks.append(photo)
+            blocks.append({"type": "collage", "blocks": photo_blocks})
+            i = j
+            continue
+
+        # Single image → photo block (only when already in blocks mode).
+        im_one = _RE_RICH_IMG.fullmatch(line.strip())
+        if im_one:
+            _rich_flush_prose(prose, blocks)
+            photo = {
+                "type": "photo",
+                "photo": {"type": "photo", "media": im_one.group(2)},
+            }
+            if im_one.group(1):
+                photo["caption"] = {"text": im_one.group(1)}
+            blocks.append(photo)
+            i += 1
+            continue
+
+        # Inline $$math$$ inside a prose line → split.
+        if "$$" in line:
+            _rich_flush_prose(prose, blocks)
+            pos = 0
+            for m in _RE_RICH_DISPLAY_MATH.finditer(line):
+                before = line[pos : m.start()]
+                if before.strip():
+                    blocks.append({"type": "paragraph", "text": before})
+                blocks.append(
+                    {
+                        "type": "mathematical_expression",
+                        "expression": m.group(1).strip(),
+                    }
+                )
+                pos = m.end()
+            after = line[pos:]
+            if after.strip():
+                prose.append(after)
+            i += 1
+            continue
+
+        prose.append(line)
+        i += 1
+
+    _rich_flush_prose(prose, blocks)
+    if not blocks:
+        return {"markdown": src}
+    return {"blocks": blocks}
+
 
 def _strip_md(s: str) -> str:
     """Strip markdown inline formatting from text."""
@@ -839,17 +1069,19 @@ class TelegramChannel(BaseChannel):
     def _rich_api_kwargs(
         self,
         chat_id: int,
-        markdown: str,
+        text: str,
         thread_kwargs: dict | None = None,
         reply_params=None,
         *,
         message_id: int | None = None,
         draft_id: int | None = None,
+        rich_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build kwargs for sendRichMessage / sendRichMessageDraft / editMessageText."""
+        body = rich_body if rich_body is not None else build_rich_message_body(text or "")
         kwargs: dict[str, Any] = {
             "chat_id": chat_id,
-            "rich_message": {"markdown": markdown or ""},
+            "rich_message": body,
         }
         tk = thread_kwargs or {}
         if tk.get("message_thread_id") is not None:
@@ -875,23 +1107,36 @@ class TelegramChannel(BaseChannel):
         """Bot API 10.1 sendRichMessage via do_api_request. Returns message_id or None."""
         if not self._app:
             return None
-        try:
-            result = await self._call_with_retry(
-                self._app.bot.do_api_request,
-                "sendRichMessage",
-                api_kwargs=self._rich_api_kwargs(
-                    chat_id, markdown, thread_kwargs, reply_params
-                ),
-            )
-            if isinstance(result, dict) and result.get("message_id") is not None:
-                return int(result["message_id"])
-            mid = getattr(result, "message_id", None)
-            return int(mid) if mid is not None else None
-        except (NetworkError, RetryAfter, TimedOut):
-            raise
-        except Exception as e:
-            logger.warning("Telegram sendRichMessage failed, falling back: {}", e)
-            return None
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        # If auto-blocks fail, retry plain markdown once.
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        last_err: Exception | None = None
+        for attempt_body in attempts:
+            try:
+                result = await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "sendRichMessage",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        reply_params,
+                        rich_body=attempt_body,
+                    ),
+                )
+                if isinstance(result, dict) and result.get("message_id") is not None:
+                    return int(result["message_id"])
+                mid = getattr(result, "message_id", None)
+                return int(mid) if mid is not None else None
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                last_err = e
+                continue
+        logger.warning("Telegram sendRichMessage failed, falling back: {}", last_err)
+        return None
 
     async def _send_rich_message_draft(
         self,
@@ -905,20 +1150,29 @@ class TelegramChannel(BaseChannel):
             return False
         thread_id = (thread_kwargs or {}).get("message_thread_id")
         draft_id = self._draft_id_for(chat_id, thread_id, metadata)
-        try:
-            await self._call_with_retry(
-                self._app.bot.do_api_request,
-                "sendRichMessageDraft",
-                api_kwargs=self._rich_api_kwargs(
-                    chat_id, markdown, thread_kwargs, draft_id=draft_id
-                ),
-            )
-            return True
-        except (NetworkError, RetryAfter, TimedOut):
-            raise
-        except Exception as e:
-            logger.debug("Telegram sendRichMessageDraft failed (falling back): {}", e)
-            return False
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        for attempt_body in attempts:
+            try:
+                await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "sendRichMessageDraft",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        draft_id=draft_id,
+                        rich_body=attempt_body,
+                    ),
+                )
+                return True
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                logger.debug("Telegram sendRichMessageDraft failed (falling back): {}", e)
+        return False
 
     async def _edit_rich_message(
         self,
@@ -930,20 +1184,32 @@ class TelegramChannel(BaseChannel):
         """editMessageText with rich_message. True on success."""
         if not self._app:
             return False
-        try:
-            await self._call_with_retry(
-                self._app.bot.do_api_request,
-                "editMessageText",
-                api_kwargs=self._rich_api_kwargs(
-                    chat_id, markdown, thread_kwargs, message_id=message_id
-                ),
-            )
-            return True
-        except (NetworkError, RetryAfter, TimedOut):
-            raise
-        except Exception as e:
-            logger.warning("Telegram editMessageText(rich) failed, falling back: {}", e)
-            return False
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        last_err: Exception | None = None
+        for attempt_body in attempts:
+            try:
+                await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "editMessageText",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        message_id=message_id,
+                        rich_body=attempt_body,
+                    ),
+                )
+                return True
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                last_err = e
+                continue
+        logger.warning("Telegram editMessageText(rich) failed, falling back: {}", last_err)
+        return False
 
     def _guest_result_title(self) -> str:
         """InlineQueryResultArticle title for Guest Mode answers."""

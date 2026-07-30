@@ -17,7 +17,8 @@ to `true` (private-chat UX; no access-control impact).
 
 ## Access notes for Rich Messages
 
-- **`richMessages: true`** sends agent replies via `sendRichMessage` with `rich_message.markdown` (raw Markdown from the model). PTB 22.8 has no wrappers — ShibaClaw calls the Bot API through `Bot.do_api_request`.
+- **`richMessages: true`** sends agent replies via `sendRichMessage`. Plain text uses `rich_message.markdown`. PTB 22.8 has no wrappers — ShibaClaw calls the Bot API through `Bot.do_api_request`.
+- **Auto blocks:** display math (`$$…$$` / ` ```math `), GFM pipe-tables, and ≥2 consecutive `![](https://…)` images are converted to explicit `blocks` (mathematical_expression / table / collage). Blocks failure retries markdown, then HTML/`sendMessage`.
 - Private streaming with rich enabled uses `sendRichMessageDraft`; on failure it falls back to `sendMessageDraft` / HTML `sendMessage`.
 - Some Telegram clients still show unsupported placeholders for rich content — keep the flag off until your clients render it well.
 - Chat Automation supports `business_connection_id` on `sendRichMessage` when the connected user can send rich messages.
@@ -36,6 +37,7 @@ These flags alone are not enough — Telegram must allow the capability for your
 - **Streaming drafts** work only in **private** chats (Telegram API constraint). Groups keep the existing progress-edit path. Draft IDs are derived from the inbound `message_id` so they survive process restarts.
 - **Guest replies** use `answerGuestQuery` (not `sendMessage`). Guest turns get an isolated session key `telegram:guest:<query_id>`. Guest Mode still respects `allowFrom` — unauthorised senders are ignored.
 - **Rich Messages** use `sendRichMessage` / `sendRichMessageDraft` when `richMessages` is enabled; any API error falls back to the legacy HTML/`sendMessage` path.
+- **Auto blocks:** plain replies stay `rich_message.markdown`. When the text has display math (`$$…$$` / ` ```math `), a GFM pipe-table, or ≥2 consecutive image URLs, ShibaClaw builds explicit `blocks` (mathematical_expression / table / collage). If blocks fail, it retries markdown once, then HTML.
 
 ## Example config
 
