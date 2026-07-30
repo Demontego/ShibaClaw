@@ -14,7 +14,7 @@ logger.remove()
 @pytest.mark.asyncio
 async def test_telegram_channel_chat_ids_eviction():
     bus = MagicMock(spec=MessageBus)
-    config = TelegramConfig(enabled=True, token="fake_token")
+    config = TelegramConfig(enabled=True, token="fake_token", allow_from=["*"])
     channel = TelegramChannel(config, bus)
 
     channel._download_message_media = AsyncMock(return_value=([], []))
@@ -22,7 +22,6 @@ async def test_telegram_channel_chat_ids_eviction():
     channel._is_group_message_for_bot = AsyncMock(return_value=True)
     channel._build_message_metadata = MagicMock(return_value={})
     channel._derive_topic_session_key = MagicMock(return_value="session_key")
-    channel.is_allowed = MagicMock(return_value=True)
 
     for i in range(505):
         update = MagicMock()
@@ -43,6 +42,9 @@ async def test_telegram_channel_chat_ids_eviction():
         message.media_group_id = None
         message.message_id = i
         message.message_thread_id = None
+        message.business_connection_id = None
+        message.forward_origin = None
+        message.is_automatic_forward = False
         update.message = message
         update.edited_message = None
         update.effective_message = message
@@ -208,7 +210,6 @@ async def test_guest_message_sets_guest_metadata():
     channel = TelegramChannel(config, bus)
     channel._download_message_media = AsyncMock(return_value=([], []))
     channel._handle_message = AsyncMock()
-    channel.is_allowed = MagicMock(return_value=True)
 
     update = MagicMock()
     user = MagicMock()
@@ -229,6 +230,8 @@ async def test_guest_message_sets_guest_metadata():
     message.message_thread_id = None
     message.guest_query_id = "guest-abc"
     message.business_connection_id = None
+    message.forward_origin = None
+    message.is_automatic_forward = False
     message.photo = None
     message.voice = None
     message.audio = None
@@ -242,6 +245,7 @@ async def test_guest_message_sets_guest_metadata():
     assert channel._handle_message.await_count == 1
     kwargs = channel._handle_message.await_args.kwargs
     assert kwargs["metadata"]["guest_query_id"] == "guest-abc"
+    assert kwargs["metadata"]["is_allowlisted"] is True
     assert kwargs["session_key"].startswith("telegram:guest:")
 
 
@@ -321,6 +325,7 @@ def test_telegram_config_ai_defaults():
     assert cfg.business_enabled is False
     assert cfg.managed_bots_enabled is False
     assert cfg.rich_messages is False
+    assert cfg.open_groups is False
 
 
 @pytest.mark.asyncio
@@ -425,3 +430,210 @@ def test_build_rich_message_body_images_become_collage():
     collage = next(b for b in body["blocks"] if b["type"] == "collage")
     assert len(collage["blocks"]) == 2
     assert collage["blocks"][0]["photo"]["media"] == "https://example.com/a.jpg"
+
+
+def test_extract_forward_info_from_user():
+    origin = MagicMock()
+    origin.type = "user"
+    origin.sender_user = MagicMock()
+    origin.sender_user.full_name = "Alice"
+    origin.sender_user.first_name = "Alice"
+    origin.sender_user.username = "alice"
+    origin.sender_user.id = 42
+    origin.sender_user_name = None
+    origin.sender_chat = None
+    origin.chat = None
+    message = MagicMock()
+    message.forward_origin = origin
+    message.is_automatic_forward = False
+    info = TelegramChannel._extract_forward_info(message)
+    assert info is not None
+    assert info["is_forward"] is True
+    assert info["forward_from_user_id"] == 42
+    assert "Alice" in info["forward_label"]
+    assert "@alice" in info["forward_label"]
+
+
+def test_ingress_private_dm_requires_allowlist():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(
+        enabled=True, token="t", allow_from=["111"], open_groups=True, business_enabled=True
+    )
+    channel = TelegramChannel(config, bus)
+    assert channel._ingress_allowed(
+        is_group=False, has_business=False, sender_id="111", username=None
+    )
+    assert not channel._ingress_allowed(
+        is_group=False, has_business=False, sender_id="999", username="x"
+    )
+    assert channel._ingress_allowed(
+        is_group=True, has_business=False, sender_id="999", username="x"
+    )
+    assert channel._ingress_allowed(
+        is_group=False, has_business=True, sender_id="999", username="x"
+    )
+    assert not channel._ingress_allowed(
+        is_group=True, has_business=False, sender_id="999", username="x", is_guest=True
+    )
+
+
+@pytest.mark.asyncio
+async def test_open_groups_marks_non_allowlisted():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(
+        enabled=True, token="t", allow_from=["111"], open_groups=True, group_policy="open"
+    )
+    channel = TelegramChannel(config, bus)
+    channel._download_message_media = AsyncMock(return_value=([], []))
+    channel._handle_message = AsyncMock()
+    channel._is_group_message_for_bot = AsyncMock(return_value=True)
+
+    update = MagicMock()
+    user = MagicMock()
+    user.id = 999
+    user.first_name = "Peer"
+    user.username = "peer"
+    user.is_bot = False
+    update.effective_user = user
+    message = MagicMock()
+    message.chat.id = -100
+    message.chat_id = -100
+    message.chat.type = "supergroup"
+    message.text = "hi"
+    message.caption = None
+    message.reply_to_message = None
+    message.media_group_id = None
+    message.message_id = 1
+    message.message_thread_id = None
+    message.business_connection_id = None
+    message.forward_origin = None
+    message.is_automatic_forward = False
+    message.photo = None
+    message.voice = None
+    message.audio = None
+    message.document = None
+    message.video = None
+    message.video_note = None
+    message.animation = None
+    update.effective_message = message
+    update.guest_message = None
+    update.message = message
+    update.edited_message = None
+
+    await channel._on_message(update, MagicMock())
+    meta = channel._handle_message.await_args.kwargs["metadata"]
+    assert meta["is_allowlisted"] is False
+    content = channel._handle_message.await_args.kwargs["content"]
+    assert content.startswith("Peer: ")
+
+
+@pytest.mark.asyncio
+async def test_private_dm_blocks_non_allowlisted_even_with_open_groups():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", allow_from=["111"], open_groups=True)
+    channel = TelegramChannel(config, bus)
+    channel._handle_message = AsyncMock()
+
+    update = MagicMock()
+    user = MagicMock()
+    user.id = 999
+    user.first_name = "Peer"
+    user.username = "peer"
+    user.is_bot = False
+    update.effective_user = user
+    message = MagicMock()
+    message.chat.id = 999
+    message.chat_id = 999
+    message.chat.type = "private"
+    message.text = "hack"
+    message.caption = None
+    message.reply_to_message = None
+    message.media_group_id = None
+    message.message_id = 1
+    message.message_thread_id = None
+    message.business_connection_id = None
+    update.effective_message = message
+    update.guest_message = None
+    update.message = message
+    update.edited_message = None
+
+    await channel._on_message(update, MagicMock())
+    channel._handle_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_forward_prefix_in_content():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", allow_from=["*"])
+    channel = TelegramChannel(config, bus)
+    channel._download_message_media = AsyncMock(return_value=([], []))
+    channel._handle_message = AsyncMock()
+
+    origin = MagicMock()
+    origin.type = "user"
+    origin.sender_user = MagicMock()
+    origin.sender_user.full_name = "Bob"
+    origin.sender_user.first_name = "Bob"
+    origin.sender_user.username = "bob"
+    origin.sender_user.id = 5
+    origin.sender_user_name = None
+    origin.sender_chat = None
+    origin.chat = None
+
+    update = MagicMock()
+    user = MagicMock()
+    user.id = 1
+    user.first_name = "Owner"
+    user.username = "owner"
+    user.is_bot = False
+    update.effective_user = user
+    message = MagicMock()
+    message.chat.id = 1
+    message.chat_id = 1
+    message.chat.type = "private"
+    message.text = "look"
+    message.caption = None
+    message.reply_to_message = None
+    message.media_group_id = None
+    message.message_id = 9
+    message.message_thread_id = None
+    message.business_connection_id = None
+    message.forward_origin = origin
+    message.is_automatic_forward = False
+    message.photo = None
+    message.voice = None
+    message.audio = None
+    message.document = None
+    message.video = None
+    message.video_note = None
+    message.animation = None
+    update.effective_message = message
+    update.guest_message = None
+    update.message = message
+    update.edited_message = None
+
+    await channel._on_message(update, MagicMock())
+    content = channel._handle_message.await_args.kwargs["content"]
+    assert content.startswith("[Forwarded from: Bob (@bob)]")
+    meta = channel._handle_message.await_args.kwargs["metadata"]
+    assert meta["is_forward"] is True
+
+
+def test_filter_tools_for_non_allowlisted():
+    from shibaclaw.agent.loop import ShibaBrain
+
+    brain = object.__new__(ShibaBrain)
+    defs = [
+        {"type": "function", "function": {"name": "web_search"}},
+        {"type": "function", "function": {"name": "exec"}},
+        {"type": "function", "function": {"name": "read_file"}},
+        {"type": "function", "function": {"name": "mcp_call_tool"}},
+    ]
+    kept = brain._filter_tools_for_allowlist(defs, {"is_allowlisted": False}, "telegram")
+    names = [(d.get("function") or {}).get("name") for d in kept]
+    assert names == ["web_search"]
+    assert brain._tool_blocked_for_non_allowlisted("exec", {"is_allowlisted": False}, "telegram")
+    assert not brain._tool_blocked_for_non_allowlisted(
+        "exec", {"is_allowlisted": True}, "telegram"
+    )
+    assert not brain._tool_blocked_for_non_allowlisted("exec", {}, "webui")

@@ -14,6 +14,7 @@ to `true` (private-chat UX; no access-control impact).
 | `businessEnabled` | `false` | Chat Automation / Business connection messages |
 | `managedBotsEnabled` | `false` | Track Managed Bot create/token updates |
 | `richMessages` | `false` | Bot API 10.1 `sendRichMessage` / rich draft (opt-in) |
+| `openGroups` | `false` | Groups accept any member; private bot DMs stay on `allowFrom` |
 
 ## Access notes for Rich Messages
 
@@ -22,6 +23,16 @@ to `true` (private-chat UX; no access-control impact).
 - Private streaming with rich enabled uses `sendRichMessageDraft`; on failure it falls back to `sendMessageDraft` / HTML `sendMessage`.
 - Some Telegram clients still show unsupported placeholders for rich content — keep the flag off until your clients render it well.
 - Chat Automation supports `business_connection_id` on `sendRichMessage` when the connected user can send rich messages.
+
+## Access control (`allowFrom` + `openGroups`)
+
+- **Private bot DMs** always require `allowFrom` (owner allowlist). `"*"` still means everyone.
+- **`openGroups: true`** — group/supergroup members may talk to the bot (reply policy still follows `groupPolicy`). Senders not on `allowFrom` get `metadata.is_allowlisted=false` and the agent loop strips FS/exec/MCP tools.
+- **`businessEnabled: true`** — Chat Automation peer DMs are accepted even when `allowFrom` is owner-only (otherwise the archive never receives peer traffic). Same tool lockdown for non-allowlisted peers.
+- **Guest Mode** always requires `allowFrom` (never opened by `openGroups`).
+- Slash commands `/new`, `/stop`, `/restart` in groups remain allowlist-only.
+
+Forwarded messages include a content prefix `[Forwarded from: …]` and forward metadata (`is_forward`, `forward_label`, …) so the model can see the origin.
 
 ## BotFather / client setup
 
@@ -47,6 +58,7 @@ These flags alone are not enough — Telegram must allow the capability for your
     "telegram": {
       "enabled": true,
       "allowFrom": ["123456789"],
+      "openGroups": true,
       "streaming": true,
       "richMessages": true,
       "guestMode": true,

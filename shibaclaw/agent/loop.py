@@ -352,6 +352,70 @@ class ShibaBrain:
             return True
         return False
 
+    # Dangerous tools stripped when Telegram metadata.is_allowlisted is False
+    # (openGroups / Chat Automation peers who are not on allowFrom).
+    _NON_ALLOWLISTED_BLOCKED_TOOLS = frozenset(
+        {
+            "exec",
+            "write_file",
+            "edit_file",
+            "read_file",
+            "list_dir",
+            "spawn",
+            "automation",
+            "cron",
+            "message",
+            "mcp_call_tool",
+            "mcp_list_tools",
+        }
+    )
+
+    def _is_allowlisted_turn(
+        self, metadata: dict | None, channel: str | None = None
+    ) -> bool:
+        """WebUI/CLI/system and allowlisted Telegram senders keep full tools.
+
+        Missing ``is_allowlisted`` (non-Telegram / legacy) defaults to allowlisted
+        so other channels are unchanged.
+        """
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
+        if ch in {"webui", "cli", "system"}:
+            return True
+        flag = (metadata or {}).get("is_allowlisted")
+        if flag is False:
+            return False
+        return True
+
+    def _filter_tools_for_allowlist(
+        self,
+        tool_defs: list[dict],
+        metadata: dict | None,
+        channel: str | None = None,
+    ) -> list[dict]:
+        """Strip FS/exec/MCP tools for non-allowlisted Telegram turns."""
+        if self._is_allowlisted_turn(metadata, channel):
+            return tool_defs
+        blocked = self._NON_ALLOWLISTED_BLOCKED_TOOLS
+        out: list[dict] = []
+        for d in tool_defs:
+            name = (d.get("function") or {}).get("name") or d.get("name") or ""
+            if name in blocked or name.startswith("mcp_"):
+                continue
+            out.append(d)
+        return out
+
+    def _tool_blocked_for_non_allowlisted(
+        self,
+        tool_name: str,
+        metadata: dict | None,
+        channel: str | None = None,
+    ) -> bool:
+        if self._is_allowlisted_turn(metadata, channel):
+            return False
+        if tool_name in self._NON_ALLOWLISTED_BLOCKED_TOOLS:
+            return True
+        return tool_name.startswith("mcp_")
+
     def _set_tool_context(
         self,
         channel: str,
@@ -455,6 +519,7 @@ class ShibaBrain:
 
         # Tool definitions don't change mid-loop; compute once.
         tool_defs = self.tools.get_definitions()
+        tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
 
         if session_key:
             self._steering_queues.setdefault(session_key, [])
@@ -609,6 +674,19 @@ class ShibaBrain:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
+                    if self._tool_blocked_for_non_allowlisted(
+                        tool_call.name, metadata, channel
+                    ):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Tool '{tool_call.name}' is allowlist-only. "
+                                "Non-allowlisted senders cannot use FS/exec/secrets tools."
+                            ),
+                        )
+                        continue
                     try:
                         tool_future = asyncio.ensure_future(
                             self.tools.execute(tool_call.name, tool_call.arguments)
