@@ -238,6 +238,9 @@ class TelegramConfig(Base):
     allow_bot_messages: bool = False
     business_enabled: bool = False
     managed_bots_enabled: bool = False
+    # Bot API 10.1+ Rich Messages via do_api_request (PTB 22.8 has no wrappers).
+    # Opt-in: some clients still render unsupported placeholders.
+    rich_messages: bool = False
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -583,15 +586,32 @@ class TelegramChannel(BaseChannel):
                 and self._is_private_chat_id(chat_id)
                 and not metadata.get("business_connection_id")
             )
-            for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
-                if is_progress and use_draft:
-                    await self._send_message_draft(chat_id, chunk, thread_kwargs, metadata)
-                elif is_progress:
-                    await self._send_or_edit_progress(chat_id, chunk, reply_params, thread_kwargs)
-                else:
-                    await self._send_with_streaming(
-                        chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
-                    )
+            use_rich = bool(self.config.rich_messages)
+            sent_rich = False
+            if use_rich and not is_progress:
+                # One rich payload (no HTML split) — fallback to legacy on failure.
+                mid = await self._send_rich_message(
+                    chat_id, msg.content, reply_params, thread_kwargs
+                )
+                sent_rich = mid is not None
+            if not sent_rich:
+                for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
+                    if is_progress and use_draft:
+                        if use_rich and await self._send_rich_message_draft(
+                            chat_id, chunk, thread_kwargs, metadata
+                        ):
+                            continue
+                        await self._send_message_draft(
+                            chat_id, chunk, thread_kwargs, metadata
+                        )
+                    elif is_progress:
+                        await self._send_or_edit_progress(
+                            chat_id, chunk, reply_params, thread_kwargs
+                        )
+                    else:
+                        await self._send_with_streaming(
+                            chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
+                        )
             if not is_progress:
                 thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
                 await self._clear_progress_message(chat_id, thread_id)
@@ -815,6 +835,115 @@ class TelegramChannel(BaseChannel):
             await self._call_with_retry(self._app.bot.send_message_draft, **kwargs)
         except Exception as e:
             logger.debug("Telegram sendMessageDraft failed (falling back): {}", e)
+
+    def _rich_api_kwargs(
+        self,
+        chat_id: int,
+        markdown: str,
+        thread_kwargs: dict | None = None,
+        reply_params=None,
+        *,
+        message_id: int | None = None,
+        draft_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Build kwargs for sendRichMessage / sendRichMessageDraft / editMessageText."""
+        kwargs: dict[str, Any] = {
+            "chat_id": chat_id,
+            "rich_message": {"markdown": markdown or ""},
+        }
+        tk = thread_kwargs or {}
+        if tk.get("message_thread_id") is not None:
+            kwargs["message_thread_id"] = tk["message_thread_id"]
+        if tk.get("business_connection_id"):
+            kwargs["business_connection_id"] = tk["business_connection_id"]
+        if message_id is not None:
+            kwargs["message_id"] = message_id
+        if draft_id is not None:
+            kwargs["draft_id"] = draft_id
+        if reply_params is not None and message_id is None and draft_id is None:
+            # ReplyParameters serializes via PTB; dict also works for raw API.
+            kwargs["reply_parameters"] = reply_params
+        return kwargs
+
+    async def _send_rich_message(
+        self,
+        chat_id: int,
+        markdown: str,
+        reply_params=None,
+        thread_kwargs: dict | None = None,
+    ) -> int | None:
+        """Bot API 10.1 sendRichMessage via do_api_request. Returns message_id or None."""
+        if not self._app:
+            return None
+        try:
+            result = await self._call_with_retry(
+                self._app.bot.do_api_request,
+                "sendRichMessage",
+                api_kwargs=self._rich_api_kwargs(
+                    chat_id, markdown, thread_kwargs, reply_params
+                ),
+            )
+            if isinstance(result, dict) and result.get("message_id") is not None:
+                return int(result["message_id"])
+            mid = getattr(result, "message_id", None)
+            return int(mid) if mid is not None else None
+        except (NetworkError, RetryAfter, TimedOut):
+            raise
+        except Exception as e:
+            logger.warning("Telegram sendRichMessage failed, falling back: {}", e)
+            return None
+
+    async def _send_rich_message_draft(
+        self,
+        chat_id: int,
+        markdown: str,
+        thread_kwargs: dict | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        """Bot API 10.1 sendRichMessageDraft (private chats). True on success."""
+        if not self._app:
+            return False
+        thread_id = (thread_kwargs or {}).get("message_thread_id")
+        draft_id = self._draft_id_for(chat_id, thread_id, metadata)
+        try:
+            await self._call_with_retry(
+                self._app.bot.do_api_request,
+                "sendRichMessageDraft",
+                api_kwargs=self._rich_api_kwargs(
+                    chat_id, markdown, thread_kwargs, draft_id=draft_id
+                ),
+            )
+            return True
+        except (NetworkError, RetryAfter, TimedOut):
+            raise
+        except Exception as e:
+            logger.debug("Telegram sendRichMessageDraft failed (falling back): {}", e)
+            return False
+
+    async def _edit_rich_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        markdown: str,
+        thread_kwargs: dict | None = None,
+    ) -> bool:
+        """editMessageText with rich_message. True on success."""
+        if not self._app:
+            return False
+        try:
+            await self._call_with_retry(
+                self._app.bot.do_api_request,
+                "editMessageText",
+                api_kwargs=self._rich_api_kwargs(
+                    chat_id, markdown, thread_kwargs, message_id=message_id
+                ),
+            )
+            return True
+        except (NetworkError, RetryAfter, TimedOut):
+            raise
+        except Exception as e:
+            logger.warning("Telegram editMessageText(rich) failed, falling back: {}", e)
+            return False
 
     def _guest_result_title(self) -> str:
         """InlineQueryResultArticle title for Guest Mode answers."""

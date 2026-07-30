@@ -13,6 +13,14 @@ to `true` (private-chat UX; no access-control impact).
 | `allowBotMessages` | `false` | Bot-to-bot messages (also enable in BotFather) |
 | `businessEnabled` | `false` | Chat Automation / Business connection messages |
 | `managedBotsEnabled` | `false` | Track Managed Bot create/token updates |
+| `richMessages` | `false` | Bot API 10.1 `sendRichMessage` / rich draft (opt-in) |
+
+## Access notes for Rich Messages
+
+- **`richMessages: true`** sends agent replies via `sendRichMessage` with `rich_message.markdown` (raw Markdown from the model). PTB 22.8 has no wrappers — ShibaClaw calls the Bot API through `Bot.do_api_request`.
+- Private streaming with rich enabled uses `sendRichMessageDraft`; on failure it falls back to `sendMessageDraft` / HTML `sendMessage`.
+- Some Telegram clients still show unsupported placeholders for rich content — keep the flag off until your clients render it well.
+- Chat Automation supports `business_connection_id` on `sendRichMessage` when the connected user can send rich messages.
 
 ## BotFather / client setup
 
@@ -27,7 +35,7 @@ These flags alone are not enough — Telegram must allow the capability for your
 
 - **Streaming drafts** work only in **private** chats (Telegram API constraint). Groups keep the existing progress-edit path. Draft IDs are derived from the inbound `message_id` so they survive process restarts.
 - **Guest replies** use `answerGuestQuery` (not `sendMessage`). Guest turns get an isolated session key `telegram:guest:<query_id>`. Guest Mode still respects `allowFrom` — unauthorised senders are ignored.
-- **Rich Messages** (`sendRichMessage` / rich blocks) are **not** wired yet — `python-telegram-bot` 22.8 does not expose those methods. Planned when PTB adds them.
+- **Rich Messages** use `sendRichMessage` / `sendRichMessageDraft` when `richMessages` is enabled; any API error falls back to the legacy HTML/`sendMessage` path.
 
 ## Example config
 
@@ -38,6 +46,7 @@ These flags alone are not enough — Telegram must allow the capability for your
       "enabled": true,
       "allowFrom": ["123456789"],
       "streaming": true,
+      "richMessages": true,
       "guestMode": true,
       "allowBotMessages": true,
       "businessEnabled": true,

@@ -316,3 +316,71 @@ def test_telegram_config_ai_defaults():
     assert cfg.allow_bot_messages is False
     assert cfg.business_enabled is False
     assert cfg.managed_bots_enabled is False
+    assert cfg.rich_messages is False
+
+
+@pytest.mark.asyncio
+async def test_rich_messages_uses_send_rich_message():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=False)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(return_value={"message_id": 42})
+    channel._app.bot.send_message = AsyncMock()
+
+    msg = MagicMock()
+    msg.chat_id = "123"
+    msg.content = "# Hello\n\n**bold** table reply"
+    msg.media = None
+    msg.metadata = {}
+
+    await channel.send(msg)
+
+    channel._app.bot.do_api_request.assert_awaited()
+    endpoint = channel._app.bot.do_api_request.await_args.args[0]
+    assert endpoint == "sendRichMessage"
+    kwargs = channel._app.bot.do_api_request.await_args.kwargs["api_kwargs"]
+    assert kwargs["chat_id"] == 123
+    assert kwargs["rich_message"]["markdown"].startswith("# Hello")
+    channel._app.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rich_messages_falls_back_to_send_message():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=False)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(side_effect=RuntimeError("no rich"))
+    channel._app.bot.send_message = AsyncMock(return_value=MagicMock(message_id=7))
+
+    msg = MagicMock()
+    msg.chat_id = "123"
+    msg.content = "plain fallback"
+    msg.media = None
+    msg.metadata = {}
+
+    await channel.send(msg)
+    assert channel._app.bot.send_message.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_rich_progress_uses_rich_draft_in_private():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=True)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(return_value=True)
+    channel._app.bot.send_message_draft = AsyncMock()
+
+    msg = MagicMock()
+    msg.chat_id = "123"  # private
+    msg.content = "streaming…"
+    msg.media = None
+    msg.metadata = {"_progress": True, "message_id": 9}
+
+    await channel.send(msg)
+
+    channel._app.bot.do_api_request.assert_awaited()
+    assert channel._app.bot.do_api_request.await_args.args[0] == "sendRichMessageDraft"
+    channel._app.bot.send_message_draft.assert_not_awaited()
