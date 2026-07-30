@@ -1,6 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from shibaclaw.integrations.telegram import TelegramChannel, TelegramConfig
+from shibaclaw.integrations.telegram import (
+    TelegramChannel,
+    TelegramConfig,
+    build_rich_message_body,
+)
 from shibaclaw.bus.queue import MessageBus
 from loguru import logger
 
@@ -316,3 +320,108 @@ def test_telegram_config_ai_defaults():
     assert cfg.allow_bot_messages is False
     assert cfg.business_enabled is False
     assert cfg.managed_bots_enabled is False
+    assert cfg.rich_messages is False
+
+
+@pytest.mark.asyncio
+async def test_rich_messages_uses_send_rich_message():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=False)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(return_value={"message_id": 42})
+    channel._app.bot.send_message = AsyncMock()
+
+    msg = MagicMock()
+    msg.chat_id = "123"
+    msg.content = "# Hello\n\n**bold** table reply"
+    msg.media = None
+    msg.metadata = {}
+
+    await channel.send(msg)
+
+    channel._app.bot.do_api_request.assert_awaited()
+    endpoint = channel._app.bot.do_api_request.await_args.args[0]
+    assert endpoint == "sendRichMessage"
+    kwargs = channel._app.bot.do_api_request.await_args.kwargs["api_kwargs"]
+    assert kwargs["chat_id"] == 123
+    assert kwargs["rich_message"]["markdown"].startswith("# Hello")
+    channel._app.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rich_messages_falls_back_to_send_message():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=False)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(side_effect=RuntimeError("no rich"))
+    channel._app.bot.send_message = AsyncMock(return_value=MagicMock(message_id=7))
+
+    msg = MagicMock()
+    msg.chat_id = "123"
+    msg.content = "plain fallback"
+    msg.media = None
+    msg.metadata = {}
+
+    await channel.send(msg)
+    assert channel._app.bot.send_message.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_rich_progress_uses_rich_draft_in_private():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=True)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(return_value=True)
+    channel._app.bot.send_message_draft = AsyncMock()
+
+    msg = MagicMock()
+    msg.chat_id = "123"  # private
+    msg.content = "streaming…"
+    msg.media = None
+    msg.metadata = {"_progress": True, "message_id": 9}
+
+    await channel.send(msg)
+
+    channel._app.bot.do_api_request.assert_awaited()
+    assert channel._app.bot.do_api_request.await_args.args[0] == "sendRichMessageDraft"
+    channel._app.bot.send_message_draft.assert_not_awaited()
+
+
+def test_build_rich_message_body_plain_stays_markdown():
+    body = build_rich_message_body("Hello **world**")
+    assert body == {"markdown": "Hello **world**"}
+
+
+def test_build_rich_message_body_math_uses_blocks():
+    body = build_rich_message_body("Energy:\n\n$$E = mc^2$$\n\nDone.")
+    assert "blocks" in body
+    types = [b["type"] for b in body["blocks"]]
+    assert "mathematical_expression" in types
+    math = next(b for b in body["blocks"] if b["type"] == "mathematical_expression")
+    assert math["expression"] == "E = mc^2"
+
+
+def test_build_rich_message_body_table_uses_blocks():
+    md = "| A | B |\n| --- | --- |\n| 1 | 2 |\n"
+    body = build_rich_message_body(md)
+    assert "blocks" in body
+    table = next(b for b in body["blocks"] if b["type"] == "table")
+    assert table["cells"][0][0]["text"] == "A"
+    assert table["cells"][0][0].get("is_header") is True
+    assert table["cells"][1][1]["text"] == "2"
+
+
+def test_build_rich_message_body_images_become_collage():
+    md = (
+        "Pics:\n\n"
+        "![a](https://example.com/a.jpg)\n"
+        "![b](https://example.com/b.jpg)\n"
+    )
+    body = build_rich_message_body(md)
+    assert "blocks" in body
+    collage = next(b for b in body["blocks"] if b["type"] == "collage")
+    assert len(collage["blocks"]) == 2
+    assert collage["blocks"][0]["photo"]["media"] == "https://example.com/a.jpg"
