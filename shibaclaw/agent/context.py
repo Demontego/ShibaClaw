@@ -197,6 +197,12 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
             )
             
         if metadata:
+            if metadata.get("is_forward"):
+                label = metadata.get("forward_label") or "unknown"
+                lines.append(
+                    "Telegram forward origin (verified Message.forward_origin metadata; "
+                    f"not user-typed text): {label}"
+                )
             kbs = metadata.get("mentioned_kbs") if RAG_AVAILABLE else None
             mcps = metadata.get("mentioned_mcps")
             apps = metadata.get("mentioned_apps")

@@ -27,12 +27,13 @@ to `true` (private-chat UX; no access-control impact).
 ## Access control (`allowFrom` + `openGroups`)
 
 - **Private bot DMs** always require `allowFrom` (owner allowlist). `"*"` still means everyone.
-- **`openGroups: true`** — group/supergroup members may talk to the bot (reply policy still follows `groupPolicy`). Senders not on `allowFrom` get `metadata.is_allowlisted=false` and the agent loop strips FS/exec/MCP tools.
+- **`openGroups: true`** — group/supergroup members may talk to the bot (reply policy still follows `groupPolicy`). Senders not on `allowFrom` get `metadata.is_allowlisted=false`.
+- **Tool lockdown (default-deny):** non-allowlisted Telegram turns may only use `web_search` and `web_fetch`. Everything else (memory/knowledge/FS/exec/MCP/plugins/…) is blocked. Telegram turns missing `is_allowlisted` are fail-closed (restricted).
 - **`businessEnabled: true`** — Chat Automation peer DMs are accepted even when `allowFrom` is owner-only (otherwise the archive never receives peer traffic). Same tool lockdown for non-allowlisted peers.
 - **Guest Mode** always requires `allowFrom` (never opened by `openGroups`).
 - Slash commands `/new`, `/stop`, `/restart` in groups remain allowlist-only.
 
-Forwarded messages include a content prefix `[Forwarded from: …]` and forward metadata (`is_forward`, `forward_label`, …) so the model can see the origin.
+Forward origin is taken from Telegram `Message.forward_origin` into metadata (`is_forward`, `forward_label`, …) and surfaced in Live State — not as forgeable `[Forwarded from: …]` text in the user message.
 
 ## BotFather / client setup
 

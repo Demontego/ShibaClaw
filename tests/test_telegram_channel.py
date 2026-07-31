@@ -562,7 +562,7 @@ async def test_private_dm_blocks_non_allowlisted_even_with_open_groups():
 
 
 @pytest.mark.asyncio
-async def test_forward_prefix_in_content():
+async def test_forward_origin_in_metadata_not_content():
     bus = MagicMock(spec=MessageBus)
     config = TelegramConfig(enabled=True, token="t", allow_from=["*"])
     channel = TelegramChannel(config, bus)
@@ -614,9 +614,12 @@ async def test_forward_prefix_in_content():
 
     await channel._on_message(update, MagicMock())
     content = channel._handle_message.await_args.kwargs["content"]
-    assert content.startswith("[Forwarded from: Bob (@bob)]")
+    assert content == "look"
+    assert "[Forwarded from:" not in content
     meta = channel._handle_message.await_args.kwargs["metadata"]
     assert meta["is_forward"] is True
+    assert "Bob" in meta["forward_label"]
+    assert "@bob" in meta["forward_label"]
 
 
 def test_filter_tools_for_non_allowlisted():
@@ -625,15 +628,30 @@ def test_filter_tools_for_non_allowlisted():
     brain = object.__new__(ShibaBrain)
     defs = [
         {"type": "function", "function": {"name": "web_search"}},
+        {"type": "function", "function": {"name": "web_fetch"}},
+        {"type": "function", "function": {"name": "memory_search"}},
+        {"type": "function", "function": {"name": "knowledge_search"}},
         {"type": "function", "function": {"name": "exec"}},
         {"type": "function", "function": {"name": "read_file"}},
         {"type": "function", "function": {"name": "mcp_call_tool"}},
+        {"type": "function", "function": {"name": "future_plugin_tool"}},
     ]
     kept = brain._filter_tools_for_allowlist(defs, {"is_allowlisted": False}, "telegram")
     names = [(d.get("function") or {}).get("name") for d in kept]
-    assert names == ["web_search"]
+    assert names == ["web_search", "web_fetch"]
+    assert brain._tool_blocked_for_non_allowlisted(
+        "memory_search", {"is_allowlisted": False}, "telegram"
+    )
+    assert brain._tool_blocked_for_non_allowlisted(
+        "future_plugin_tool", {"is_allowlisted": False}, "telegram"
+    )
     assert brain._tool_blocked_for_non_allowlisted("exec", {"is_allowlisted": False}, "telegram")
     assert not brain._tool_blocked_for_non_allowlisted(
         "exec", {"is_allowlisted": True}, "telegram"
     )
     assert not brain._tool_blocked_for_non_allowlisted("exec", {}, "webui")
+    # Telegram fail-closed: missing is_allowlisted → restricted
+    assert brain._tool_blocked_for_non_allowlisted("exec", {}, "telegram")
+    assert not brain._tool_blocked_for_non_allowlisted(
+        "web_search", {}, "telegram"
+    )

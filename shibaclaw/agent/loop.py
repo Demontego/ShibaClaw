@@ -352,21 +352,12 @@ class ShibaBrain:
             return True
         return False
 
-    # Dangerous tools stripped when Telegram metadata.is_allowlisted is False
-    # (openGroups / Chat Automation peers who are not on allowFrom).
-    _NON_ALLOWLISTED_BLOCKED_TOOLS = frozenset(
+    # Default-deny for non-allowlisted Telegram (openGroups / Chat Automation peers).
+    # Only these tools are exposed; memory/knowledge/FS/exec/MCP/plugins stay owner-side.
+    _NON_ALLOWLISTED_ALLOWED_TOOLS = frozenset(
         {
-            "exec",
-            "write_file",
-            "edit_file",
-            "read_file",
-            "list_dir",
-            "spawn",
-            "automation",
-            "cron",
-            "message",
-            "mcp_call_tool",
-            "mcp_list_tools",
+            "web_search",
+            "web_fetch",
         }
     )
 
@@ -375,16 +366,21 @@ class ShibaBrain:
     ) -> bool:
         """WebUI/CLI/system and allowlisted Telegram senders keep full tools.
 
-        Missing ``is_allowlisted`` (non-Telegram / legacy) defaults to allowlisted
-        so other channels are unchanged.
+        Telegram is fail-closed: missing ``is_allowlisted`` → restricted tools.
+        Other channels keep legacy fail-open when the flag is absent.
         """
         ch = str(channel or (metadata or {}).get("channel") or "").lower()
         if ch in {"webui", "cli", "system"}:
             return True
         flag = (metadata or {}).get("is_allowlisted")
+        if ch == "telegram":
+            return flag is True
         if flag is False:
             return False
         return True
+
+    def _non_allowlisted_tool_allowed(self, tool_name: str) -> bool:
+        return tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS
 
     def _filter_tools_for_allowlist(
         self,
@@ -392,16 +388,14 @@ class ShibaBrain:
         metadata: dict | None,
         channel: str | None = None,
     ) -> list[dict]:
-        """Strip FS/exec/MCP tools for non-allowlisted Telegram turns."""
+        """Allow-list only for non-allowlisted Telegram turns (default-deny)."""
         if self._is_allowlisted_turn(metadata, channel):
             return tool_defs
-        blocked = self._NON_ALLOWLISTED_BLOCKED_TOOLS
         out: list[dict] = []
         for d in tool_defs:
             name = (d.get("function") or {}).get("name") or d.get("name") or ""
-            if name in blocked or name.startswith("mcp_"):
-                continue
-            out.append(d)
+            if self._non_allowlisted_tool_allowed(name):
+                out.append(d)
         return out
 
     def _tool_blocked_for_non_allowlisted(
@@ -412,9 +406,7 @@ class ShibaBrain:
     ) -> bool:
         if self._is_allowlisted_turn(metadata, channel):
             return False
-        if tool_name in self._NON_ALLOWLISTED_BLOCKED_TOOLS:
-            return True
-        return tool_name.startswith("mcp_")
+        return not self._non_allowlisted_tool_allowed(tool_name)
 
     def _set_tool_context(
         self,
@@ -683,7 +675,7 @@ class ShibaBrain:
                             tool_call.name,
                             (
                                 f"Error: Tool '{tool_call.name}' is allowlist-only. "
-                                "Non-allowlisted senders cannot use FS/exec/secrets tools."
+                                "Non-allowlisted senders may only use web_search/web_fetch."
                             ),
                         )
                         continue

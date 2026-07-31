@@ -1704,10 +1704,8 @@ class TelegramChannel(BaseChannel):
             )
             if tag:
                 content_parts.insert(0, tag)
-        if fwd := self._extract_forward_info(message):
-            content_parts.insert(
-                0, f"[Forwarded from: {fwd.get('forward_label') or 'unknown'}]"
-            )
+        # Forward origin stays in metadata only (see _build_message_metadata +
+        # Live State). Do not prefix content — users can forge "[Forwarded from:]".
         content = "\n".join(content_parts) if content_parts else "[empty message]"
         str_chat_id = str(chat_id)
         sender_name = user.first_name or user.username or sender_id
