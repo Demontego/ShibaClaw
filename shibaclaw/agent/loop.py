@@ -1187,6 +1187,23 @@ class ShibaBrain:
             preview,
         )
         session = self.sessions.get_or_create(key)
+        # Auto nicknames for Telegram sessions in the WebUI sessions list.
+        if msg.channel == "telegram":
+            try:
+                from shibaclaw.integrations.telegram_labels import (
+                    maybe_autolabel_session,
+                    telegram_owner_ids,
+                )
+
+                if maybe_autolabel_session(
+                    session,
+                    msg.metadata or {},
+                    self.workspace,
+                    owner_ids=telegram_owner_ids(self.channels_config),
+                ):
+                    self.sessions.save(session)
+            except Exception as e:
+                logger.warning("telegram session autolabel failed: {}", e)
         profile_id = profile_id_override or session.metadata.get("profile_id") or None
         if profile_id_override and session.metadata.get("profile_id") != profile_id_override:
             session.metadata["profile_id"] = profile_id_override

@@ -326,19 +326,71 @@ function renderProcessGroupFromHistory(turnId, steps, targetContainer = chatHist
     targetContainer.appendChild(groupEl);
 }
 
-function createMessageGroup(type, targetContainer = chatHistory) {
+// Owner Telegram ids from channels.telegram.allowFrom (cached).
+let _telegramOwnerIds = null;
+let _telegramOwnerIdsLoading = null;
+
+async function ensureTelegramOwnerIds() {
+    if (_telegramOwnerIds) return _telegramOwnerIds;
+    if (_telegramOwnerIdsLoading) return _telegramOwnerIdsLoading;
+    _telegramOwnerIdsLoading = (async () => {
+        try {
+            const res = await authFetch("/api/settings");
+            if (!res.ok) return (_telegramOwnerIds = new Set());
+            const cfg = await res.json();
+            const tg = (cfg.channels && cfg.channels.telegram) || {};
+            const raw = tg.allowFrom || tg.allow_from || [];
+            _telegramOwnerIds = new Set(
+                (Array.isArray(raw) ? raw : []).map(String).filter((id) => id && id !== "*")
+            );
+        } catch {
+            _telegramOwnerIds = new Set();
+        }
+        return _telegramOwnerIds;
+    })();
+    return _telegramOwnerIdsLoading;
+}
+
+function classifySessionMessage(msg, sessionKey) {
+    const meta = (msg && msg.metadata) || {};
+    if (meta.is_bot_sender) {
+        return { type: "agent", label: meta.first_name || "Shiba" };
+    }
+    const uid = meta.user_id != null ? String(meta.user_id) : "";
+    const sk = sessionKey || (typeof state !== "undefined" ? state.sessionId : "") || "";
+    // Telegram multi-speaker: non-allowFrom speakers on the left.
+    if (sk.startsWith("telegram:") && uid) {
+        const owners = _telegramOwnerIds;
+        if (owners && owners.size) {
+            if (!owners.has(uid)) {
+                return { type: "peer", label: meta.first_name || meta.username || uid };
+            }
+            return { type: "user", label: null };
+        }
+        // Settings not loaded yet: heuristic for multi-party chats only.
+        const chatPart = (sk.split(":")[1] || "");
+        const multiParty = sk.includes(":guest:") || chatPart.startsWith("-")
+            || meta.business_connection_id || meta.is_group || meta.is_guest;
+        if (multiParty) {
+            return { type: "peer", label: meta.first_name || meta.username || uid };
+        }
+    }
+    return { type: "user", label: null };
+}
+
+function createMessageGroup(type, targetContainer = chatHistory, opts = {}) {
     state.messageCount++;
     const group = document.createElement("div");
     group.className = `message-group ${type}`;
 
     const avatar = document.createElement("div");
     avatar.className = "message-avatar";
-    if (type === "user") {
+    if (type === "user" || type === "peer") {
         avatar.style.display = "none";
     } else {
         const img = document.createElement("img");
         img.src = state.profileAvatar || DEFAULT_AVATAR;
-        img.alt = "ShibaClaw";
+        img.alt = "Shiba";
         img.className = "agent-avatar-img";
         avatar.appendChild(img);
     }
@@ -348,10 +400,19 @@ function createMessageGroup(type, targetContainer = chatHistory) {
     const prevIsProcessGroup = prev && prev.classList.contains("process-group");
     const prevGroup = prevIsProcessGroup ? targetContainer.children[targetContainer.children.length - 2] : prev;
     const sameType = prevGroup && prevGroup.classList.contains("message-group") && prevGroup.classList.contains(type);
-    if (!sameType) group.classList.add("show-avatar");
+    const labelText = (opts && opts.label) || (type === "agent" ? "Shiba" : "");
+    if (labelText) group.dataset.senderLabel = labelText;
+    const prevLabel = prevGroup && prevGroup.dataset ? (prevGroup.dataset.senderLabel || "") : "";
+    if (!sameType || (labelText && labelText !== prevLabel)) group.classList.add("show-avatar");
 
     const content = document.createElement("div");
     content.className = "message-content";
+    if (labelText && (type === "peer" || type === "agent")) {
+        const lab = document.createElement("div");
+        lab.className = "message-sender-label";
+        lab.textContent = labelText;
+        content.appendChild(lab);
+    }
     group.appendChild(content);
 
     return group;
