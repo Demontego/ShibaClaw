@@ -11,9 +11,7 @@ from shibaclaw.agent.profiles import ProfileManager
 
 def _pm(tmp_path: Path, manifest: dict) -> ProfileManager:
     (tmp_path / "profiles").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "profiles" / "manifest.json").write_text(
-        json.dumps(manifest), encoding="utf-8"
-    )
+    (tmp_path / "profiles" / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return ProfileManager(tmp_path)
 
 
@@ -78,9 +76,21 @@ def test_sync_session_knowledge_bases(tmp_path: Path):
     assert meta["knowledge_bases"] == ["kb-a"]
     assert pm.sync_session_knowledge_bases(meta, "b", "a") is True
     assert meta["knowledge_bases"] == ["kb-b"]
-    # Manual pin is preserved when switching away if user added extras... 
-    # After switch to b with empty after unpin of a defaults, b defaults apply.
-    # Manual pins are kept; defaults only auto-apply when the list is empty.
+    # Manual pins are preserved and the new profile defaults are still attached.
     meta["knowledge_bases"] = ["manual"]
-    assert pm.sync_session_knowledge_bases(meta, "a", "b") is False
-    assert meta["knowledge_bases"] == ["manual"]
+    assert pm.sync_session_knowledge_bases(meta, "a", "b") is True
+    assert meta["knowledge_bases"] == ["manual", "kb-a"]
+
+
+def test_sync_session_knowledge_bases_keeps_custom_pins_on_switch(tmp_path: Path):
+    pm = _pm(
+        tmp_path,
+        {
+            "old": {"knowledge_bases": ["old-default"]},
+            "new": {"knowledge_bases": ["new-default"]},
+        },
+    )
+    meta = {"knowledge_bases": ["custom", "old-default"]}
+
+    assert pm.sync_session_knowledge_bases(meta, "new", "old") is True
+    assert meta["knowledge_bases"] == ["custom", "new-default"]

@@ -369,7 +369,7 @@ class ShibaBrain:
             enabled = pm.get_enabled_tools(profile_id)
             disabled = pm.get_disabled_tools(profile_id)
         except Exception:
-            return False
+            return profile_id is not None
         if enabled is not None:
             if "*" in enabled:
                 return False
@@ -1226,7 +1226,7 @@ class ShibaBrain:
                 chat_id=msg.chat_id,
                 content="\n".join(lines),
             )
-            
+
         if cmd == "/update":
             await self.bus.publish_outbound(
                 OutboundMessage(

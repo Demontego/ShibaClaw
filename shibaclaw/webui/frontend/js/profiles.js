@@ -107,6 +107,10 @@ async function renderProfileDropdown() {
         <div class="profile-action" id="profile-action-create">
             <span class="material-icons-round">add_circle_outline</span>
             Create custom profile
+        </div>
+        <div class="profile-action" id="profile-action-edit">
+            <span class="material-icons-round">tune</span>
+            Configure current profile
         </div>`;
 
     profileDropdown.innerHTML = html;
@@ -116,7 +120,9 @@ async function renderProfileDropdown() {
     });
 
     const createBtn = profileDropdown.querySelector("#profile-action-create");
-    if (createBtn) createBtn.addEventListener("click", () => startProfileCreationSession());
+    if (createBtn) createBtn.addEventListener("click", () => openProfileModal());
+    const editBtn = profileDropdown.querySelector("#profile-action-edit");
+    if (editBtn) editBtn.addEventListener("click", () => openProfileModal(state.profileId));
 }
 
 // escapeHtml — uses global from utils.js (loaded before profiles.js)
@@ -141,36 +147,91 @@ document.addEventListener("click", (e) => {
     }
 });
 
-function startProfileCreationSession() {
+async function openProfileModal(profileId = null) {
     closeProfileDropdown();
-    if (!state.socket) return;
+    let profile = {};
+    if (profileId) {
+        const response = await authFetch(`/api/profiles/${encodeURIComponent(profileId)}`);
+        if (!response.ok) return;
+        profile = await response.json();
+    }
 
-    const prompt = [
-        "I want to create a new custom agent profile for ShibaClaw.",
-        "Walk me through defining it step by step:",
-        "1. Ask me what kind of assistant I need (role, specialty, tone).",
-        "2. Based on my answers, generate a complete SOUL.md file.",
-        "3. Once I'm happy with it, save it as a new profile using write_file to `profiles/<profile-id>/SOUL.md` in the workspace.",
-        "4. Also update `profiles/manifest.json` to register the new profile with id, label, description, and `\"builtin\": false`.",
-        "",
-        "Start by asking me what kind of agent I'd like to create."
-    ].join("\n");
+    const overlay = document.createElement("div");
+    overlay.className = "modal-backdrop active";
+    overlay.innerHTML = `
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
+            <div class="modal-header">
+                <h2 id="profile-modal-title">${profileId ? "Configure profile" : "Create profile"}</h2>
+                <button class="modal-close" type="button" aria-label="Close">×</button>
+            </div>
+            <form class="modal-body">
+                <div class="form-group"><label for="profile-modal-id">ID</label><input class="form-input" id="profile-modal-id" required ${profileId ? "readonly" : ""}></div>
+                <div class="form-group"><label for="profile-modal-label">Label</label><input class="form-input" id="profile-modal-label" required></div>
+                <div class="form-group"><label for="profile-modal-description">Description</label><input class="form-input" id="profile-modal-description"></div>
+                <div class="form-group"><label for="profile-modal-soul">SOUL.md</label><textarea class="form-input" id="profile-modal-soul" rows="6"></textarea></div>
+                <div class="form-group"><label for="profile-modal-disabled-tools">Disabled tools (comma-separated)</label><input class="form-input" id="profile-modal-disabled-tools" placeholder="exec, write_file"></div>
+                <div class="form-group"><label for="profile-modal-enabled-tools">Enabled tools (comma-separated)</label><input class="form-input" id="profile-modal-enabled-tools" placeholder="web_search, web_fetch"></div>
+                <div class="form-group"><label for="profile-modal-temperature">Temperature</label><input class="form-input" id="profile-modal-temperature" type="number" min="0" max="2" step="0.1"></div>
+                <div class="form-group"><label for="profile-modal-knowledge-bases">Knowledge bases (comma-separated IDs)</label><input class="form-input" id="profile-modal-knowledge-bases" placeholder="docs, product-notes"></div>
+                <div id="profile-modal-error" role="alert"></div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" type="button">Cancel</button>
+                    <button class="btn-primary" type="submit">Save</button>
+                </div>
+            </form>
+        </div>`;
+    document.body.appendChild(overlay);
 
-    const onReset = (data) => {
-        realtime.off("session_reset", onReset);
-        setTimeout(() => {
-            const chatInput = document.getElementById("chat-input");
-            if (chatInput) {
-                chatInput.value = prompt;
-                chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const input = (id) => overlay.querySelector(`#profile-modal-${id}`);
+    const csv = (value) => Array.isArray(value) ? value.join(", ") : "";
+    input("id").value = profile.id || "";
+    input("label").value = profile.label || "";
+    input("description").value = profile.description || "";
+    input("soul").value = profile.soul || "";
+    input("disabled-tools").value = csv(profile.disabled_tools);
+    input("enabled-tools").value = csv(profile.enabled_tools);
+    input("temperature").value = profile.temperature ?? "";
+    input("knowledge-bases").value = csv(profile.knowledge_bases);
+
+    const close = () => overlay.remove();
+    overlay.querySelector(".modal-close").addEventListener("click", close);
+    overlay.querySelector(".btn-secondary").addEventListener("click", close);
+    overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) close();
+    });
+    overlay.querySelector("form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const list = (name) => {
+            const values = input(name).value.split(",").map((item) => item.trim()).filter(Boolean);
+            return values.length ? values : null;
+        };
+        const payload = {
+            id: input("id").value.trim(),
+            label: input("label").value.trim(),
+            description: input("description").value.trim(),
+            soul: input("soul").value,
+            disabled_tools: list("disabled-tools"),
+            enabled_tools: list("enabled-tools"),
+            temperature: input("temperature").value === "" ? null : Number(input("temperature").value),
+            knowledge_bases: list("knowledge-bases"),
+        };
+        const response = await authFetch(
+            profileId ? `/api/profiles/${encodeURIComponent(profileId)}` : "/api/profiles",
+            {
+                method: profileId ? "PUT" : "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
             }
-            const btnSend = document.getElementById("btn-send");
-            if (btnSend) btnSend.click();
-        }, 300);
-    };
-
-    realtime.on("session_reset", onReset);
-    realtime.emit("new_session");
+        );
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            overlay.querySelector("#profile-modal-error").textContent = body.error || "Unable to save profile.";
+            return;
+        }
+        await fetchProfiles();
+        close();
+        if (!profileId) await switchProfile(payload.id);
+    });
 }
 
 function initProfileSocket() {
