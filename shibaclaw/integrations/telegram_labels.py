@@ -205,7 +205,7 @@ def maybe_autolabel_session(
     if not isinstance(smeta, dict):
         return False
     existing = (smeta.get("nickname") or "").strip()
-    if existing and not smeta.get("nickname_auto"):
+    if existing and smeta.get("nickname_auto") is not True:
         return False
 
     label = suggest_label(

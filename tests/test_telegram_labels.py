@@ -39,7 +39,7 @@ def test_maybe_autolabel_respects_manual_nickname():
     session = SimpleNamespace(
         key="telegram:99",
         messages=[],
-        metadata={"nickname": "Manual", "nickname_auto": False},
+        metadata={"nickname": "Manual"},
     )
     changed = maybe_autolabel_session(
         session,
