@@ -476,6 +476,14 @@ class TelegramConfig(Base):
     # Bot API 10.1+ Rich Messages via do_api_request (PTB 22.8 has no wrappers).
     # Opt-in: some clients still render unsupported placeholders.
     rich_messages: bool = False
+    # Secretary / Chat Automation: archive inbound by default; do not auto-reply in DMs.
+    business_auto_reply: bool = False
+    history_max_age_hours: float = 24.0
+    # When True: groups accept any member (groupPolicy still gates replies).
+    # Private bot DMs stay locked to allowFrom. Chat Automation peer DMs are
+    # always accepted when business_enabled (otherwise owner-only allowFrom
+    # blocks the archive). Non-allowlisted senders get metadata.is_allowlisted=False.
+    open_groups: bool = False
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -518,6 +526,8 @@ class TelegramChannel(BaseChannel):
         # (chat_id, inbound_message_id) -> our outbound reply id (edit-on-user-edit)
         self._inbound_reply_map: dict[tuple[int, int], int] = {}
         self._INBOUND_REPLY_MAP_CAP = 500
+        self._secretary_outbound: dict[int, set[int]] = {}
+        self._SECRETARY_OUTBOUND_CAP = 40
         self._media_group_tasks: dict[str, asyncio.Task] = {}
         self._message_threads: dict[tuple[str, int], int] = {}
         self._THREADS_CAP = 1000
@@ -532,8 +542,8 @@ class TelegramChannel(BaseChannel):
         self._managed_bots: dict[int, dict[str, Any]] = {}
         self._MANAGED_BOTS_CAP = 200
 
-    def is_allowed(self, sender_id: str, *other_ids: str) -> bool:
-        """Preserve Telegram's legacy id|username allowlist matching."""
+    def _is_allowlisted(self, sender_id: str, *other_ids: str) -> bool:
+        """True if sender matches allowFrom (id, username, or id|username)."""
         if super().is_allowed(sender_id, *other_ids):
             return True
         allow_list = getattr(self.config, "allow_from", [])
@@ -545,6 +555,41 @@ class TelegramChannel(BaseChannel):
             if sid.lstrip("-").isdigit() and username:
                 if sid in allow_list or username in allow_list:
                     return True
+        return False
+    def is_allowed(self, sender_id: str, *other_ids: str) -> bool:
+        """Ingress gate for the bus.
+
+        When ``open_groups`` is enabled (or Chat Automation is on), handlers
+        decide private vs group/business access; the bus must not re-deny.
+        Otherwise preserve classic allowFrom for all chats.
+        """
+        if self.config.open_groups or self.config.business_enabled:
+            return True
+        return self._is_allowlisted(sender_id, *other_ids)
+    def _sender_is_allowlisted(self, sender_id: str, username: str | None = None) -> bool:
+        extras = (username,) if username else ()
+        return self._is_allowlisted(sender_id, *extras)
+    def _ingress_allowed(
+        self,
+        *,
+        is_group: bool,
+        has_business: bool,
+        sender_id: str,
+        username: str | None,
+        is_guest: bool = False,
+    ) -> bool:
+        """Private bot DMs: allowFrom only. Groups/business: opt-in open + allowFrom.
+
+        Guest Mode always requires allowFrom (never open to arbitrary users).
+        """
+        if self._is_allowlisted(sender_id, username):
+            return True
+        if is_guest:
+            return False
+        if has_business and self.config.business_enabled:
+            return True
+        if is_group and self.config.open_groups:
+            return True
         return False
 
     def _build_app(self, proxy: str | None = None) -> None:
@@ -890,6 +935,8 @@ class TelegramChannel(BaseChannel):
                 inbound_mid = metadata.get("message_id")
                 if last_mid is not None:
                     self._remember_inbound_reply(chat_id, inbound_mid, last_mid)
+                    if metadata.get("business_connection_id"):
+                        self._remember_secretary_outbound(chat_id, last_mid)
                 thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
                 await self._clear_progress_message(chat_id, thread_id)
                 self._clear_draft_id(chat_id, thread_id)
@@ -1448,9 +1495,14 @@ class TelegramChannel(BaseChannel):
         if not update.message or not update.effective_user:
             return
         user = update.effective_user
-        chat_id = str(update.message.chat_id)
         sender_id = self._sender_id(user)
-        if not self.is_allowed(sender_id, chat_id, user.username):
+        is_group = update.message.chat.type in ("group", "supergroup")
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=False,
+            sender_id=sender_id,
+            username=user.username,
+        ):
             return
         await update.message.reply_text(
             f"👋 Hi {user.first_name}! I'm shibaclaw.\n\n"
@@ -1463,9 +1515,14 @@ class TelegramChannel(BaseChannel):
         if not update.message or not update.effective_user:
             return
         user = update.effective_user
-        chat_id = str(update.message.chat_id)
         sender_id = self._sender_id(user)
-        if not self.is_allowed(sender_id, chat_id, user.username):
+        is_group = update.message.chat.type in ("group", "supergroup")
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=False,
+            sender_id=sender_id,
+            username=user.username,
+        ):
             return
         await update.message.reply_text(
             "🐕 shibaclaw commands:\n"
@@ -1474,6 +1531,43 @@ class TelegramChannel(BaseChannel):
             "/restart — Restart the bot\n"
             "/help — Show available commands"
         )
+
+    def _remember_secretary_outbound(self, chat_id: int, message_id: int | None) -> None:
+        """Keep a bounded set of business replies that can be replied-to to summon."""
+        if message_id is None:
+            return
+        outbound = self._secretary_outbound.setdefault(chat_id, set())
+        outbound.add(message_id)
+        while len(outbound) > self._SECRETARY_OUTBOUND_CAP:
+            outbound.pop()
+        while len(self._secretary_outbound) > self._CHAT_IDS_CAP:
+            self._secretary_outbound.pop(next(iter(self._secretary_outbound)))
+    async def _message_has_bot_mention(self, message) -> bool:
+        """Whether this message is a Guest Mode @mention."""
+        bot_id, username = await self._ensure_bot_identity()
+        if not username:
+            return False
+        return self._has_mention_entity(
+            message.text or "", getattr(message, "entities", None), username, bot_id
+        ) or self._has_mention_entity(
+            message.caption or "", getattr(message, "caption_entities", None), username, bot_id
+        )
+    async def _is_secretary_summon(self, message) -> bool:
+        """Return true for a trigger word or reply to bot/secretary output."""
+        combined = f"{message.text or ''} {message.caption or ''}".lower()
+        for word in self.config.trigger_words:
+            trigger = str(word).strip().lower()
+            if trigger and trigger in combined:
+                return True
+        reply = getattr(message, "reply_to_message", None)
+        if reply is None:
+            return False
+        bot_id, _ = await self._ensure_bot_identity()
+        reply_user = getattr(reply, "from_user", None)
+        if bot_id and reply_user and getattr(reply_user, "id", None) == bot_id:
+            return True
+        reply_id = getattr(reply, "message_id", None)
+        return reply_id in self._secretary_outbound.get(int(message.chat_id), set())
 
     @staticmethod
     def _sender_id(user) -> str:
@@ -1509,7 +1603,54 @@ class TelegramChannel(BaseChannel):
             meta["is_guest"] = True
         if business_connection_id := getattr(message, "business_connection_id", None):
             meta["business_connection_id"] = business_connection_id
+        if fwd := TelegramChannel._extract_forward_info(message):
+            meta.update(fwd)
         return meta
+
+    @staticmethod
+    def _extract_forward_info(message) -> dict | None:
+        """Parse Message.forward_origin into a small metadata dict + label."""
+        origin = getattr(message, "forward_origin", None)
+        if origin is None and not getattr(message, "is_automatic_forward", False):
+            return None
+        info: dict[str, Any] = {"is_forward": True}
+        label = "unknown"
+        otype = getattr(origin, "type", None) or type(origin).__name__
+        info["forward_type"] = str(otype)
+        sender_user = getattr(origin, "sender_user", None)
+        if sender_user is not None:
+            name = (
+                getattr(sender_user, "full_name", None)
+                or getattr(sender_user, "first_name", None)
+                or getattr(sender_user, "username", None)
+                or str(getattr(sender_user, "id", "user"))
+            )
+            info["forward_from_user_id"] = getattr(sender_user, "id", None)
+            info["forward_from_username"] = getattr(sender_user, "username", None)
+            info["forward_from_name"] = name
+            uname = getattr(sender_user, "username", None)
+            label = f"{name} (@{uname})" if uname else str(name)
+        elif getattr(origin, "sender_user_name", None):
+            info["forward_from_name"] = origin.sender_user_name
+            label = str(origin.sender_user_name)
+        else:
+            chat = getattr(origin, "sender_chat", None) or getattr(origin, "chat", None)
+            if chat is not None:
+                title = (
+                    getattr(chat, "title", None)
+                    or getattr(chat, "full_name", None)
+                    or getattr(chat, "username", None)
+                    or str(getattr(chat, "id", "chat"))
+                )
+                info["forward_from_chat_id"] = getattr(chat, "id", None)
+                info["forward_from_chat_title"] = title
+                sig = getattr(origin, "author_signature", None)
+                info["forward_author_signature"] = sig
+                label = f"{title}" + (f" / {sig}" if sig else "")
+            elif getattr(message, "is_automatic_forward", False):
+                label = "linked channel"
+        info["forward_label"] = label
+        return info
 
     @staticmethod
     def _extract_reply_context(message) -> str | None:
@@ -1662,12 +1803,30 @@ class TelegramChannel(BaseChannel):
             return
         message = update.message
         user = update.effective_user
+        sender_id = self._sender_id(user)
+        is_group = message.chat.type in ("group", "supergroup")
+        has_business = bool(getattr(message, "business_connection_id", None))
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=has_business,
+            sender_id=sender_id,
+            username=user.username,
+        ):
+            return
+        cmd = (message.text or "").strip().split()[0].lower().split("@", 1)[0]
+        if is_group and cmd in ("/new", "/stop", "/restart") and not self._is_allowlisted(
+            sender_id, user.username
+        ):
+            await message.reply_text("These commands are owner-only.")
+            return
         self._remember_thread_context(message)
+        metadata = self._build_message_metadata(message, user)
+        metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
         await self._handle_message(
-            sender_id=self._sender_id(user),
+            sender_id=sender_id,
             chat_id=str(message.chat_id),
             content=message.text or "",
-            metadata=self._build_message_metadata(message, user),
+            metadata=metadata,
             session_key=self._derive_topic_session_key(message),
         )
 
@@ -1683,11 +1842,20 @@ class TelegramChannel(BaseChannel):
         is_guest = update.guest_message is not None
         chat_id = str(message.chat_id)
         sender_id = self._sender_id(user)
-        # Guest Mode still requires allow_from — never open the bot to arbitrary users.
-        if not self.is_allowed(sender_id, chat_id, user.username):
+        is_group = message.chat.type in ("group", "supergroup")
+        has_business = bool(getattr(message, "business_connection_id", None))
+        # Guest Mode always requires allowFrom. Private bot DMs: allowFrom only.
+        # Groups need openGroups; Chat Automation peers need businessEnabled.
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=has_business,
+            sender_id=sender_id,
+            username=user.username,
+            is_guest=is_guest,
+        ):
             logger.debug(
                 "Telegram: ignoring {} from unauthorised sender {}",
-                "guest message" if is_guest else "message",
+                "guest message" if is_guest else ("DM" if not is_group and not has_business else "message"),
                 sender_id,
             )
             return
@@ -1723,11 +1891,11 @@ class TelegramChannel(BaseChannel):
                 content_parts.insert(0, tag)
         content = "\n".join(content_parts) if content_parts else "[empty message]"
         str_chat_id = str(chat_id)
-        is_group = message.chat.type in ("group", "supergroup")
         sender_name = user.first_name or user.username or sender_id
         if is_group and not is_guest:
             content = f"{sender_name}: {content}"
         metadata = self._build_message_metadata(message, user, guest=is_guest)
+        metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
         if is_guest:
             session_key = f"telegram:guest:{metadata.get('guest_query_id') or chat_id}"
         else:
@@ -1735,6 +1903,50 @@ class TelegramChannel(BaseChannel):
         should_respond = True if is_guest else await self._is_group_message_for_bot(message)
         if is_group and not should_respond and not is_guest:
             metadata["no_reply"] = True
+        # Secretary mode: archive Chat Automation traffic; do not auto-answer peers.
+        if metadata.get("business_connection_id") and not getattr(
+            self.config, "business_auto_reply", False
+        ):
+            # Owner↔bot DM also arrives as a normal Message update. Drop the
+            # Chat Automation echo — demoting it caused duplicate agent turns.
+            if self._bot_user_id is not None and int(chat_id) == int(self._bot_user_id):
+                logger.info(
+                    "Telegram: drop business echo of owner↔bot chat {}",
+                    chat_id,
+                )
+                return
+            metadata["no_reply"] = True
+            if not await self._message_has_bot_mention(message) and await self._is_secretary_summon(
+                message
+            ):
+                metadata.pop("no_reply")
+                metadata["secretary_summon"] = True
+                logger.info(
+                    "Telegram secretary summon from {} chat={}: {}...",
+                    sender_id,
+                    chat_id,
+                    content[:50],
+                )
+            else:
+                logger.info(
+                    "Telegram business archive from {} chat={}: {}...",
+                    sender_id,
+                    chat_id,
+                    content[:50],
+                )
+        if metadata.get("no_reply") and self.config.history_max_age_hours > 0:
+            date = getattr(message, "date", None)
+            if date is not None:
+                date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
+                age_hours = (
+                    datetime.now(timezone.utc) - date.astimezone(timezone.utc)
+                ).total_seconds() / 3600
+                if age_hours > self.config.history_max_age_hours:
+                    logger.debug(
+                        "Telegram: skipping stale no_reply message ({:.1f}h)",
+                        age_hours,
+                    )
+                    return
         # User edited their message: if we already replied, edit that reply in place.
         if not metadata.get("no_reply") and getattr(message, "edit_date", None) is not None:
             prior = self._lookup_inbound_reply(int(message.chat_id), getattr(message, "message_id", None))
@@ -1766,7 +1978,7 @@ class TelegramChannel(BaseChannel):
                     "metadata": metadata,
                     "session_key": session_key,
                 }
-                if not metadata.get("no_reply"):
+                if not metadata.get("no_reply") and not metadata.get("secretary_summon"):
                     self._start_typing(str_chat_id)
             buf = self._media_group_buffers[key]
             if content and content != "[empty message]":
@@ -1775,7 +1987,7 @@ class TelegramChannel(BaseChannel):
             if key not in self._media_group_tasks:
                 self._media_group_tasks[key] = asyncio.create_task(self._flush_media_group(key))
             return
-        if not metadata.get("no_reply") and not is_guest:
+        if not metadata.get("no_reply") and not is_guest and not metadata.get("secretary_summon"):
             self._start_typing(str_chat_id)
         await self._handle_message(
             sender_id=sender_id,

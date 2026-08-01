@@ -47,7 +47,14 @@ class _FsTool(Tool):
         self._extra_allowed_dirs = extra_allowed_dirs
 
     def _resolve(self, path: str) -> Path:
-        return _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
+        resolved = _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
+        secretary_dir = (self._workspace / "memory" / "secretary").resolve() if self._workspace else None
+        if secretary_dir and resolved.is_relative_to(secretary_dir):
+            raise PermissionError(
+                "Secretary archive is only available via owner-gated business_search. "
+                "Do not read memory/secretary directly."
+            )
+        return resolved
 
 
 # ---------------------------------------------------------------------------

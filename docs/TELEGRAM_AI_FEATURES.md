@@ -12,8 +12,11 @@ to `true` (private-chat UX; no access-control impact).
 | `guestMode` | `false` | Guest bots — reply when `@username` is used in any chat |
 | `allowBotMessages` | `false` | Bot-to-bot messages (also enable in BotFather) |
 | `businessEnabled` | `false` | Chat Automation / Business connection messages |
+| `businessAutoReply` | `false` | When `false`, Chat Automation peer traffic is archived only (no agent reply) |
+| `historyMaxAgeHours` | `24` | Telegram prompt-history window; `0` disables age trimming |
 | `managedBotsEnabled` | `false` | Track Managed Bot create/token updates |
 | `richMessages` | `false` | Bot API 10.1 `sendRichMessage` / rich draft (opt-in) |
+| `openGroups` | `false` | Groups accept any member; private bot DMs stay on `allowFrom` |
 
 ## Access notes for Rich Messages
 
@@ -22,6 +25,20 @@ to `true` (private-chat UX; no access-control impact).
 - Private streaming with rich enabled uses `sendRichMessageDraft`; on failure it falls back to `sendMessageDraft` / HTML `sendMessage`.
 - Some Telegram clients still show unsupported placeholders for rich content — keep the flag off until your clients render it well.
 - Chat Automation supports `business_connection_id` on `sendRichMessage` when the connected user can send rich messages.
+
+## Access control (`allowFrom` + `openGroups`)
+
+- **Private bot DMs** always require `allowFrom` (owner allowlist). `"*"` still means everyone.
+- **`openGroups: true`** — group/supergroup members may talk to the bot (reply policy still follows `groupPolicy`). Senders not on `allowFrom` get `metadata.is_allowlisted=false`.
+- **Tool lockdown (default-deny):** non-allowlisted Telegram turns may only use `web_search` and `web_fetch`. Everything else (memory/knowledge/FS/exec/MCP/plugins/…) is blocked. Telegram turns missing `is_allowlisted` are fail-closed (restricted).
+- **`businessEnabled: true`** — Chat Automation peer DMs are accepted even when `allowFrom` is owner-only (otherwise the archive never receives peer traffic). Same tool lockdown for non-allowlisted peers.
+- **`businessAutoReply: false` (default)** — archive Chat Automation turns without calling the agent (`no_reply`). A peer can summon the secretary with a configured `triggerWords` value or by replying to a bot/secretary reply; `@bot` stays Guest Mode. Secretary and business peer sessions keep their full ledger rather than using `historyMaxAgeHours`.
+- **Secretary tools** (`business_search`, `business_send`) are registered when Telegram is configured. They are **owner-only** (`allowFrom` ids; `"*"` is not owner). Cron/`automation` channel turns may use them when the turn is treated as owner. Owner↔bot business echoes (chat id = bot user id) are dropped so the bot does not archive its own DM thread.
+- **Secretary archive files** under `memory/secretary/` cannot be read through filesystem tools; use owner-gated `business_search`.
+- **Guest Mode** always requires `allowFrom` (never opened by `openGroups`).
+- Slash commands `/new`, `/stop`, `/restart` in groups remain allowlist-only.
+
+Forward origin is taken from Telegram `Message.forward_origin` into metadata (`is_forward`, `forward_label`, …) and surfaced in Live State — not as forgeable `[Forwarded from: …]` text in the user message.
 
 ## BotFather / client setup
 
@@ -47,11 +64,15 @@ These flags alone are not enough — Telegram must allow the capability for your
     "telegram": {
       "enabled": true,
       "allowFrom": ["123456789"],
+      "openGroups": true,
       "streaming": true,
       "richMessages": true,
       "guestMode": true,
       "allowBotMessages": true,
       "businessEnabled": true,
+      "businessAutoReply": false,
+      "historyMaxAgeHours": 24,
+      "triggerWords": ["shiba"],
       "managedBotsEnabled": true
     }
   }
