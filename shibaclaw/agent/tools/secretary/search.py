@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -179,7 +180,7 @@ class BusinessSearchTool(Tool):
         sessions_dir = getattr(self._sessions, "sessions_dir", None)
         return Path(sessions_dir).parent if sessions_dir is not None else Path.home() / ".shibaclaw" / "workspace"
 
-    def _search(self, query: str, peer_filter: str, top_k: int) -> str:
+    async def _search(self, query: str, peer_filter: str, top_k: int) -> str:
         if not query.strip():
             return "Empty query — use mode=recent or mode=list instead."
         try:
@@ -187,7 +188,7 @@ class BusinessSearchTool(Tool):
             sync.sync_secretary_markdown(workspace)
             if error := sync.ensure_qmd_collection(workspace):
                 return f"Secretary qmd unavailable: {error}"
-            if error := sync.qmd_reindex():
+            if error := await asyncio.to_thread(sync.qmd_reindex):
                 return f"Secretary qmd unavailable: {error}"
             error, results = sync.qmd_search(query, top_k=top_k)
             if error:
@@ -221,4 +222,4 @@ class BusinessSearchTool(Tool):
             return self._list(peer_filter, limit, age)
         if selected == "recent":
             return self._recent(peer_filter, limit, age)
-        return self._search(query or "", peer_filter, limit)
+        return await self._search(query or "", peer_filter, limit)

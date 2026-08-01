@@ -48,8 +48,8 @@ class _FsTool(Tool):
 
     def _resolve(self, path: str) -> Path:
         resolved = _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
-        normalized = str(resolved).replace("\\", "/").rstrip("/")
-        if normalized.endswith("/memory/secretary"):
+        secretary_dir = (self._workspace / "memory" / "secretary").resolve() if self._workspace else None
+        if secretary_dir and resolved.is_relative_to(secretary_dir):
             raise PermissionError(
                 "Secretary archive is only available via owner-gated business_search. "
                 "Do not read memory/secretary directly."

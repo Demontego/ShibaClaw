@@ -110,7 +110,7 @@ class BusinessSendTool(Tool):
             if not connection:
                 continue
             label = _label(messages, peer_id, key)
-            identifiers = {str(peer_id), label.casefold()}
+            identifiers = {str(peer_id)}
             identifiers.update(
                 str(value).lstrip("@").casefold()
                 for message in messages
@@ -119,7 +119,7 @@ class BusinessSendTool(Tool):
                 for value in (_meta(message).get("username"), _meta(message).get("first_name"))
                 if value
             )
-            if peer != str(peer_id) and not any(peer == value or peer in value for value in identifiers):
+            if peer not in identifiers:
                 continue
             matches.append((key, label, peer_id, connection))
         unique: dict[int, tuple[str, str, int, str]] = {}
