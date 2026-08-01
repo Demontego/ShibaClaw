@@ -184,6 +184,23 @@ class ShibaBrain:
                 names.append(name)
         return names
 
+    def _history_max_age_hours(self, channel: str) -> float | None:
+        """Return Telegram's configured prompt-history window."""
+        if channel != "telegram":
+            return None
+        telegram = getattr(self.channels_config, "telegram", None)
+        if telegram is None:
+            extras = getattr(self.channels_config, "model_extra", None) or {}
+            telegram = extras.get("telegram") if isinstance(extras, dict) else None
+        if isinstance(telegram, dict):
+            value = telegram.get("historyMaxAgeHours", telegram.get("history_max_age_hours", 24))
+        else:
+            value = getattr(telegram, "history_max_age_hours", 24)
+        try:
+            return None if float(value) <= 0 else float(value)
+        except (TypeError, ValueError):
+            return 24.0
+
     async def reconfigure(self, new_cfg: Any, new_provider: Any) -> None:
         """Hot-reload agent configuration without restarting the gateway process.
 
@@ -1190,10 +1207,43 @@ class ShibaBrain:
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-        history = session.get_history(max_messages=0)
+        message_metadata = msg.metadata or {}
+        max_age_hours = self._history_max_age_hours(msg.channel)
+        if message_metadata.get("secretary_summon") or message_metadata.get(
+            "business_connection_id"
+        ):
+            max_age_hours = None
+        history = session.get_history(max_messages=0, max_age_hours=max_age_hours)
+        current_message = msg.content
+        if message_metadata.get("is_guest") or message_metadata.get("secretary_summon"):
+            try:
+                from shibaclaw.agent.tools.secretary.preamble import (
+                    build_guest_preamble,
+                    build_secretary_preamble,
+                )
+
+                owner_ids = _telegram_allow_from_ids(self.channels_config)
+                preamble = (
+                    build_secretary_preamble(
+                        self.sessions,
+                        chat_id=str(msg.chat_id),
+                        meta=message_metadata,
+                        owner_ids=owner_ids,
+                    )
+                    if message_metadata.get("secretary_summon")
+                    else build_guest_preamble(
+                        self.sessions,
+                        chat_id=str(msg.chat_id),
+                        meta=message_metadata,
+                        owner_ids=owner_ids,
+                    )
+                )
+                current_message = preamble + (msg.content or "")
+            except Exception as error:
+                logger.warning("Guest/secretary preamble failed: {}", error)
         initial_messages = self.context.build_messages(
             history=history,
-            current_message=msg.content,
+            current_message=current_message,
             media=msg.media if msg.media else None,
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -1222,6 +1272,8 @@ class ShibaBrain:
         _pre_saved_count = 1
 
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
+            if msg.metadata and msg.metadata.get("secretary_summon"):
+                return
             meta = {"_progress": True, "_tool_hint": tool_hint, **(msg.metadata or {})}
             await self.bus.publish_outbound(
                 OutboundMessage(

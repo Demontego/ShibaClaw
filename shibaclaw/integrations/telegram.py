@@ -6,6 +6,7 @@ import itertools
 import logging
 import re
 import unicodedata
+from datetime import datetime, timezone
 from typing import Any, Literal
 from loguru import logger
 from pydantic import Field, field_validator
@@ -459,6 +460,7 @@ class TelegramConfig(Base):
     group_policy: Literal["open", "mention", "trigger", "mention_or_trigger"] = "mention"
     trigger_words: list[str] = Field(default_factory=list)
     group_context_buffer_size: int = 10
+    history_max_age_hours: float = 24.0
     connection_pool_size: int = 32
     pool_timeout: float = 5.0
     # Bot API 9.3–10.x AI / agent features (require BotFather toggles where noted).
@@ -518,6 +520,8 @@ class TelegramChannel(BaseChannel):
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._media_group_buffers: dict[str, dict] = {}
         self._media_group_tasks: dict[str, asyncio.Task] = {}
+        self._secretary_outbound: dict[int, set[int]] = {}
+        self._SECRETARY_OUTBOUND_CAP = 40
         self._message_threads: dict[tuple[str, int], int] = {}
         self._THREADS_CAP = 1000
         self._progress_messages: dict[tuple[str, int | None], int] = {}
@@ -863,12 +867,12 @@ class TelegramChannel(BaseChannel):
             )
             use_rich = bool(self.config.rich_messages)
             sent_rich = False
+            last_mid: int | None = None
             if use_rich and not is_progress:
-                # One rich payload (no HTML split) — fallback to legacy on failure.
-                mid = await self._send_rich_message(
+                last_mid = await self._send_rich_message(
                     chat_id, msg.content, reply_params, thread_kwargs
                 )
-                sent_rich = mid is not None
+                sent_rich = last_mid is not None
             if not sent_rich:
                 for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
                     if is_progress and use_draft:
@@ -884,10 +888,12 @@ class TelegramChannel(BaseChannel):
                             chat_id, chunk, reply_params, thread_kwargs
                         )
                     else:
-                        await self._send_with_streaming(
+                        last_mid = await self._send_with_streaming(
                             chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
                         )
             if not is_progress:
+                if metadata.get("business_connection_id"):
+                    self._remember_secretary_outbound(chat_id, last_mid)
                 thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
                 await self._clear_progress_message(chat_id, thread_id)
                 self._clear_draft_id(chat_id, thread_id)
@@ -1027,11 +1033,11 @@ class TelegramChannel(BaseChannel):
         text: str,
         reply_params=None,
         thread_kwargs: dict | None = None,
-    ) -> None:
+    ) -> int | None:
         """Send a plain text message with HTML fallback."""
         try:
             html = _markdown_to_telegram_html(text)
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=html,
@@ -1039,7 +1045,7 @@ class TelegramChannel(BaseChannel):
                 reply_parameters=reply_params,
                 **(thread_kwargs or {}),
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e:
@@ -1048,14 +1054,14 @@ class TelegramChannel(BaseChannel):
                 raise
             logger.warning("HTML parse failed, falling back to plain text: {}", e)
         try:
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=text,
                 reply_parameters=reply_params,
                 **(thread_kwargs or {}),
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e2:
@@ -1337,12 +1343,12 @@ class TelegramChannel(BaseChannel):
         thread_kwargs: dict | None = None,
         *,
         use_draft: bool = False,
-    ) -> None:
+    ) -> int | None:
         """Send final message text. Optional last draft flash for private chats."""
         if use_draft and text:
             # Final animated draft, then persist with sendMessage (API contract).
             await self._send_message_draft(chat_id, text, thread_kwargs)
-        await self._send_text(chat_id, text, reply_params, thread_kwargs)
+        return await self._send_text(chat_id, text, reply_params, thread_kwargs)
 
     async def _on_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
@@ -1385,6 +1391,45 @@ class TelegramChannel(BaseChannel):
             "/restart — Restart the bot\n"
             "/help — Show available commands"
         )
+
+    def _remember_secretary_outbound(self, chat_id: int, message_id: int | None) -> None:
+        """Keep a bounded set of business replies that can be replied-to to summon."""
+        if message_id is None:
+            return
+        outbound = self._secretary_outbound.setdefault(chat_id, set())
+        outbound.add(message_id)
+        while len(outbound) > self._SECRETARY_OUTBOUND_CAP:
+            outbound.pop()
+        while len(self._secretary_outbound) > self._CHAT_IDS_CAP:
+            self._secretary_outbound.pop(next(iter(self._secretary_outbound)))
+
+    async def _message_has_bot_mention(self, message) -> bool:
+        """Whether this message is a Guest Mode @mention."""
+        bot_id, username = await self._ensure_bot_identity()
+        if not username:
+            return False
+        return self._has_mention_entity(
+            message.text or "", getattr(message, "entities", None), username, bot_id
+        ) or self._has_mention_entity(
+            message.caption or "", getattr(message, "caption_entities", None), username, bot_id
+        )
+
+    async def _is_secretary_summon(self, message) -> bool:
+        """Return true for a trigger word or reply to bot/secretary output."""
+        combined = f"{message.text or ''} {message.caption or ''}".lower()
+        for word in self.config.trigger_words:
+            trigger = str(word).strip().lower()
+            if trigger and trigger in combined:
+                return True
+        reply = getattr(message, "reply_to_message", None)
+        if reply is None:
+            return False
+        bot_id, _ = await self._ensure_bot_identity()
+        reply_user = getattr(reply, "from_user", None)
+        if bot_id and reply_user and getattr(reply_user, "id", None) == bot_id:
+            return True
+        reply_id = getattr(reply, "message_id", None)
+        return reply_id in self._secretary_outbound.get(int(message.chat_id), set())
 
     @staticmethod
     def _sender_id(user) -> str:
@@ -1735,12 +1780,24 @@ class TelegramChannel(BaseChannel):
                 )
                 return
             metadata["no_reply"] = True
-            logger.info(
-                "Telegram business archive from {} chat={}: {}...",
-                sender_id,
-                chat_id,
-                content[:50],
-            )
+            if not await self._message_has_bot_mention(message) and await self._is_secretary_summon(
+                message
+            ):
+                metadata.pop("no_reply")
+                metadata["secretary_summon"] = True
+                logger.info("Telegram secretary summon from {} chat={}: {}...", sender_id, chat_id, content[:50])
+            else:
+                logger.info(
+                    "Telegram business archive from {} chat={}: {}...", sender_id, chat_id, content[:50]
+                )
+        if metadata.get("no_reply") and self.config.history_max_age_hours > 0:
+            date = getattr(message, "date", None)
+            if date is not None:
+                date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
+                age_hours = (datetime.now(timezone.utc) - date.astimezone(timezone.utc)).total_seconds() / 3600
+                if age_hours > self.config.history_max_age_hours:
+                    logger.debug("Telegram: skipping stale no_reply message ({:.1f}h)", age_hours)
+                    return
         logger.debug(
             "Telegram message from {} guest={}: {}...",
             sender_id,
@@ -1761,7 +1818,7 @@ class TelegramChannel(BaseChannel):
                     "metadata": metadata,
                     "session_key": session_key,
                 }
-                if not metadata.get("no_reply"):
+                if not metadata.get("no_reply") and not metadata.get("secretary_summon"):
                     self._start_typing(str_chat_id)
             buf = self._media_group_buffers[key]
             if content and content != "[empty message]":
@@ -1770,7 +1827,7 @@ class TelegramChannel(BaseChannel):
             if key not in self._media_group_tasks:
                 self._media_group_tasks[key] = asyncio.create_task(self._flush_media_group(key))
             return
-        if not metadata.get("no_reply") and not is_guest:
+        if not metadata.get("no_reply") and not is_guest and not metadata.get("secretary_summon"):
             self._start_typing(str_chat_id)
         await self._handle_message(
             sender_id=sender_id,
