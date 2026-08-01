@@ -12,6 +12,7 @@ to `true` (private-chat UX; no access-control impact).
 | `guestMode` | `false` | Guest bots — reply when `@username` is used in any chat |
 | `allowBotMessages` | `false` | Bot-to-bot messages (also enable in BotFather) |
 | `businessEnabled` | `false` | Chat Automation / Business connection messages |
+| `businessAutoReply` | `false` | When `false`, Chat Automation peer traffic is archived only (no agent reply) |
 | `managedBotsEnabled` | `false` | Track Managed Bot create/token updates |
 | `richMessages` | `false` | Bot API 10.1 `sendRichMessage` / rich draft (opt-in) |
 | `openGroups` | `false` | Groups accept any member; private bot DMs stay on `allowFrom` |
@@ -30,6 +31,8 @@ to `true` (private-chat UX; no access-control impact).
 - **`openGroups: true`** — group/supergroup members may talk to the bot (reply policy still follows `groupPolicy`). Senders not on `allowFrom` get `metadata.is_allowlisted=false`.
 - **Tool lockdown (default-deny):** non-allowlisted Telegram turns may only use `web_search` and `web_fetch`. Everything else (memory/knowledge/FS/exec/MCP/plugins/…) is blocked. Telegram turns missing `is_allowlisted` are fail-closed (restricted).
 - **`businessEnabled: true`** — Chat Automation peer DMs are accepted even when `allowFrom` is owner-only (otherwise the archive never receives peer traffic). Same tool lockdown for non-allowlisted peers.
+- **`businessAutoReply: false` (default)** — archive Chat Automation turns without calling the agent (`no_reply`). Set `true` to auto-reply in peer DMs.
+- **Secretary tools** (`business_search`, `business_send`) are registered when Telegram is configured. They are **owner-only** (`allowFrom` ids; `"*"` is not owner). Cron/`automation` channel turns may use them when the turn is treated as owner. Owner↔bot business echoes (chat id = bot user id) are dropped so the bot does not archive its own DM thread.
 - **Guest Mode** always requires `allowFrom` (never opened by `openGroups`).
 - Slash commands `/new`, `/stop`, `/restart` in groups remain allowlist-only.
 
@@ -65,6 +68,7 @@ These flags alone are not enough — Telegram must allow the capability for your
       "guestMode": true,
       "allowBotMessages": true,
       "businessEnabled": true,
+      "businessAutoReply": false,
       "managedBotsEnabled": true
     }
   }

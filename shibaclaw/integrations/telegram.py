@@ -467,6 +467,8 @@ class TelegramConfig(Base):
     guest_mode: bool = False
     allow_bot_messages: bool = False
     business_enabled: bool = False
+    # Secretary / Chat Automation: archive inbound by default; do not auto-reply in DMs.
+    business_auto_reply: bool = False
     managed_bots_enabled: bool = False
     # Bot API 10.1+ Rich Messages via do_api_request (PTB 22.8 has no wrappers).
     # Opt-in: some clients still render unsupported placeholders.
@@ -1720,6 +1722,25 @@ class TelegramChannel(BaseChannel):
         should_respond = True if is_guest else await self._is_group_message_for_bot(message)
         if is_group and not should_respond and not is_guest:
             metadata["no_reply"] = True
+        # Secretary mode: archive Chat Automation traffic; do not auto-answer peers.
+        if metadata.get("business_connection_id") and not getattr(
+            self.config, "business_auto_reply", False
+        ):
+            # Owner↔bot DM also arrives as a normal Message update. Drop the
+            # Chat Automation echo — demoting it caused duplicate agent turns.
+            if self._bot_user_id is not None and int(chat_id) == int(self._bot_user_id):
+                logger.info(
+                    "Telegram: drop business echo of owner↔bot chat {}",
+                    chat_id,
+                )
+                return
+            metadata["no_reply"] = True
+            logger.info(
+                "Telegram business archive from {} chat={}: {}...",
+                sender_id,
+                chat_id,
+                content[:50],
+            )
         logger.debug(
             "Telegram message from {} guest={}: {}...",
             sender_id,

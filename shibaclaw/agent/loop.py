@@ -36,6 +36,29 @@ from shibaclaw.thinkers.base import Thinker
 
 _MEDIA_RE = re.compile(r'\{\s*"media"\s*:\s*\[\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]\s*\}')
 
+
+def _telegram_allow_from_ids(channels_config: Any | None) -> set[str]:
+    """Owner Telegram ids from channels.telegram.allowFrom (``*`` ignored)."""
+    if channels_config is None:
+        return set()
+    extra = getattr(channels_config, "model_extra", None) or {}
+    tg = extra.get("telegram") if isinstance(extra, dict) else None
+    if tg is None:
+        tg = getattr(channels_config, "telegram", None)
+    if tg is None:
+        return set()
+    if hasattr(tg, "model_dump"):
+        data = tg.model_dump(by_alias=True)
+    elif isinstance(tg, dict):
+        data = tg
+    else:
+        return set()
+    raw = data.get("allowFrom") or data.get("allow_from") or []
+    if not isinstance(raw, list):
+        return set()
+    return {str(x) for x in raw if x is not None and str(x).strip() and str(x) != "*"}
+
+
 if TYPE_CHECKING:
     from shibaclaw.config.schema import ExecToolConfig, WebSearchConfig
 
@@ -324,6 +347,24 @@ class ShibaBrain:
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
 
+        # Telegram Chat Automation secretary archive (owner-only via allowFrom).
+        try:
+            from shibaclaw.agent.tools.secretary import BusinessSearchTool, BusinessSendTool
+
+            owner_ids = _telegram_allow_from_ids(self.channels_config)
+            self.tools.register(
+                BusinessSearchTool(sessions=self.sessions, owner_ids=owner_ids)
+            )
+            self.tools.register(
+                BusinessSendTool(
+                    sessions=self.sessions,
+                    send_callback=self.bus.publish_outbound,
+                    owner_ids=owner_ids,
+                )
+            )
+        except Exception as e:
+            logger.error("Failed to register secretary tools: {}", e)
+
         self.mcp.restore_active_tools()
 
     def inject_steering_message(
@@ -370,7 +411,7 @@ class ShibaBrain:
         Other channels keep legacy fail-open when the flag is absent.
         """
         ch = str(channel or (metadata or {}).get("channel") or "").lower()
-        if ch in {"webui", "cli", "system"}:
+        if ch in {"webui", "cli", "system", "automation"}:
             return True
         flag = (metadata or {}).get("is_allowlisted")
         if ch == "telegram":
@@ -416,6 +457,7 @@ class ShibaBrain:
         session_key: str | None = None,
         model: str | None = None,
         provider: Any | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
         for name in ("message", "spawn", "automation", "think"):
@@ -429,6 +471,11 @@ class ShibaBrain:
                         )
                     else:
                         tool.set_context(channel, chat_id, session_key)
+        # Secretary tools need turn metadata for owner ACL.
+        for name in ("business_search", "business_send"):
+            if tool := self.tools.get(name):
+                if hasattr(tool, "set_context"):
+                    tool.set_context(channel, chat_id, metadata=metadata or {})
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -504,6 +551,7 @@ class ShibaBrain:
             session_key,
             model=active_model,
             provider=active_provider,
+            metadata=metadata,
         )
 
         if not active_provider:
@@ -963,6 +1011,7 @@ class ShibaBrain:
                 msg.metadata.get("message_id"),
                 session_key=key,
                 model=session.metadata.get("model") or None,
+                metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
@@ -1135,6 +1184,7 @@ class ShibaBrain:
             msg.metadata.get("message_id"),
             session_key=key,
             model=session.metadata.get("model") or None,
+            metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
