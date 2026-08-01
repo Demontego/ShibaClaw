@@ -310,6 +310,19 @@ def _migrate_config(data: dict) -> dict:
             email[key] = default_val
     channels["email"] = email
 
+    # Expose Telegram security and secretary controls in the WebUI even when
+    # they were absent from an older config.
+    telegram = channels.get("telegram", {})
+    if isinstance(telegram, dict):
+        telegram_defaults: dict = {
+            "openGroups": False,
+            "businessAutoReply": False,
+            "historyMaxAgeHours": 24.0,
+            "triggerWords": [],
+        }
+        for key, default_val in telegram_defaults.items():
+            telegram.setdefault(key, default_val)
+
     # Remove stale consentGranted from non-email channels (UI bug legacy)
     for _ch_name, _ch_cfg in channels.items():
         if _ch_name != "email" and isinstance(_ch_cfg, dict):
