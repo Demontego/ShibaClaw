@@ -8,6 +8,11 @@ import json
 import time
 from urllib.parse import urlencode
 
+from shibaclaw.webui.routers.auth import (
+    _TELEGRAM_AUTH_MAX_ATTEMPTS,
+    _telegram_auth_attempts,
+    _telegram_auth_rate_limited,
+)
 from shibaclaw.webui.telegram_webapp_auth import user_id_allowed, validate_init_data
 
 
@@ -41,7 +46,25 @@ def test_validate_init_data_ok_and_rejects_tamper_stale():
     assert validate_init_data(stale, bot_token, now=float(now)) is None
 
 
-def test_user_id_allowed_rejects_star():
+def test_user_id_allowed_matches_id_and_username_entries():
     assert user_id_allowed(42, ["42"])
+    assert user_id_allowed(42, ["owner"], "owner")
+    assert user_id_allowed(42, ["@Owner"], "owner")
+    assert user_id_allowed(42, ["42|owner"], "Owner")
+    assert user_id_allowed(42, ["42|@owner"], "owner")
     assert not user_id_allowed(42, ["*"])
     assert not user_id_allowed(1, ["42"])
+    assert not user_id_allowed(42, ["owner"], "someone_else")
+    assert not user_id_allowed(42, ["42|owner"], "someone_else")
+
+
+def test_telegram_auth_rate_limiter_releases_expired_attempts():
+    client_ip = "test-telegram-mini-app"
+    _telegram_auth_attempts.pop(client_ip, None)
+    try:
+        for _ in range(_TELEGRAM_AUTH_MAX_ATTEMPTS):
+            assert not _telegram_auth_rate_limited(client_ip, now=100.0)
+        assert _telegram_auth_rate_limited(client_ip, now=100.0)
+        assert not _telegram_auth_rate_limited(client_ip, now=161.0)
+    finally:
+        _telegram_auth_attempts.pop(client_ip, None)

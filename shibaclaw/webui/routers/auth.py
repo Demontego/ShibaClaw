@@ -2,12 +2,31 @@
 
 from __future__ import annotations
 
+from collections import deque
+import time
+
 from loguru import logger
 from starlette.requests import Request
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from shibaclaw.webui.auth import _auth_enabled, _is_user_setup, is_telegram_mini_surface
+
+_TELEGRAM_AUTH_MAX_ATTEMPTS = 10
+_TELEGRAM_AUTH_WINDOW_SEC = 60
+_telegram_auth_attempts: dict[str, deque[float]] = {}
+
+
+def _telegram_auth_rate_limited(client_ip: str, *, now: float | None = None) -> bool:
+    """Record an auth attempt and return whether its IP exceeded the one-minute limit."""
+    current_time = time.monotonic() if now is None else now
+    attempts = _telegram_auth_attempts.setdefault(client_ip, deque())
+    while attempts and attempts[0] <= current_time - _TELEGRAM_AUTH_WINDOW_SEC:
+        attempts.popleft()
+    if len(attempts) >= _TELEGRAM_AUTH_MAX_ATTEMPTS:
+        return True
+    attempts.append(current_time)
+    return False
 
 
 def _reject_password_on_mini(request: Request) -> JSONResponse | None:
@@ -178,6 +197,15 @@ async def api_auth_telegram(request: Request):
     from shibaclaw.security.credential_manager import get_credential_manager
     from shibaclaw.webui.telegram_webapp_auth import user_id_allowed, validate_init_data
 
+    client_ip = request.client.host if request.client else "unknown"
+    if _telegram_auth_rate_limited(client_ip):
+        logger.warning("Telegram Mini App auth rate limited from {}", client_ip)
+        return JSONResponse(
+            {"error": "Too many authentication attempts. Try again in a minute."},
+            status_code=429,
+            headers={"Retry-After": str(_TELEGRAM_AUTH_WINDOW_SEC)},
+        )
+
     try:
         data = await request.json()
     except Exception:
@@ -249,7 +277,8 @@ async def api_auth_telegram(request: Request):
 
     user_id = parsed["user"].get("id")
     allow_from = list(_tg_get(tg, "allow_from", "allowFrom", default=[]) or [])
-    if not user_id_allowed(user_id, allow_from):
+    username = parsed["user"].get("username")
+    if not user_id_allowed(user_id, allow_from, username):
         logger.warning("Telegram Mini App denied user_id={}", user_id)
         return JSONResponse({"error": "Access denied."}, status_code=403)
 

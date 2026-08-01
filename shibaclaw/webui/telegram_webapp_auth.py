@@ -66,12 +66,33 @@ def validate_init_data(
     }
 
 
-def user_id_allowed(user_id: int | str, allow_from: list[str]) -> bool:
-    """Owner-only: numeric id must be in allow_from. Bare '*' is rejected for Mini App."""
+def user_id_allowed(
+    user_id: int | str, allow_from: list[str], username: str | None = None
+) -> bool:
+    """Match a Telegram user against numeric, username, or ``id|username`` entries.
+
+    Bare ``"*"`` remains deliberately unsupported for Mini App authentication.
+    """
     if not allow_from:
         return False
     uid = str(user_id).strip()
     if not uid or uid == "*":
         return False
-    allowed = {str(x).strip() for x in allow_from if str(x).strip() and str(x).strip() != "*"}
-    return uid in allowed
+    normalized_username = (username or "").strip().lstrip("@").casefold()
+    for raw_entry in allow_from:
+        entry = str(raw_entry).strip()
+        if not entry or entry == "*":
+            continue
+        if entry == uid:
+            return True
+        if "|" in entry:
+            entry_uid, entry_username = entry.split("|", 1)
+            if (
+                entry_uid.strip() == uid
+                and normalized_username
+                and entry_username.strip().lstrip("@").casefold() == normalized_username
+            ):
+                return True
+        elif normalized_username and entry.lstrip("@").casefold() == normalized_username:
+            return True
+    return False
