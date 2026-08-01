@@ -201,7 +201,9 @@ function startApp() {
     if (typeof initMentions === "function") {
         initMentions();
     }
-    chatInput.focus();
+    try {
+        if (chatInput) chatInput.focus();
+    } catch (_) { /* Telegram WebView may block focus */ }
 
     syncFooterActions();
 

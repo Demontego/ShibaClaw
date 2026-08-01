@@ -1031,6 +1031,8 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         history_max_age_hours: { section: "logic", tooltip: "Discard Telegram conversation history older than this many hours." },
         trigger_words: { section: "logic", tooltip: "Words that summon the bot in Telegram groups and Chat Automation peer DMs." },
         managed_bots_enabled: { section: "logic", tooltip: "Allow the bot to be managed by other bots (Bot API 9.3+)." },
+        mini_app_url: { section: "logic", tooltip: "Public HTTPS URL for the Telegram Mini App menu button (e.g. https://host:8444/?tgWebApp=1)." },
+        miniAppUrl: { section: "logic", tooltip: "Public HTTPS URL for the Telegram Mini App menu button (e.g. https://host:8444/?tgWebApp=1)." },
         group_context_buffer_size: { section: "logic", tooltip: "Number of recent group messages kept as context for replies." },
         intents: { section: "logic", tooltip: "Discord Gateway intent bitmask. Controls which events the bot receives." },
         mode: { section: "logic", tooltip: "Connection mode: socket for Socket Mode, events for HTTP Events API." },
