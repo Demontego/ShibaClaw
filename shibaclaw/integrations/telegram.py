@@ -429,6 +429,11 @@ _SEND_MAX_RETRIES = 3
 _SEND_RETRY_BASE_DELAY = 0.5
 
 
+def _is_message_not_modified_error(error: Exception) -> bool:
+    """Return whether Telegram rejected an edit because the content is unchanged."""
+    return "message is not modified" in str(error).lower()
+
+
 class TelegramConfig(Base):
     """Telegram channel configuration."""
 
@@ -835,9 +840,8 @@ class TelegramChannel(BaseChannel):
                 elif progress_id is not None and not use_draft:
                     finalize_edit = int(progress_id)
             if finalize_edit is not None and not is_progress:
-                text_body = msg.content
-                if len(text_body) > TELEGRAM_MAX_MESSAGE_LEN:
-                    text_body = text_body[: TELEGRAM_MAX_MESSAGE_LEN - 1] + "…"
+                chunks = list(split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN))
+                text_body, *remaining_chunks = chunks
                 if use_rich and await self._edit_rich_message(
                     chat_id, finalize_edit, text_body, thread_kwargs
                 ):
@@ -850,6 +854,10 @@ class TelegramChannel(BaseChannel):
                         thread_kwargs,
                         use_draft=False,
                         edit_message_id=finalize_edit,
+                    )
+                for chunk in remaining_chunks:
+                    last_mid = await self._send_with_streaming(
+                        chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
                     )
             elif use_rich and not is_progress:
                 last_mid = await self._send_rich_message(
@@ -939,9 +947,13 @@ class TelegramChannel(BaseChannel):
                 parse_mode="HTML",
             )
             return True
-        except (NetworkError, RetryAfter, TimedOut):
+        except (NetworkError, RetryAfter, TimedOut) as e:
+            if _is_message_not_modified_error(e):
+                return True
             raise
         except Exception as e:
+            if _is_message_not_modified_error(e):
+                return True
             err_str = str(e).lower()
             if "parse" not in err_str and "entit" not in err_str:
                 logger.warning("Failed to edit progress message {}: {}", message_id, e)
@@ -955,9 +967,13 @@ class TelegramChannel(BaseChannel):
                 text=text,
             )
             return True
-        except (NetworkError, RetryAfter, TimedOut):
+        except (NetworkError, RetryAfter, TimedOut) as e:
+            if _is_message_not_modified_error(e):
+                return True
             raise
         except Exception as e:
+            if _is_message_not_modified_error(e):
+                return True
             logger.warning("Failed to edit progress message {} with plain text: {}", message_id, e)
             return False
 
@@ -1047,9 +1063,13 @@ class TelegramChannel(BaseChannel):
                     **edit_kw,
                 )
                 return int(edit_message_id)
-            except (NetworkError, RetryAfter, TimedOut):
+            except (NetworkError, RetryAfter, TimedOut) as e:
+                if _is_message_not_modified_error(e):
+                    return int(edit_message_id)
                 raise
             except Exception as e:
+                if _is_message_not_modified_error(e):
+                    return int(edit_message_id)
                 err_str = str(e).lower()
                 if "parse" in err_str or "entit" in err_str:
                     try:
@@ -1061,7 +1081,13 @@ class TelegramChannel(BaseChannel):
                             **edit_kw,
                         )
                         return int(edit_message_id)
+                    except (NetworkError, RetryAfter, TimedOut) as e2:
+                        if _is_message_not_modified_error(e2):
+                            return int(edit_message_id)
+                        raise
                     except Exception as e2:
+                        if _is_message_not_modified_error(e2):
+                            return int(edit_message_id)
                         logger.warning(
                             "Failed to edit message {} (plain), falling back to send: {}",
                             edit_message_id,
@@ -1293,9 +1319,13 @@ class TelegramChannel(BaseChannel):
                     ),
                 )
                 return True
-            except (NetworkError, RetryAfter, TimedOut):
+            except (NetworkError, RetryAfter, TimedOut) as e:
+                if _is_message_not_modified_error(e):
+                    return True
                 raise
             except Exception as e:
+                if _is_message_not_modified_error(e):
+                    return True
                 last_err = e
                 continue
         logger.warning("Telegram editMessageText(rich) failed, falling back: {}", last_err)
