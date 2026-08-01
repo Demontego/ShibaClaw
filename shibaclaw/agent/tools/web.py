@@ -120,8 +120,21 @@ class WebSearchTool(Tool):
         else:
             return f"Error: unknown search provider '{provider}'"
 
+
+    def _resolve_search_api_key(self) -> str:
+        """Vault-first API key (WebSearchConfig.api_key was removed)."""
+        resolve = getattr(self.config, "resolve_api_key", None)
+        if callable(resolve):
+            try:
+                key = resolve() or ""
+                if key:
+                    return key
+            except Exception:
+                pass
+        return os.environ.get("BRAVE_API_KEY", "") or os.environ.get("TAVILY_API_KEY", "") or os.environ.get("JINA_API_KEY", "")
+
     async def _search_brave(self, query: str, n: int) -> str:
-        api_key = self.config.api_key or os.environ.get("BRAVE_API_KEY", "")
+        api_key = self._resolve_search_api_key() or os.environ.get("BRAVE_API_KEY", "")
         if not api_key:
             logger.warning("BRAVE_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)
@@ -147,7 +160,7 @@ class WebSearchTool(Tool):
             return f"Error: {e}"
 
     async def _search_tavily(self, query: str, n: int) -> str:
-        api_key = self.config.api_key or os.environ.get("TAVILY_API_KEY", "")
+        api_key = self._resolve_search_api_key() or os.environ.get("TAVILY_API_KEY", "")
         if not api_key:
             logger.warning("TAVILY_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)
@@ -187,7 +200,7 @@ class WebSearchTool(Tool):
             return f"Error: {e}"
 
     async def _search_jina(self, query: str, n: int) -> str:
-        api_key = self.config.api_key or os.environ.get("JINA_API_KEY", "")
+        api_key = self._resolve_search_api_key() or os.environ.get("JINA_API_KEY", "")
         if not api_key:
             logger.warning("JINA_API_KEY not set, falling back to DuckDuckGo")
             return await self._search_duckduckgo(query, n)

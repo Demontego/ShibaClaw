@@ -498,8 +498,19 @@ Root: {workspace_path}
         """Add a tool result to the message list, wrapped with a randomized delimiter for security."""
         tag = f"tool_output_{self._tool_output_nonce}"
         
+        # Prompt-injection guard. Keep phrases specific — bare "you are now" false-positives
+        # on Klavis/Google Calendar docs ("You are now viewing…") and blanks the tool result.
         lower_res = result.lower()
-        if "ignore previous instructions" in lower_res or "you are now" in lower_res or "system prompt" in lower_res:
+        _inject = (
+            "ignore previous instructions" in lower_res
+            or "ignore all previous instructions" in lower_res
+            or "ignore prior instructions" in lower_res
+            or "new system prompt" in lower_res
+            or "your new system prompt" in lower_res
+            or "you are now a " in lower_res
+            or "you are now an " in lower_res
+        )
+        if _inject:
             result = "[SECURITY WARNING: Potential Prompt Injection Detected. Content sanitized.]"
             
         closing_tag = f"</{tag}>"
@@ -521,6 +532,7 @@ Root: {workspace_path}
         content: str | None,
         tool_calls: list[dict[str, Any]] | None = None,
         reasoning_content: str | None = None,
+        reasoning_details: list[dict[str, Any]] | None = None,
         thinking_blocks: list[dict] | None = None,
     ) -> list[dict[str, Any]]:
         """Add an assistant message to the message list."""
@@ -529,6 +541,7 @@ Root: {workspace_path}
                 content,
                 tool_calls=tool_calls,
                 reasoning_content=reasoning_content,
+                reasoning_details=reasoning_details,
                 thinking_blocks=thinking_blocks,
             )
         )

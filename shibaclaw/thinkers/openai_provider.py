@@ -53,6 +53,17 @@ def _extract_extra_fields(obj: Any, known_keys: set[str]) -> dict[str, Any]:
     return extras
 
 
+def _extract_reasoning_details(obj: Any) -> list[dict[str, Any]] | None:
+    value = getattr(obj, "reasoning_details", None)
+    if value is None and isinstance(getattr(obj, "model_extra", None), dict):
+        value = obj.model_extra.get("reasoning_details")
+    if value is None and isinstance(getattr(obj, "__pydantic_extra__", None), dict):
+        value = obj.__pydantic_extra__.get("reasoning_details")
+    if value is None and isinstance(obj, dict):
+        value = obj.get("reasoning_details")
+    return value if isinstance(value, list) else None
+
+
 class OpenAIThinker(Thinker):
     """
     Thinker using the native openai SDK for multi-provider support.
@@ -251,6 +262,7 @@ class OpenAIThinker(Thinker):
             finish_reason=choice.finish_reason or "stop",
             usage=usage,
             reasoning_content=getattr(msg, "reasoning_content", None),
+            reasoning_details=_extract_reasoning_details(msg),
         )
 
     def get_default_model(self) -> str:
@@ -296,6 +308,7 @@ class OpenAIThinker(Thinker):
             finish_reason = "stop"
             usage_data = {}
             reasoning_content = ""
+            reasoning_details: list[dict[str, Any]] = []
 
             stream = await self._client.chat.completions.create(**kwargs)
 
@@ -326,6 +339,10 @@ class OpenAIThinker(Thinker):
                 # Reasoning content (DeepSeek-R1 etc.)
                 if delta and getattr(delta, "reasoning_content", None):
                     reasoning_content += delta.reasoning_content
+                if delta:
+                    delta_reasoning_details = _extract_reasoning_details(delta)
+                    if delta_reasoning_details:
+                        reasoning_details.extend(delta_reasoning_details)
 
                 # Tool call deltas
                 if delta and getattr(delta, "tool_calls", None):
@@ -377,6 +394,7 @@ class OpenAIThinker(Thinker):
                 finish_reason=finish_reason,
                 usage=usage_data,
                 reasoning_content=reasoning_content or None,
+                reasoning_details=reasoning_details or None,
             )
         except Exception as e:
             body = getattr(e, "doc", None) or getattr(getattr(e, "response", None), "text", None)
@@ -412,6 +430,7 @@ class OpenAIThinker(Thinker):
                     finish_reason="error",
                     usage=usage_data,
                     reasoning_content=reasoning_content or None,
+                    reasoning_details=reasoning_details or None,
                 )
             else:
                 return LLMResponse(content=f"Error calling LLM: {err_msg}", finish_reason="error")
