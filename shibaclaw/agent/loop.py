@@ -1124,7 +1124,7 @@ class ShibaBrain:
         )
 
         if final_content is None:
-            final_content = "I've completed processing but have no response to give."
+            final_content = ""
 
         self._save_turn(session, all_msgs, 1 + len(history) + _pre_saved_count)
         self.sessions.save(session)
@@ -1147,6 +1147,15 @@ class ShibaBrain:
                 final_content = final_content.replace(media_match.group(0), "").strip()
             except Exception as _e:
                 logger.debug("Ignored error: {}", _e)
+
+        final_content = (final_content or "").strip()
+        if not final_content and not media_list:
+            logger.debug(
+                "Silent skip: no content/media for {}:{}",
+                msg.channel,
+                msg.sender_id,
+            )
+            return None
 
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.debug("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)

@@ -510,6 +510,9 @@ class TelegramChannel(BaseChannel):
         self._CHAT_IDS_CAP = 500
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._media_group_buffers: dict[str, dict] = {}
+        # (chat_id, inbound_message_id) -> our outbound reply id (edit-on-user-edit)
+        self._inbound_reply_map: dict[tuple[int, int], int] = {}
+        self._INBOUND_REPLY_MAP_CAP = 500
         self._media_group_tasks: dict[str, asyncio.Task] = {}
         self._message_threads: dict[tuple[str, int], int] = {}
         self._THREADS_CAP = 1000
@@ -817,14 +820,47 @@ class TelegramChannel(BaseChannel):
                 and not metadata.get("business_connection_id")
             )
             use_rich = bool(self.config.rich_messages)
-            sent_rich = False
-            if use_rich and not is_progress:
-                # One rich payload (no HTML split) — fallback to legacy on failure.
-                mid = await self._send_rich_message(
+            edit_mid = None if is_progress else metadata.get("edit_message_id")
+            last_mid = None
+            thread_id_pre = thread_kwargs.get("message_thread_id") if thread_kwargs else None
+            progress_id = (
+                None
+                if is_progress
+                else self._progress_messages.get(self._progress_key(chat_id, thread_id_pre))
+            )
+            finalize_edit = None
+            if not is_progress:
+                if edit_mid is not None:
+                    finalize_edit = int(edit_mid)
+                elif progress_id is not None and not use_draft:
+                    finalize_edit = int(progress_id)
+            if finalize_edit is not None and not is_progress:
+                text_body = msg.content
+                if len(text_body) > TELEGRAM_MAX_MESSAGE_LEN:
+                    text_body = text_body[: TELEGRAM_MAX_MESSAGE_LEN - 1] + "…"
+                if use_rich and await self._edit_rich_message(
+                    chat_id, finalize_edit, text_body, thread_kwargs
+                ):
+                    last_mid = finalize_edit
+                else:
+                    last_mid = await self._send_with_streaming(
+                        chat_id,
+                        text_body,
+                        reply_params,
+                        thread_kwargs,
+                        use_draft=False,
+                        edit_message_id=finalize_edit,
+                    )
+            elif use_rich and not is_progress:
+                last_mid = await self._send_rich_message(
                     chat_id, msg.content, reply_params, thread_kwargs
                 )
-                sent_rich = mid is not None
-            if not sent_rich:
+                if last_mid is None:
+                    for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
+                        last_mid = await self._send_with_streaming(
+                            chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
+                        )
+            else:
                 for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
                     if is_progress and use_draft:
                         if use_rich and await self._send_rich_message_draft(
@@ -836,13 +872,16 @@ class TelegramChannel(BaseChannel):
                         )
                     elif is_progress:
                         await self._send_or_edit_progress(
-                            chat_id, chunk, reply_params, thread_kwargs
+                            chat_id, chunk, reply_params, thread_kwargs, metadata
                         )
                     else:
-                        await self._send_with_streaming(
+                        last_mid = await self._send_with_streaming(
                             chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
                         )
             if not is_progress:
+                inbound_mid = metadata.get("message_id")
+                if last_mid is not None:
+                    self._remember_inbound_reply(chat_id, inbound_mid, last_mid)
                 thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
                 await self._clear_progress_message(chat_id, thread_id)
                 self._clear_draft_id(chat_id, thread_id)
@@ -928,10 +967,15 @@ class TelegramChannel(BaseChannel):
         text: str,
         reply_params=None,
         thread_kwargs: dict | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Send the first progress message or edit an existing one."""
         thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
         key = self._progress_key(chat_id, thread_id)
+        # User-edit path: stream into the prior reply instead of a new bubble.
+        seed = (metadata or {}).get("edit_message_id")
+        if seed is not None and key not in self._progress_messages:
+            self._progress_messages[key] = int(seed)
         existing_id = self._progress_messages.get(key)
         if existing_id is not None:
             success = await self._edit_progress_message(chat_id, existing_id, text)
@@ -982,19 +1026,64 @@ class TelegramChannel(BaseChannel):
         text: str,
         reply_params=None,
         thread_kwargs: dict | None = None,
-    ) -> None:
-        """Send a plain text message with HTML fallback."""
+        *,
+        edit_message_id: int | None = None,
+    ) -> int | None:
+        """Send or edit a plain text message with HTML fallback. Returns message_id."""
+        tk = dict(thread_kwargs or {})
+        biz = tk.get("business_connection_id")
+        if edit_message_id is not None:
+            edit_kw: dict[str, Any] = {}
+            if biz:
+                edit_kw["business_connection_id"] = biz
+            try:
+                html = _markdown_to_telegram_html(text)
+                await self._call_with_retry(
+                    self._app.bot.edit_message_text,
+                    chat_id=chat_id,
+                    message_id=edit_message_id,
+                    text=html,
+                    parse_mode="HTML",
+                    **edit_kw,
+                )
+                return int(edit_message_id)
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                err_str = str(e).lower()
+                if "parse" in err_str or "entit" in err_str:
+                    try:
+                        await self._call_with_retry(
+                            self._app.bot.edit_message_text,
+                            chat_id=chat_id,
+                            message_id=edit_message_id,
+                            text=text,
+                            **edit_kw,
+                        )
+                        return int(edit_message_id)
+                    except Exception as e2:
+                        logger.warning(
+                            "Failed to edit message {} (plain), falling back to send: {}",
+                            edit_message_id,
+                            e2,
+                        )
+                else:
+                    logger.warning(
+                        "Failed to edit message {}, falling back to send: {}",
+                        edit_message_id,
+                        e,
+                    )
         try:
             html = _markdown_to_telegram_html(text)
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=html,
                 parse_mode="HTML",
                 reply_parameters=reply_params,
-                **(thread_kwargs or {}),
+                **tk,
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e:
@@ -1003,19 +1092,20 @@ class TelegramChannel(BaseChannel):
                 raise
             logger.warning("HTML parse failed, falling back to plain text: {}", e)
         try:
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=text,
                 reply_parameters=reply_params,
-                **(thread_kwargs or {}),
+                **tk,
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e2:
             logger.error("Error sending Telegram message: {}", e2)
             raise
+
 
     @staticmethod
     def _is_private_chat_id(chat_id: int) -> bool:
@@ -1292,12 +1382,36 @@ class TelegramChannel(BaseChannel):
         thread_kwargs: dict | None = None,
         *,
         use_draft: bool = False,
-    ) -> None:
-        """Send final message text. Optional last draft flash for private chats."""
-        if use_draft and text:
+        edit_message_id: int | None = None,
+    ) -> int | None:
+        """Send or edit final message text. Optional last draft flash for private chats."""
+        if use_draft and text and edit_message_id is None:
             # Final animated draft, then persist with sendMessage (API contract).
             await self._send_message_draft(chat_id, text, thread_kwargs)
-        await self._send_text(chat_id, text, reply_params, thread_kwargs)
+        return await self._send_text(
+            chat_id,
+            text,
+            reply_params,
+            thread_kwargs,
+            edit_message_id=edit_message_id,
+        )
+
+
+    def _remember_inbound_reply(
+        self, chat_id: int, inbound_mid: int | None, outbound_mid: int | None
+    ) -> None:
+        """Map user message -> our reply so user edits can update in place."""
+        if inbound_mid is None or outbound_mid is None:
+            return
+        key = (int(chat_id), int(inbound_mid))
+        self._inbound_reply_map[key] = int(outbound_mid)
+        while len(self._inbound_reply_map) > self._INBOUND_REPLY_MAP_CAP:
+            self._inbound_reply_map.pop(next(iter(self._inbound_reply_map)))
+
+    def _lookup_inbound_reply(self, chat_id: int, inbound_mid: int | None) -> int | None:
+        if inbound_mid is None:
+            return None
+        return self._inbound_reply_map.get((int(chat_id), int(inbound_mid)))
 
     async def _on_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
@@ -1591,6 +1705,17 @@ class TelegramChannel(BaseChannel):
         should_respond = True if is_guest else await self._is_group_message_for_bot(message)
         if is_group and not should_respond and not is_guest:
             metadata["no_reply"] = True
+        # User edited their message: if we already replied, edit that reply in place.
+        if not metadata.get("no_reply") and getattr(message, "edit_date", None) is not None:
+            prior = self._lookup_inbound_reply(int(message.chat_id), getattr(message, "message_id", None))
+            if prior is not None:
+                metadata["edit_message_id"] = prior
+                logger.info(
+                    "Telegram: edit prior reply {} for inbound {} chat={}",
+                    prior,
+                    message.message_id,
+                    chat_id,
+                )
         logger.debug(
             "Telegram message from {} guest={}: {}...",
             sender_id,
