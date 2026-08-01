@@ -64,7 +64,17 @@ async def api_profiles_create(request: Request):
     if pm.get_profile(profile_id):
         return JSONResponse({"error": "Profile already exists"}, status_code=409)
 
-    profile = pm.create_profile(profile_id, label, description, soul, avatar=avatar)
+    profile = pm.create_profile(
+        profile_id,
+        label,
+        description,
+        soul,
+        avatar=avatar,
+        disabled_tools=data.get("disabled_tools"),
+        enabled_tools=data.get("enabled_tools"),
+        temperature=data.get("temperature"),
+        knowledge_bases=data.get("knowledge_bases"),
+    )
     # Invalidate ScentBuilder bootstrap cache so the new profile is picked up
     agent = getattr(agent_manager, "agent", None)
     if agent:
@@ -87,6 +97,10 @@ async def api_profiles_update(request: Request):
         description=data.get("description"),
         soul_content=data.get("soul"),
         avatar=data.get("avatar", ...),
+        disabled_tools=data.get("disabled_tools", ...),
+        enabled_tools=data.get("enabled_tools", ...),
+        temperature=data.get("temperature", ...),
+        knowledge_bases=data.get("knowledge_bases", ...),
     )
     if not result:
         return JSONResponse({"error": "Profile not found"}, status_code=404)
