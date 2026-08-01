@@ -48,6 +48,80 @@ class ProfileManager:
             encoding="utf-8",
         )
 
+
+    def get_disabled_tools(self, profile_id: str | None) -> list[str]:
+        """Return disabled tool names for *profile_id* ("*" means all tools)."""
+        pid = profile_id or DEFAULT_PROFILE_ID
+        meta = self._load_manifest().get(pid, {})
+        disabled = meta.get("disabled_tools")
+        if not isinstance(disabled, list):
+            return []
+        return [str(x) for x in disabled]
+
+    def get_enabled_tools(self, profile_id: str | None) -> list[str] | None:
+        """Return enabled tool allowlist for *profile_id*, or None if unrestricted."""
+        pid = profile_id or DEFAULT_PROFILE_ID
+        meta = self._load_manifest().get(pid, {})
+        enabled = meta.get("enabled_tools")
+        if not isinstance(enabled, list):
+            return None
+        return [str(x) for x in enabled]
+
+
+    def get_temperature(self, profile_id: str | None) -> float | None:
+        """Return profile temperature override, or None for global default."""
+        pid = profile_id or DEFAULT_PROFILE_ID
+        meta = self._load_manifest().get(pid, {})
+        temp = meta.get("temperature")
+        if temp is None:
+            return None
+        try:
+            return float(temp)
+        except (TypeError, ValueError):
+            return None
+
+
+    def get_default_knowledge_bases(self, profile_id: str | None) -> list[str]:
+        """Return default Knowledge Base collection ids for *profile_id*."""
+        pid = profile_id or DEFAULT_PROFILE_ID
+        meta = self._load_manifest().get(pid, {})
+        kbs = meta.get("knowledge_bases")
+        if not isinstance(kbs, list):
+            return []
+        return [str(x) for x in kbs]
+
+    def sync_session_knowledge_bases(
+        self,
+        metadata: dict,
+        new_profile_id: str | None,
+        old_profile_id: str | None = None,
+    ) -> bool:
+        """Pin/unpin profile default KBs on profile switch. Returns True if changed."""
+        new_defaults = self.get_default_knowledge_bases(new_profile_id)
+        old_defaults = (
+            self.get_default_knowledge_bases(old_profile_id)
+            if old_profile_id is not None
+            else []
+        )
+        current = metadata.get("knowledge_bases")
+        if not isinstance(current, list):
+            current = []
+        else:
+            current = [str(x) for x in current]
+
+        changed = False
+        if old_defaults:
+            filtered = [x for x in current if x not in set(old_defaults)]
+            if filtered != current:
+                current = filtered
+                changed = True
+        if new_defaults and not current:
+            current = list(new_defaults)
+            changed = True
+        if changed:
+            metadata["knowledge_bases"] = current
+        return changed
+
     def get_soul_path(self, profile_id: str) -> Path:
         """Get the path to a profile's SOUL.md."""
         if profile_id == DEFAULT_PROFILE_ID:
@@ -133,6 +207,14 @@ class ProfileManager:
                 result["avatar"] = meta["avatar"]
             if "pinned_skills" in meta:
                 result["pinned_skills"] = meta["pinned_skills"]
+            if "disabled_tools" in meta:
+                result["disabled_tools"] = meta["disabled_tools"]
+            if "enabled_tools" in meta:
+                result["enabled_tools"] = meta["enabled_tools"]
+            if "temperature" in meta:
+                result["temperature"] = meta["temperature"]
+            if "knowledge_bases" in meta:
+                result["knowledge_bases"] = meta["knowledge_bases"]
             return result
 
         soul = self.get_soul_content(profile_id)
@@ -149,6 +231,14 @@ class ProfileManager:
             result["avatar"] = meta["avatar"]
         if "pinned_skills" in meta:
             result["pinned_skills"] = meta["pinned_skills"]
+        if "disabled_tools" in meta:
+            result["disabled_tools"] = meta["disabled_tools"]
+        if "enabled_tools" in meta:
+            result["enabled_tools"] = meta["enabled_tools"]
+        if "temperature" in meta:
+            result["temperature"] = meta["temperature"]
+        if "knowledge_bases" in meta:
+            result["knowledge_bases"] = meta["knowledge_bases"]
         return result
 
     def create_profile(

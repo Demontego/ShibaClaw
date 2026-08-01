@@ -321,6 +321,65 @@ class ShibaBrain:
             return resolved_provider
         return self.provider
 
+
+    def _filter_tools_for_profile(
+        self, tool_defs: list[dict], profile_id: str | None
+    ) -> list[dict]:
+        """Apply profile enabled_tools allowlist and/or disabled_tools denylist.
+
+        Precedence: enabled_tools (if set) wins as allowlist.
+        disabled_tools "*" means deny-all unless enabled_tools is set.
+        """
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            pm = ProfileManager(self.workspace)
+            enabled = pm.get_enabled_tools(profile_id)
+            disabled = pm.get_disabled_tools(profile_id)
+        except Exception:
+            return tool_defs
+
+        out = tool_defs
+        if enabled is not None:
+            allow = set(enabled)
+            if "*" not in allow:
+                filtered: list[dict] = []
+                for d in out:
+                    name = (d.get("function") or {}).get("name") or d.get("name") or ""
+                    if name in allow:
+                        filtered.append(d)
+                out = filtered
+        elif disabled:
+            if "*" in disabled:
+                return []
+            blocked = set(disabled)
+            filtered = []
+            for d in out:
+                name = (d.get("function") or {}).get("name") or d.get("name") or ""
+                if name not in blocked:
+                    filtered.append(d)
+            out = filtered
+        return out
+
+    def _tool_disabled_for_profile(self, tool_name: str, profile_id: str | None) -> bool:
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            pm = ProfileManager(self.workspace)
+            enabled = pm.get_enabled_tools(profile_id)
+            disabled = pm.get_disabled_tools(profile_id)
+        except Exception:
+            return False
+        if enabled is not None:
+            if "*" in enabled:
+                return False
+            return tool_name not in set(enabled)
+        if not disabled:
+            return False
+        if "*" in disabled:
+            return True
+        return tool_name in disabled
+
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
         allowed_dir = self.workspace if self.restrict_to_workspace else None
@@ -524,6 +583,27 @@ class ShibaBrain:
 
         return ", ".join(_fmt(tc) for tc in tool_calls)
 
+    @staticmethod
+    def _resolve_temperature(
+        profile_id: str | None,
+        session_metadata: dict | None,
+        workspace: str | Path,
+    ) -> float | None:
+        """Session metadata temperature wins over profile manifest."""
+        meta = session_metadata or {}
+        raw = meta.get("temperature")
+        if raw is not None:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                pass
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            return ProfileManager(workspace).get_temperature(profile_id)
+        except Exception:
+            return None
+
     async def _run_agent_loop(
         self,
         initial_messages: list[dict],
@@ -537,6 +617,7 @@ class ShibaBrain:
         model: str | None = None,
         session_key: str | None = None,
         metadata: dict | None = None,
+        temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop.
 
@@ -575,7 +656,9 @@ class ShibaBrain:
             return "No provider is configured for the selected model.", tools_used, messages
 
         # Tool definitions don't change mid-loop; compute once.
-        tool_defs = self.tools.get_definitions()
+        tool_defs = self._filter_tools_for_profile(
+            self.tools.get_definitions(), profile_id
+        )
         tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
 
         if session_key:
@@ -597,6 +680,17 @@ class ShibaBrain:
                 if agent_manager.pm:
                     sess = agent_manager.pm.get_or_create(chat_id)
                     session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                    try:
+                        from shibaclaw.agent.profiles import ProfileManager
+
+                        pid = sess.metadata.get("profile_id") or profile_id
+                        if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
+                            sess.metadata, pid, None
+                        ):
+                            agent_manager.pm.save(sess)
+                            session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                    except Exception:
+                        pass
 
             mentioned_kb_names = [
                 k.lower() for k in (metadata.get("mentioned_kbs", []) if metadata else [])
@@ -699,6 +793,8 @@ class ShibaBrain:
             call_kwargs = {}
             if session_reasoning_effort:
                 call_kwargs["reasoning_effort"] = session_reasoning_effort
+            if temperature is not None:
+                call_kwargs["temperature"] = temperature
 
             response = await active_provider.chat_with_retry_streaming(
                 messages=messages,
@@ -731,6 +827,17 @@ class ShibaBrain:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
+                    if self._tool_disabled_for_profile(tool_call.name, profile_id):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Tool '{tool_call.name}' is disabled "
+                                f"for this profile."
+                            ),
+                        )
+                        continue
                     if self._tool_blocked_for_non_allowlisted(
                         tool_call.name, metadata, channel
                     ):
@@ -1042,6 +1149,9 @@ class ShibaBrain:
                 available_channels=self._available_channels,
                 profile_id=profile_id,
             )
+            _temp = self._resolve_temperature(
+                profile_id, session.metadata, self.workspace
+            )
             final_content, _, all_msgs = await self._run_agent_loop(
                 messages,
                 channel=channel,
@@ -1049,6 +1159,7 @@ class ShibaBrain:
                 profile_id=profile_id,
                 session_key=key,
                 metadata=msg.metadata,
+                temperature=_temp,
             )
             self._save_turn(session, all_msgs, 1 + len(history))
             self.sessions.save(session)
@@ -1284,6 +1395,9 @@ class ShibaBrain:
                 )
             )
 
+        _temp = self._resolve_temperature(
+            profile_id, session.metadata, self.workspace
+        )
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
@@ -1293,6 +1407,8 @@ class ShibaBrain:
             profile_id=profile_id,
             model=session.metadata.get("model") or None,
             session_key=key,
+            metadata=msg.metadata,
+            temperature=_temp,
         )
 
         if final_content is None:

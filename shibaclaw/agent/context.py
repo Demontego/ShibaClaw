@@ -69,6 +69,31 @@ class ScentBuilder:
         if memory:
             parts.append(f"# Memory\n\n{memory}")
 
+        try:
+            from shibaclaw.agent.profiles import ProfileManager, DEFAULT_PROFILE_ID
+            _pm = ProfileManager(self.workspace)
+            _pid = profile_id or DEFAULT_PROFILE_ID
+            _enabled = _pm.get_enabled_tools(_pid)
+            _disabled = _pm.get_disabled_tools(_pid)
+            # enabled_tools allowlist takes precedence over disabled_tools "*"
+            if _enabled is None and "*" in _disabled:
+                parts.append(
+                    "# Tools\n\n"
+                    "All tools are disabled for this profile. "
+                    "Answer from knowledge and conversation only — "
+                    "do not attempt tool calls."
+                )
+                return "\n\n---\n\n".join(parts)
+            if _enabled is not None and "*" not in _enabled:
+                parts.append(
+                    "# Tools\n\n"
+                    "Only these tools are available in this profile: "
+                    + ", ".join(_enabled)
+                    + ". Do not attempt other tools."
+                )
+        except Exception:
+            pass
+
         pinned_skills: list[str] | None = None
         try:
             from shibaclaw.agent.profiles import ProfileManager, DEFAULT_PROFILE_ID

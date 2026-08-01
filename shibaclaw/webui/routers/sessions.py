@@ -71,7 +71,17 @@ async def api_sessions_patch(request: Request):
     if "nickname" in data:
         session.metadata["nickname"] = data["nickname"]
     if "profile_id" in data:
+        old_profile_id = session.metadata.get("profile_id", "default")
         session.metadata["profile_id"] = data["profile_id"]
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            wp = agent_manager.config.workspace_path
+            ProfileManager(wp).sync_session_knowledge_bases(
+                session.metadata, data["profile_id"], old_profile_id
+            )
+        except Exception:
+            pass
     if "model" in data:
         session.metadata["model"] = data["model"]
     if "reasoning_effort" in data:
