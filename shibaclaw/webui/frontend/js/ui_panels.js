@@ -939,24 +939,3 @@ function hideThinking() {
 
 // ── Onboard Wizard ──────────────────────────────────────────
 /* ── Model Selector (Chat Window) ────────────────────────────────── */
-/* ── Heartbeat panel ── */
-async function loadHeartbeatSettingsPanel() {
-    const profileSelect = $("s-hb-profile");
-    if (!profileSelect) return;
-    try {
-        const res = await authFetch("/api/profiles");
-        if (res.ok) {
-            const data = await res.json();
-            const profiles = data.profiles || [];
-            let html = '<option value="">Default (inherit)</option>';
-            for (const p of profiles) {
-                html += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`;
-            }
-            const currentVal = profileSelect.value;
-            profileSelect.innerHTML = html;
-            profileSelect.value = currentVal; // Restore selection after populating
-        }
-    } catch (e) {
-        console.error("loadHeartbeatSettingsPanel profiles fetch failed", e);
-    }
-}

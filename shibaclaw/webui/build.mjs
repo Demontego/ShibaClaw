@@ -116,13 +116,7 @@ async function build() {
     html = html.replace(/src="\/shibaclaw_logo\.webp"/g, 'src="/static/shibaclaw_logo.webp"');
     html = html.replace(/href="\/favicon\.ico"/g, 'href="/static/favicon.ico"');
     
-    // Ensure all remaining /css/ links point to /static/css/
-    html = html.replace(/href="\/css\//g, 'href="/static/css/');
-    
-    // Copy the css folder as well so unbundled css files are available
-    if (fs.existsSync('frontend/css')) {
-        fs.cpSync('frontend/css', 'static/css', { recursive: true });
-    }
+    // CSS is fully bundled into bundle.css (no separate static/css tree).
     
     // 3. Add bundle.js at the end of body
     html = html.replace('</body>', `    <script src="/static/bundle.js?v=${buildVer}"></script>\n</body>`);

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import json
 import os
@@ -14,6 +13,8 @@ import urllib.request
 import httpx
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
+
+from shibaclaw.webui.oauth_util import base64url_encode as _base64url_encode
 
 GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98"
 GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code"
@@ -39,10 +40,6 @@ def _oauth_result_page(success: bool, message: str) -> str:
       </body>
     </html>
     """
-
-
-def _base64url_encode(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def _openrouter_headers(extra: dict[str, str] | None = None) -> dict[str, str]:

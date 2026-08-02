@@ -77,7 +77,6 @@ window.switchSettingsTab = function (tab, options = {}) {
         const storedSubtab = localStorage.getItem("shibaclaw_extensions_subtab") || "skills";
         switchExtensionsSubTab(storedSubtab);
     }
-    if (tab === "heartbeat") loadHeartbeatSettingsPanel();
     try { localStorage.setItem("shibaclaw_settings_tab", tab); } catch (e) { }
 
     const isMobile = window.matchMedia("(max-width: 768px)").matches;
@@ -911,44 +910,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
     $("s-gw-host").value = gw.host || "127.0.0.1";
     $("s-gw-port").value = gw.port ?? 19999;
 
-    const hb = gw.heartbeat || {};
-    $("s-hb-enabled").checked = hb.enabled !== false;
-    $("s-hb-interval").value = hb.intervalMin ?? 30;
-    $("s-hb-profile").value = hb.profileId || "";
-
     const ch = cfg.channels || {};
-
-    const targetChanSelect = $("s-hb-target-channel");
-    if (targetChanSelect) {
-        let html = '<option value="">Auto-detect</option>';
-        html += '<option value="webui">Web UI</option>';
-
-        for (const [name, cc] of Object.entries(ch)) {
-            if (["sendProgress", "sendToolHints"].includes(name) || typeof cc !== "object") continue;
-            if (cc.enabled === true) {
-                const displayName = name.charAt(0).toUpperCase() + name.slice(1);
-                html += `<option value="${name}">${displayName}</option>`;
-            }
-        }
-        targetChanSelect.innerHTML = html;
-    }
-
-    const targets = Object.keys(hb.targets || {});
-    if (targets.length > 0) {
-        const firstChan = targets[0];
-        if (targetChanSelect && targetChanSelect.querySelector(`option[value="${firstChan}"]`)) {
-            targetChanSelect.value = firstChan;
-        } else if (targetChanSelect) {
-            // Add it if it's currently selected but disabled, so it doesn't just disappear
-            targetChanSelect.innerHTML += `<option value="${firstChan}">${firstChan.charAt(0).toUpperCase() + firstChan.slice(1)} (disabled)</option>`;
-            targetChanSelect.value = firstChan;
-        }
-        $("s-hb-target-id").value = hb.targets[firstChan] || "";
-    } else {
-        if (targetChanSelect) targetChanSelect.value = "";
-        $("s-hb-target-id").value = "";
-    }
-
 
     $("s-ch-sendProgress").checked = ch.sendProgress !== false;
     $("s-ch-sendToolHints").checked = !!ch.sendToolHints;
@@ -1403,20 +1365,10 @@ window.saveSettings = async function () {
         gateway: {
             host: $("s-gw-host").value,
             port: parseInt($("s-gw-port").value),
-            heartbeat: {
-                enabled: $("s-hb-enabled").checked,
-                intervalMin: parseInt($("s-hb-interval").value),
-                model: $("s-hb-model").value || null,
-                profileId: $("s-hb-profile").value || null,
-                targets: (() => {
-                    const chan = $("s-hb-target-channel").value;
-                    const tid = $("s-hb-target-id").value;
-                    if (chan) {
-                        return { [chan]: tid };
-                    }
-                    return {};
-                })()
-            }
+            // Preserve existing heartbeat config (managed via Automation panel).
+            heartbeat: (typeof lastSettingsConfig !== "undefined" && lastSettingsConfig.gateway)
+                ? JSON.parse(JSON.stringify(lastSettingsConfig.gateway.heartbeat || {}))
+                : {},
         },
         channels: {
             sendProgress: $("s-ch-sendProgress").checked,

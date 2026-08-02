@@ -27,7 +27,6 @@
   "hacker": {
     "label": "Hacker",
     "description": "Security expert — finds vulnerabilities, hardens systems",
-    "builtin": true,
-    "avatar": "/static/img/profiles/hacker.png"
+    "builtin": true
   }
 }

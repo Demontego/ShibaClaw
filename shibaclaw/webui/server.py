@@ -19,15 +19,14 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
 from .agent_manager import agent_manager
-from .api import (
-    api_context_get,
+from .auth import AuthMiddleware, _auth_enabled
+from .routers.notifications import (
     api_internal_session_notify,
     api_notifications_delete,
     api_notifications_list,
     api_notifications_post,
-    api_status,
 )
-from .auth import AuthMiddleware, _auth_enabled
+from .routers.status import api_context_get, api_status
 from .gateway_client import gateway_client
 from .oauth_generic import api_oauth_generic_authorize, api_oauth_generic_callback
 from .routers.auth import (
