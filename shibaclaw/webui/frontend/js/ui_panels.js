@@ -11,9 +11,17 @@ const CHANNEL_META = {
     cron: { icon: "schedule_send", label: "One-time" },
     _default: { icon: "chat_bubble", label: "Other" }
 };
-const RECENT_COUNT = 4;
+const CHANNEL_ORDER = ["telegram", "webui", "automation", "heartbeat", "cron", "cli", "api", "discord", "slack"];
 
-const _channelCollapsed = {};
+let _sessionSearchQuery = "";
+let _sessionSearchWired = false;
+let _sessionsCache = [];
+
+const _channelCollapsed = JSON.parse(localStorage.getItem("sessionChannelCollapsed") || "{}");
+
+function _saveChannelCollapsed() {
+    localStorage.setItem("sessionChannelCollapsed", JSON.stringify(_channelCollapsed));
+}
 
 function _extractChannel(key) {
     const rawKey = (key || "").trim();
@@ -228,14 +236,109 @@ function _buildSessionEl(sess) {
 
 function _toggleChannelGroup(ch, headerEl) {
     _channelCollapsed[ch] = !_channelCollapsed[ch];
+    _saveChannelCollapsed();
     const items = headerEl.nextElementSibling;
     if (_channelCollapsed[ch]) {
         headerEl.classList.add("collapsed");
         items.classList.add("collapsed");
+        items.style.maxHeight = "";
     } else {
         headerEl.classList.remove("collapsed");
         items.classList.remove("collapsed");
         items.style.maxHeight = items.scrollHeight + "px";
+    }
+}
+
+function _wireSessionSearch() {
+    const input = $("session-search");
+    if (!input || _sessionSearchWired) return;
+    _sessionSearchWired = true;
+    if (_sessionSearchQuery) input.value = _sessionSearchQuery;
+    input.addEventListener("input", () => {
+        _sessionSearchQuery = input.value || "";
+        _renderSessionsList();
+    });
+}
+
+function _sessionMatchesQuery(sess, q) {
+    if (!q) return true;
+    const name = sess.nickname || sess.key || "";
+    const display = _cleanSessionTitle(name, sess.key);
+    const hay = `${display} ${name} ${sess.key || ""}`.toLowerCase();
+    return hay.includes(q);
+}
+
+function _sortedChannelKeys(groups) {
+    const keys = Object.keys(groups);
+    keys.sort((a, b) => {
+        const ia = CHANNEL_ORDER.indexOf(a);
+        const ib = CHANNEL_ORDER.indexOf(b);
+        const ra = ia === -1 ? 999 : ia;
+        const rb = ib === -1 ? 999 : ib;
+        if (ra !== rb) return ra - rb;
+        return a.localeCompare(b);
+    });
+    return keys;
+}
+
+function _renderSessionsList() {
+    const list = $("history-list");
+    if (!list) return;
+    _wireSessionSearch();
+
+    const searchEl = $("session-search");
+    if (searchEl && document.activeElement !== searchEl) {
+        searchEl.value = _sessionSearchQuery;
+    }
+
+    const q = (_sessionSearchQuery || "").trim().toLowerCase();
+    const sessions = (_sessionsCache || []).filter((s) => _sessionMatchesQuery(s, q));
+
+    list.innerHTML = "";
+
+    if (!_sessionsCache.length) {
+        list.innerHTML = `<div class="history-empty">No past sessions</div>`;
+        return;
+    }
+    if (!sessions.length) {
+        list.innerHTML = `<div class="history-empty">No matches</div>`;
+        return;
+    }
+
+    const groups = {};
+    for (const sess of sessions) {
+        const ch = _extractChannel(sess.key);
+        (groups[ch] || (groups[ch] = [])).push(sess);
+    }
+
+    for (const ch of _sortedChannelKeys(groups)) {
+        const info = _channelInfo(ch);
+        const items = groups[ch];
+        const collapsed = !!_channelCollapsed[ch];
+
+        const header = document.createElement("div");
+        header.className = "channel-group-header" + (collapsed ? " collapsed" : "");
+        header.innerHTML = `
+            <span class="material-icons-round">${escapeHtml(info.icon)}</span>
+            <span>${escapeHtml(info.label)}</span>
+            <span class="group-count">${items.length}</span>
+            <span class="material-icons-round group-chevron">expand_more</span>
+        `;
+
+        const itemsEl = document.createElement("div");
+        itemsEl.className = "channel-group-items" + (collapsed ? " collapsed" : "");
+        items.forEach((s) => itemsEl.appendChild(_buildSessionEl(s)));
+
+        header.addEventListener("click", () => _toggleChannelGroup(ch, header));
+        list.appendChild(header);
+        list.appendChild(itemsEl);
+
+        if (!collapsed) {
+            // After layout so scrollHeight is correct.
+            requestAnimationFrame(() => {
+                itemsEl.style.maxHeight = itemsEl.scrollHeight + "px";
+            });
+        }
     }
 }
 
@@ -244,32 +347,10 @@ async function loadHistory() {
     try {
         const res = await authFetch("/api/sessions");
         const data = await res.json();
-        list.innerHTML = "";
-
-        if (!data.sessions || data.sessions.length === 0) {
-            list.innerHTML = `<div class="history-item">No past sessions</div>`;
-            return;
-        }
-
-        const sessions = data.sessions;
-        const visibleSessions = sessions.slice(0, RECENT_COUNT);
-        const remaining = sessions.slice(RECENT_COUNT);
-
-        visibleSessions.forEach(s => list.appendChild(_buildSessionEl(s)));
-
-        if (remaining.length > 0) {
-            const moreBtn = document.createElement("button");
-            moreBtn.className = "btn-show-more";
-            moreBtn.innerHTML = `<span class="material-icons-round">expand_more</span> Show ${remaining.length} more`;
-            moreBtn.onclick = (e) => {
-                e.stopPropagation();
-                remaining.forEach(s => list.insertBefore(_buildSessionEl(s), moreBtn));
-                moreBtn.remove();
-            };
-            list.appendChild(moreBtn);
-        }
+        _sessionsCache = data.sessions || [];
+        _renderSessionsList();
     } catch (e) {
-        list.innerHTML = `<div class="history-item">Error loading history</div>`;
+        if (list) list.innerHTML = `<div class="history-empty">Error loading history</div>`;
     }
 }
 
@@ -652,6 +733,11 @@ async function loadSession(sessionId) {
             const { parsedMessages, parsedGroups } = _parseSessionMessages(messages, loadSeq, sessionId);
             if (!_isCurrentSessionLoad(loadSeq, sessionId)) return;
 
+            if (typeof ensureTelegramOwnerIds === "function") {
+                await ensureTelegramOwnerIds();
+            }
+            if (!_isCurrentSessionLoad(loadSeq, sessionId)) return;
+
             const fragment = document.createDocumentFragment();
             _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, sessionId);
             
@@ -796,7 +882,10 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
         }
 
         if (item.type === "user") {
-            const group = createMessageGroup("user", fragment);
+            const cls = (typeof classifySessionMessage === "function")
+                ? classifySessionMessage(item.data, sessionId)
+                : { type: "user", label: null };
+            const group = createMessageGroup(cls.type, fragment, { label: cls.label });
             const bubble = document.createElement("div");
             bubble.className = "message-bubble";
 
@@ -814,7 +903,7 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
             fragment.appendChild(group);
 
         } else if (item.type === "agent") {
-            const group = createMessageGroup("agent", fragment);
+            const group = createMessageGroup("agent", fragment, { label: "Shiba" });
             const bubble = document.createElement("div");
             bubble.className = "message-bubble";
             bubble.innerHTML = renderMarkdown(item.data.content);
@@ -849,7 +938,7 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
                 console.error("Failed to parse message tool args:", e);
             }
 
-            const group = createMessageGroup("agent", fragment);
+            const group = createMessageGroup("agent", fragment, { label: "Shiba" });
             const bubble = document.createElement("div");
             bubble.className = "message-bubble";
             bubble.innerHTML = renderMarkdown(toolContent);

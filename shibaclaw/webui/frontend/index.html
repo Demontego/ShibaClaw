@@ -117,7 +117,14 @@
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
-                <div class="section-title">SESSIONS</div>
+                <div class="history-section-head">
+                    <div class="section-title">SESSIONS</div>
+                    <div class="session-search-wrap">
+                        <span class="material-icons-round session-search-icon">search</span>
+                        <input id="session-search" class="session-search" type="search"
+                            placeholder="Filter sessions…" autocomplete="off" spellcheck="false" />
+                    </div>
+                </div>
                 <div id="history-list" class="history-list">
                     <div class="history-item loading">Loading...</div>
                 </div>

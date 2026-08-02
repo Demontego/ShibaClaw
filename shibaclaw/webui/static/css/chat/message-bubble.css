@@ -10,12 +10,17 @@
 
 /* Consecutive messages: less gap */
 .message-group+.message-group.user,
-.message-group+.message-group.agent {
+.message-group+.message-group.agent,
+.message-group+.message-group.peer {
     margin-top: 0;
 }
 
 .message-group.user+.message-group.agent,
-.message-group.agent+.message-group.user {
+.message-group.agent+.message-group.user,
+.message-group.user+.message-group.peer,
+.message-group.peer+.message-group.user,
+.message-group.agent+.message-group.peer,
+.message-group.peer+.message-group.agent {
     margin-top: 14px;
 }
 
@@ -44,9 +49,26 @@
     max-width: 82%;
 }
 
-.message-group.agent {
+.message-group.agent,
+.message-group.peer {
     align-self: flex-start;
     max-width: 92%;
+}
+
+.message-sender-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0 2px 2px;
+    color: var(--text-secondary);
+}
+
+.message-group.agent .message-sender-label {
+    color: var(--shiba-gold);
+}
+
+.message-group.peer .message-sender-label {
+    color: var(--accent-blue);
 }
 
 /* Avatar — compact, shown only on first in group via .show-avatar */
@@ -148,7 +170,7 @@
     max-width: 100%;
 }
 
-/* User: slightly lighter surface to distinguish from agent */
+/* User (owner / WebUI): right-side elevated bubble */
 .message-group.user .message-bubble {
     background: var(--bg-elevated);
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -157,10 +179,19 @@
     color: var(--text-primary);
 }
 
-/* Agent: clean surface */
+/* Peer (other Telegram speakers): left + cool highlight */
+.message-group.peer .message-bubble {
+    background: rgba(74, 158, 255, 0.10);
+    border: 1px solid rgba(74, 158, 255, 0.28);
+    border-radius: var(--radius-md);
+    border-bottom-left-radius: var(--radius-sm);
+    color: var(--text-primary);
+}
+
+/* Agent (Shiba): left + gold tint */
 .message-group.agent .message-bubble {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--shiba-gold-dim);
+    border: 1px solid var(--border-highlight);
     border-bottom-left-radius: var(--radius-sm);
     color: var(--text-primary);
 }

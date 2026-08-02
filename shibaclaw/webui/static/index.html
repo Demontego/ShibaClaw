@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1785621252007">
+    <link rel="stylesheet" href="/static/bundle.css?v=1785653956871">
     <link rel="stylesheet" href="/static/css/mcp_manager.css?v=1">
     <link rel="stylesheet" href="/static/css/connected_apps.css?v=1">
     <link rel="stylesheet" href="/static/css/subagent-feedback.css?v=1">
@@ -115,7 +115,14 @@
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
-                <div class="section-title">SESSIONS</div>
+                <div class="history-section-head">
+                    <div class="section-title">SESSIONS</div>
+                    <div class="session-search-wrap">
+                        <span class="material-icons-round session-search-icon">search</span>
+                        <input id="session-search" class="session-search" type="search"
+                            placeholder="Filter sessions…" autocomplete="off" spellcheck="false" />
+                    </div>
+                </div>
                 <div id="history-list" class="history-list">
                     <div class="history-item loading">Loading...</div>
                 </div>
@@ -1461,7 +1468,7 @@
         </div>
     </div>
 
-        <script src="/static/bundle.js?v=1785621252007"></script>
+        <script src="/static/bundle.js?v=1785653956871"></script>
 </body>
 
 </html>
