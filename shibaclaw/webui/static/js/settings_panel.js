@@ -897,7 +897,8 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
     const tw = cfg.tools?.web || {};
     const ts = tw.search || {};
     $("s-tool-searchProvider").value = ts.provider || "brave";
-    $("s-tool-searchKey").value = ts.apiKey || "";
+    const searchKeyEl = $("s-tool-searchKey");
+    if (searchKeyEl) searchKeyEl.value = ts.apiKey || "";
     $("s-tool-searchMax").value = ts.maxResults ?? 5;
     $("s-tool-proxy").value = tw.proxy || "";
     const te = cfg.tools?.exec || {};
@@ -1387,7 +1388,7 @@ window.saveSettings = async function () {
                 proxy: $("s-tool-proxy").value || null,
                 search: {
                     provider: $("s-tool-searchProvider").value,
-                    apiKey: $("s-tool-searchKey").value,
+                    apiKey: $("s-tool-searchKey") ? $("s-tool-searchKey").value : "",
                     maxResults: parseInt($("s-tool-searchMax").value),
                 }
             },

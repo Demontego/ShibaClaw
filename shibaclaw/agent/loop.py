@@ -820,6 +820,7 @@ class ShibaBrain:
                     response.content,
                     tool_call_dicts,
                     reasoning_content=response.reasoning_content,
+                    reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
                 )
 
@@ -920,6 +921,7 @@ class ShibaBrain:
                     messages,
                     response.content,
                     reasoning_content=response.reasoning_content,
+                    reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
                 )
                 # Preserve full content (including <think>) for the UI

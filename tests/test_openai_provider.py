@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from shibaclaw.thinkers.openai_provider import OpenAIThinker
+from shibaclaw.thinkers.openai_provider import OpenAIThinker, _merge_reasoning_details
 
 
 def test_parse_response_preserves_provider_specific_tool_call_fields():
@@ -140,6 +140,17 @@ def test_chat_streaming_preserves_provider_specific_tool_call_fields():
     serialized = response.tool_calls[0].to_openai_tool_call()
     assert serialized["thought_signature"] == "sig-stream"
     assert serialized["function"]["vendor_field"] == "nested-extra"
+
+
+def test_merge_reasoning_details_replaces_repeated_streamed_blocks():
+    accumulated = [{"type": "reasoning.encrypted", "data": "partial"}]
+
+    _merge_reasoning_details(
+        accumulated,
+        [{"type": "reasoning.encrypted", "data": "complete"}],
+    )
+
+    assert accumulated == [{"type": "reasoning.encrypted", "data": "complete"}]
 
 
 def test_github_copilot_get_available_models_refreshes_session_token():
