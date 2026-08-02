@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Changed
+- **Runtime simplification & dead-code cleanup** — Removed unused browser tool, root WhatsApp `bridge/` duplicate, vendored socket.io copies, legacy WebUI `static/js/` tree, cron/heartbeat polling aliases, and unused direct deps (`websocket-client`, `questionary`, `chardet`, empty `telegram` / `langsmith` extras). Thin `CustomThinker`, route agent session KB updates through `PackManager` (no `webui` import), extract gateway HTTP/WS helpers + streaming token coalescing, defer system-prompt rebuild work, async session save, and skip secretary qmd reindex when digests are unchanged. Characterization tests cover agent turn, gateway actions/protocol, and secretary sync.
+
 ### Fixed
 - **Private DM forum topics get isolated sessions** — Bot API 9.3+ topics in private chats with the bot no longer share one `telegram:{chat_id}` session. When `message_thread_id` is present, history and per-session profile follow `telegram:{chat_id}:topic:{thread_id}` (same as group forums). WebUI autolabels append `· topic {id}` so owner DM topics stay distinguishable.
 - **Telegram polling omitted `callback_query`** — `allowed_updates` only requested `message` / `edited_message`, so inline keyboard callbacks never reached the bot. Include `callback_query` so button handlers (e.g. profile pickers) work.

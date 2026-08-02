@@ -345,10 +345,6 @@ class GatewayClient:
             "restart": ("POST", "/restart"),
             "automation.status": ("GET", "/api/automation/status"),
             "automation.list": ("GET", "/api/automation/jobs"),
-            # Legacy aliases kept for any old consumers
-            "cron.list": ("GET", "/api/automation/jobs"),
-            "heartbeat.status": ("GET", "/api/automation/status"),
-            "heartbeat.trigger": ("POST", "/api/automation/trigger-heartbeats"),
         }
         if action in method_map:
             method, path = method_map[action]
@@ -357,7 +353,7 @@ class GatewayClient:
             else:
                 return await _http_post(hosts, port, path, payload or {}, self._token)
 
-        if action in ("automation.trigger", "cron.trigger"):
+        if action == "automation.trigger":
             job_id = (payload or {}).get("job_id", "")
             return await _http_post(
                 hosts, port, f"/api/automation/jobs/{job_id}/trigger", {}, self._token

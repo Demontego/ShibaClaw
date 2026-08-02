@@ -83,9 +83,6 @@ async function build() {
     if (fs.existsSync('frontend/img')) {
         fs.cpSync('frontend/img', 'static/img', { recursive: true });
     }
-    if (fs.existsSync('frontend/js')) {
-        fs.cpSync('frontend/js', 'static/js', { recursive: true });
-    }
     if (fs.existsSync('frontend/shibaclaw_logo.webp')) {
         fs.copyFileSync('frontend/shibaclaw_logo.webp', 'static/shibaclaw_logo.webp');
     }
@@ -114,9 +111,6 @@ async function build() {
     html = html.replace(/href="\/vendor\//g, 'href="/static/vendor/');
     html = html.replace(/src="\/vendor\//g, 'src="/static/vendor/');
     
-    // Ensure remaining /js/ links point to /static/js/
-    html = html.replace(/src="\/js\//g, 'src="/static/js/');
-
     // Ensure images and root files point to /static/
     html = html.replace(/href="\/shibaclaw_logo\.webp"/g, 'href="/static/shibaclaw_logo.webp"');
     html = html.replace(/src="\/shibaclaw_logo\.webp"/g, 'src="/static/shibaclaw_logo.webp"');

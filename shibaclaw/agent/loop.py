@@ -409,7 +409,7 @@ class ShibaBrain:
         from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
 
         if RAG_AVAILABLE:
-            self.tools.register(KnowledgeSearchTool())
+            self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
         self.tools.register(MemorySearchTool(workspace=self.workspace))
         self.tools.register(
@@ -674,23 +674,21 @@ class ShibaBrain:
                 all_collections = await asyncio.to_thread(km.list_collections)
 
             session_kb_ids = []
-            if chat_id:
-                from shibaclaw.webui.agent_manager import agent_manager
+            kb_session_key = session_key or chat_id
+            if kb_session_key and self.sessions:
+                sess = self.sessions.get_or_create(kb_session_key)
+                session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                try:
+                    from shibaclaw.agent.profiles import ProfileManager
 
-                if agent_manager.pm:
-                    sess = agent_manager.pm.get_or_create(chat_id)
-                    session_kb_ids = sess.metadata.get("knowledge_bases", [])
-                    try:
-                        from shibaclaw.agent.profiles import ProfileManager
-
-                        pid = sess.metadata.get("profile_id") or profile_id
-                        if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
-                            sess.metadata, pid, None
-                        ):
-                            agent_manager.pm.save(sess)
-                            session_kb_ids = sess.metadata.get("knowledge_bases", [])
-                    except Exception:
-                        pass
+                    pid = sess.metadata.get("profile_id") or profile_id
+                    if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
+                        sess.metadata, pid, None
+                    ):
+                        await self.sessions.asave(sess)
+                        session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                except Exception:
+                    pass
 
             mentioned_kb_names = [
                 k.lower() for k in (metadata.get("mentioned_kbs", []) if metadata else [])
@@ -715,13 +713,10 @@ class ShibaBrain:
                         desc_part = f" - Desc: {col_desc}" if col_desc else ""
                         active_kbs.append(f"ID: {col_id} (Name: '{col_name}'){desc_part}")
 
-                if changed and chat_id:
-                    from shibaclaw.webui.agent_manager import agent_manager
-
-                    if agent_manager.pm:
-                        sess = agent_manager.pm.get_or_create(chat_id)
-                        sess.metadata["knowledge_bases"] = new_session_kb_ids
-                        agent_manager.pm.save(sess)
+                if changed and kb_session_key and self.sessions:
+                    sess = self.sessions.get_or_create(kb_session_key)
+                    sess.metadata["knowledge_bases"] = new_session_kb_ids
+                    await self.sessions.asave(sess)
         except Exception:
             pass
 
@@ -1150,6 +1145,7 @@ class ShibaBrain:
                 memory_max_prompt_tokens=self.memory_consolidator.memory_max_prompt_tokens,
                 available_channels=self._available_channels,
                 profile_id=profile_id,
+                defer_system=True,
             )
             _temp = self._resolve_temperature(
                 profile_id, session.metadata, self.workspace
@@ -1164,7 +1160,7 @@ class ShibaBrain:
                 temperature=_temp,
             )
             self._save_turn(session, all_msgs, 1 + len(history))
-            self.sessions.save(session)
+            await self.sessions.asave(session)
             self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
             return OutboundMessage(
                 channel=channel,
@@ -1201,13 +1197,13 @@ class ShibaBrain:
                     self.workspace,
                     owner_ids=telegram_owner_ids(self.channels_config),
                 ):
-                    self.sessions.save(session)
+                    await self.sessions.asave(session)
             except Exception as e:
                 logger.warning("telegram session autolabel failed: {}", e)
         profile_id = profile_id_override or session.metadata.get("profile_id") or None
         if profile_id_override and session.metadata.get("profile_id") != profile_id_override:
             session.metadata["profile_id"] = profile_id_override
-            self.sessions.save(session)
+            await self.sessions.asave(session)
 
         # Normalize model ID if present
         if model := session.metadata.get("model"):
@@ -1216,13 +1212,13 @@ class ShibaBrain:
             canonical = canonicalize_model_id(self.config, model)
             if canonical != model:
                 session.metadata["model"] = canonical
-                self.sessions.save(session)
+                await self.sessions.asave(session)
 
         cmd = msg.content.strip().lower()
         if cmd == "/new":
             snapshot = session.messages[session.last_consolidated :]
             session.clear()
-            self.sessions.save(session)
+            await self.sessions.asave(session)
             self.sessions.invalidate(session.key)
 
             if snapshot:
@@ -1380,6 +1376,7 @@ class ShibaBrain:
             memory_max_prompt_tokens=self.memory_consolidator.memory_max_prompt_tokens,
             available_channels=self._available_channels,
             profile_id=profile_id,
+            defer_system=True,
         )
 
         _user_entry = {
@@ -1395,7 +1392,7 @@ class ShibaBrain:
         if metadata:
             _user_entry["metadata"] = metadata
         session.messages.append(_user_entry)
-        self.sessions.save(session)
+        await self.sessions.asave(session)
 
         if msg.metadata and msg.metadata.get("no_reply"):
             return None
@@ -1434,7 +1431,7 @@ class ShibaBrain:
             final_content = ""
 
         self._save_turn(session, all_msgs, 1 + len(history) + _pre_saved_count)
-        self.sessions.save(session)
+        await self.sessions.asave(session)
         self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
         self._schedule_background(self.memory_consolidator.maybe_proactive_learn(session))
 

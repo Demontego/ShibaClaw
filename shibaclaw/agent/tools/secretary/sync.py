@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -10,6 +11,10 @@ from pathlib import Path
 from typing import Any
 
 COLLECTION = "secretary"
+
+
+def _body_digest(body: str) -> str:
+    return hashlib.blake2b(body.encode("utf-8"), digest_size=16).hexdigest()
 
 
 def _content_text(content: Any) -> str:
@@ -139,14 +144,23 @@ def sync_secretary_markdown(workspace: Path) -> dict[str, Any]:
         if "\n## " not in body:
             continue
         destination = out_dir / _safe_filename(peer_id, name)
+        digest_path = destination.with_suffix(destination.suffix + ".b2")
         active_files.add(destination.name)
-        if not destination.exists() or destination.read_text(encoding="utf-8") != body:
-            destination.write_text(body, encoding="utf-8")
-            written += 1
+        digest = _body_digest(body)
+        if (
+            destination.exists()
+            and digest_path.exists()
+            and digest_path.read_text(encoding="utf-8").strip() == digest
+        ):
+            continue
+        destination.write_text(body, encoding="utf-8")
+        digest_path.write_text(digest, encoding="utf-8")
+        written += 1
     removed = 0
     for stale in out_dir.glob("*.md"):
         if stale.name not in active_files:
-            stale.unlink()
+            stale.unlink(missing_ok=True)
+            stale.with_suffix(stale.suffix + ".b2").unlink(missing_ok=True)
             removed += 1
     return {"dir": str(out_dir), "files": len(active_files), "written": written,
             "removed": removed, "skipped_bot": skipped_bot}

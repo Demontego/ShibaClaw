@@ -20,12 +20,25 @@ from starlette.staticfiles import StaticFiles
 
 from .agent_manager import agent_manager
 from .api import (
+    api_context_get,
+    api_internal_session_notify,
+    api_notifications_delete,
+    api_notifications_list,
+    api_notifications_post,
+    api_status,
+)
+from .auth import AuthMiddleware, _auth_enabled
+from .gateway_client import gateway_client
+from .oauth_generic import api_oauth_generic_authorize, api_oauth_generic_callback
+from .routers.auth import (
+    api_auth_change_password,
     api_auth_login,
     api_auth_setup,
     api_auth_status,
     api_auth_telegram,
     api_auth_verify,
-    api_auth_change_password,
+)
+from .routers.automation import (
     api_automation_job_delete,
     api_automation_job_get,
     api_automation_job_trigger,
@@ -33,67 +46,25 @@ from .api import (
     api_automation_jobs_create,
     api_automation_jobs_list,
     api_automation_status,
-    api_context_get,
-    api_cron_list,
-    api_cron_trigger,
-    api_file_get,
-    api_file_save,
-    api_fs_explore,
-    api_gateway_health,
-    api_gateway_restart,
-    api_heartbeat_status,
-    api_heartbeat_trigger,
-    api_internal_session_notify,
-    api_models_get,
-    api_notifications_delete,
-    api_notifications_list,
-    api_notifications_post,
-    api_oauth_code,
-    api_oauth_disconnect,
-    api_oauth_job,
-    api_oauth_login,
-    api_oauth_openrouter_callback,
-    api_oauth_providers,
-    api_oauth_generic_authorize,
-    api_oauth_generic_callback,
-    api_onboard_providers,
-    api_onboard_submit,
-    api_onboard_templates,
-    api_profiles_create,
-    api_profiles_delete,
-    api_profiles_get,
-    api_profiles_list,
-    api_profiles_update,
-    api_restart_server,
-    api_sessions_archive,
-    api_sessions_delete,
-    api_sessions_get,
-    api_sessions_list,
-    api_sessions_patch,
-    api_settings_get,
-    api_settings_post,
-    api_skills_delete,
-    api_skills_import,
-    api_skills_list,
-    api_skills_pin,
-    api_status,
-    api_update_apply,
-    api_update_check,
-    api_update_manifest,
-    api_upload,
-    api_list_plugins,
-    api_install_plugin,
-    api_uninstall_plugin,
 )
+from .routers.connected_apps import (
+    cancel_connect_app,
+    connect_app,
+    disconnect_app,
+    get_app_status,
+    get_backend_status,
+    list_apps,
+    save_backend_settings,
+)
+from .routers.fs import api_file_get, api_file_save, api_fs_explore, api_upload
+from .routers.gateway import api_gateway_health, api_gateway_restart
 from .routers.knowledge import (
-    api_knowledge_list,
     api_knowledge_create,
     api_knowledge_delete,
+    api_knowledge_list,
     api_knowledge_update,
     api_knowledge_upload,
 )
-from .auth import AuthMiddleware, _auth_enabled
-from .gateway_client import gateway_client
 from .routers.mcp_manager import (
     delete_mcp_server,
     get_mcp_server,
@@ -102,13 +73,46 @@ from .routers.mcp_manager import (
     test_mcp_server,
     upsert_mcp_server,
 )
-from .routers.connected_apps import (
-    list_apps,
-    connect_app,
-    disconnect_app,
-    get_app_status,
-    get_backend_status, cancel_connect_app,
-    save_backend_settings,
+from .routers.oauth import (
+    api_oauth_code,
+    api_oauth_disconnect,
+    api_oauth_job,
+    api_oauth_login,
+    api_oauth_openrouter_callback,
+    api_oauth_providers,
+)
+from .routers.onboard import (
+    api_onboard_providers,
+    api_onboard_submit,
+    api_onboard_templates,
+)
+from .routers.plugins import api_install_plugin, api_list_plugins, api_uninstall_plugin
+from .routers.profiles import (
+    api_profiles_create,
+    api_profiles_delete,
+    api_profiles_get,
+    api_profiles_list,
+    api_profiles_update,
+)
+from .routers.sessions import (
+    api_sessions_archive,
+    api_sessions_delete,
+    api_sessions_get,
+    api_sessions_list,
+    api_sessions_patch,
+)
+from .routers.settings import api_models_get, api_settings_get, api_settings_post
+from .routers.skills import (
+    api_skills_delete,
+    api_skills_import,
+    api_skills_list,
+    api_skills_pin,
+)
+from .routers.system import (
+    api_restart_server,
+    api_update_apply,
+    api_update_check,
+    api_update_manifest,
 )
 from .ws_handler import ws_endpoint
 
@@ -188,11 +192,6 @@ def create_app(
         Route("/api/automation/jobs/{job_id}", api_automation_job_update, methods=["PATCH"]),
         Route("/api/automation/jobs/{job_id}", api_automation_job_delete, methods=["DELETE"]),
         Route("/api/automation/jobs/{job_id}/trigger", api_automation_job_trigger, methods=["POST"]),
-        # ── Legacy shims (deprecated, kept for backward compat) ───────────────────
-        Route("/api/cron/jobs", api_cron_list, methods=["GET"]),
-        Route("/api/cron/jobs/{job_id}/trigger", api_cron_trigger, methods=["POST"]),
-        Route("/api/heartbeat/status", api_heartbeat_status, methods=["GET"]),
-        Route("/api/heartbeat/trigger", api_heartbeat_trigger, methods=["POST"]),
         # ── MCP Server Manager ────────────────────────────────────────────────
         Route("/api/mcp/servers", list_mcp_servers, methods=["GET"]),
         Route("/api/mcp/servers/{name}", get_mcp_server, methods=["GET"]),

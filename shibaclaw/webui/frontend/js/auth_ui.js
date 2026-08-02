@@ -188,7 +188,6 @@ function startApp() {
     initListeners();
     fetchStatus();
     loadHistory();
-    initAutomationSections();
     refreshTokenBadge();
     initFileHandlers();
     initOnboardWizard();
@@ -216,7 +215,9 @@ function startApp() {
     if (state.historyTimer) clearInterval(state.historyTimer);
     state.historyTimer = setInterval(loadHistory, 30000);
 
-    // Auto-refresh automation every 30s
+    // Refresh automation badge/list every 30s
     if (state.autoTimer) clearInterval(state.autoTimer);
-    state.autoTimer = setInterval(() => { loadCronSection(); loadHeartbeatSection(); }, 30000);
+    if (typeof loadAutomationPanel === "function") {
+        state.autoTimer = setInterval(loadAutomationPanel, 30000);
+    }
 }

@@ -1,5 +1,8 @@
 """Brain management for conversation history — the memory of the Shiba."""
 
+from __future__ import annotations
+
+import asyncio
 import json
 import os
 import shutil
@@ -231,6 +234,10 @@ class PackManager:
         except Exception as e:
             logger.warning("Failed to load session {}: {}", key, e)
             return None
+
+    async def asave(self, session: Session) -> None:
+        """Save a session without blocking the asyncio event loop."""
+        await asyncio.to_thread(self.save, session)
 
     def save(self, session: Session) -> None:
         """Save a session to disk."""

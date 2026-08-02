@@ -227,8 +227,6 @@ async def _gateway_request(method: str, path: str) -> dict | None:
     # Map well-known HTTP paths to WS actions
     _path_to_action = {
         "/": "status",
-        "/api/cron/list": "cron.list",
-        "/heartbeat/status": "heartbeat.status",
         "/api/automation/status": "automation.status",
         "/api/automation/jobs": "automation.list",
     }
@@ -281,18 +279,12 @@ async def _gateway_post(path: str, body: dict) -> dict | None:
     _path_to_action = {
         "/restart": "restart",
         "/reload": "reload",
-        "/heartbeat/trigger": "heartbeat.trigger",
         "/api/archive": "archive",
     }
 
     action = _path_to_action.get(path)
     if action and gateway_client.connected:
         return await gateway_client.request(action, body)
-
-    # Handle cron trigger: /api/cron/trigger/{job_id}
-    if path.startswith("/api/cron/trigger/") and gateway_client.connected:
-        job_id = path.split("/")[-1]
-        return await gateway_client.request("cron.trigger", {"job_id": job_id})
 
     if path == "/api/automation/jobs" and gateway_client.connected:
         return await gateway_client.request("automation.create", body)

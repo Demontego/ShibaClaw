@@ -384,13 +384,14 @@ Root: {workspace_path}
         memory_max_prompt_tokens: int = 0,
         available_channels: list[str] | None = None,
         profile_id: str | None = None,
+        *,
+        defer_system: bool = False,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call.
 
-        Runtime context is now part of the system prompt (refreshed on
-        each iteration inside the agent loop) so the user message stays
-        clean.  The system prompt built here already contains the
-        initial ``## Live State`` block.
+        When ``defer_system`` is True, leave an empty system placeholder —
+        ``ShibaBrain._run_agent_loop`` fills static + live blocks once per
+        iteration (avoids building the static prompt twice).
         """
         user_content = self._build_user_content(current_message, media)
 
@@ -423,18 +424,19 @@ Root: {workspace_path}
             else:
                 cleaned_history.append(m)
 
+        if defer_system:
+            system_content = ""
+        else:
+            system_content = self.build_system_prompt(
+                skill_names,
+                channel=channel,
+                chat_id=chat_id,
+                memory_max_prompt_tokens=memory_max_prompt_tokens,
+                available_channels=available_channels,
+                profile_id=profile_id,
+            )
         return [
-            {
-                "role": "system",
-                "content": self.build_system_prompt(
-                    skill_names,
-                    channel=channel,
-                    chat_id=chat_id,
-                    memory_max_prompt_tokens=memory_max_prompt_tokens,
-                    available_channels=available_channels,
-                    profile_id=profile_id,
-                ),
-            },
+            {"role": "system", "content": system_content},
             *cleaned_history,
             {"role": current_role, "content": user_content},
         ]
