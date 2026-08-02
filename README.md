@@ -37,12 +37,12 @@
 ---
 
 <details open>
-<summary>📢 <b>What's new — v0.9.12</b> (click to expand)</summary>
+<summary>📢 <b>What's new — v0.9.13</b> (click to expand)</summary>
 
-**Latest release (2026-07-26):**
+**Latest release (2026-08-01):**
 
-- **Dynamic Reasoning & Thinking Effort Across Providers** — Expanded reasoning/thinking model pattern detection and API capability extraction across OpenAI, Anthropic (Claude 3.7+ extended thinking), Gemini, DeepSeek R1, Qwen QwQ, Grok-3, Kimi, and open reasoning models.
-- **WebUI Chat Footer & Compact Thinking Popover** — Single-line layout fix for chat input controls and compact glassmorphic reasoning effort selector dropdown.
+- **Telegram Secretary, Archives & Owner Tools** — Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary search & send tools, secretary summons via trigger words or replies, guest/secretary safety preambles, and Telegram session history age trimming.
+- **Telegram Mini App & Profile Controls** — Telegram Mini App initData authentication, per-profile tool allow/deny lists with fail-closed security, profile temperature overrides, default KB pinning, and WebUI Telegram session grouping with speaker autolabeling.
 - **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window.
 - **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks.
 - **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.

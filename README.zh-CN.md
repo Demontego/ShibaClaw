@@ -40,9 +40,9 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>📢 <b>最新动态 — v0.9.12</b>（点击展开）</summary>
+<summary>📢 <b>最新动态 — v0.9.13</b>（点击展开）</summary>
 
-**最新版本（2026-07-22）：**
+**最新发布 (2026-08-01):**
 
 - **修复 ExecTool 命令注入漏洞** — 通过将基于 shell 的执行替换为安全的 `shlex` 参数解析和直接进程执行（`create_subprocess_exec`），解决了 Shell 执行中的严重命令注入漏洞（CWE-78）。
 - **依赖项安全漏洞修复** — 通过更新 `protobufjs` (v7.6.5) 和 `sharp` (v0.35.3) 的覆盖配置，解决了 bridge npm 依赖项中的安全漏洞。

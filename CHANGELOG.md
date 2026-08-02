@@ -1,3 +1,21 @@
+## [0.9.13] - 2026-08-01
+
+### Added
+- **Telegram Secretary Summon, Chat Automation Archive & Owner Tools (PR #159)** — Integrated Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary tools (`business_search` for searching archives and `qmd` vector search projections, `business_send` for queueing outbound peer DMs via Telegram Business Connection), peer secretary summons via `triggerWords` or bot/secretary replies, contextual safety preambles (`build_guest_preamble`, `build_secretary_preamble`), and `historyMaxAgeHours` (default 24h) history age trimming for Telegram sessions.
+- **Telegram Mini App `initData` Auth & WebUI Surface (PR #154)** — Opt-in Telegram Mini App authentication via `initData` (HMAC-SHA256 data-check-string validation) with `auth_date` freshness check. Restricts access strictly to `allowFrom` owner IDs and usernames (rejecting wildcard `*` for Mini App access), introduces dedicated Mini App WebUI mode with custom CSS (`telegram_mini.css`), automatic theme adaptation (`applyTelegramTheme`), auto-expanded UI, and sliding-window rate limiting on `/api/auth/telegram`.
+- **Profile Tool Allow/Deny Lists, Temperature & Default KBs (PR #156)** — Added per-profile tool allow/deny lists (`disabled_tools` and `enabled_tools`) enforced at prompt generation, tool definition filtering, and tool call execution with fail-closed security. Added profile temperature override (`temperature`), automatic session default Knowledge Base pinning (`knowledge_bases`), Telegram video file support (`.mp4`, `.mov`, `.webm`, `.mkv`), and optional HuggingFace embeddings import handling for OpenRouter RAG environments.
+- **WebUI Telegram Session Grouping, Search & Speaker Autolabeling (PR #153)** — Session sidebar channel grouping (Telegram, WebUI, CLI, etc.) with collapsible headers and real-time search filtering. Added automatic session autolabeling for Telegram chats (group titles, `"You + <Peer>"`, `"You"`) and speaker label indicators ("You", "Peer", "Shiba") on WebUI chat history message bubbles.
+
+### Changed
+- **Telegram Ingress Access Control (`openGroups`) & Default-Deny Sandboxing (PR #159 & PR #151)** — Added `openGroups` setting allowing non-allowlisted group members to talk to the bot while keeping DMs locked to `allowFrom`. Implemented fail-closed security sandboxing for non-allowlisted Telegram turns, restricting them strictly to safe web tools (`web_search`, `web_fetch`) while stripping filesystem, execution, MCP, and memory tools.
+
+### Fixed
+- **Telegram Edited Message Lifecycle & Truncation (PR #157)** — Automatically edits previous response bubbles when a user edits their message, with automatic 4096-character chunking for overlong responses. Handles Telegram `BadRequest("Message is not modified")` gracefully without sending duplicate fallback messages, and suppresses empty agent responses cleanly.
+- **Gemini 3.x / OpenRouter Reasoning Details & Injection Filtering (PR #155)** — Preserves and streams `reasoning_details` list across agent turns for Gemini 3.x / OpenRouter compatibility, with in-place deduplication during streaming chunk accumulation. Hardened prompt injection filter regex (`_YOU_ARE_NOW_ROLE_RE`) preventing false positives on benign system text, and added vault-backed API key resolution for `WebSearchTool` (`Brave`, `Tavily`, `Jina`).
+- **Profile Modal WebUI Form Submit Fix (PR #156)** — Fixed HTML form element nesting in profile modal (`profiles.js` & `bundle.js`), ensuring `<form>` encloses the submit button so profile settings can be saved from the WebUI.
+- **Path Traversal Protection for Secretary Archives (PR #159)** — Replaced string suffix matching with canonical path resolution (`resolved.is_relative_to(secretary_dir)`) in `filesystem.py`.
+- **Legacy Manual Session Nickname Preservation (PR #153)** — Preserved custom manual nicknames for legacy sessions by checking `nickname_auto is not True`.
+
 ## [0.9.12] - 2026-07-23
 
 ### Added

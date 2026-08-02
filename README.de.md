@@ -40,9 +40,9 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Neuigkeiten — v0.9.12</b> (zum Ausklappen klicken)</summary>
+<summary>📢 <b>Neuigkeiten — v0.9.13</b> (zum Ausklappen klicken)</summary>
 
-**Neueste Version (2026-07-22):**
+**Neueste Version (2026-08-01):**
 
 - **Behebung von Befehlsinjektionssicherheitslücken in ExecTool** — Kritische Befehlsinjektionslücke (CWE-78) in der Shell-Ausführung durch `shlex`-Argument-Parsing und direkte Prozessausführung behoben (`create_subprocess_exec`).
 - **Abhängigkeitssicherheitslücken** — Sicherheitslücken in Bridge-NPM-Abhängigkeiten durch Aktualisieren der Overrides für `protobufjs` (v7.6.5) und `sharp` (v0.35.3) behoben.

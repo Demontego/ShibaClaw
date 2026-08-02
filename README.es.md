@@ -40,9 +40,9 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Novedades — v0.9.12</b> (haz clic para expandir)</summary>
+<summary>📢 <b>Novedades — v0.9.13</b> (haz clic para expandir)</summary>
 
-**Última versión (2026-07-22):**
+**Última versión (2026-08-01):**
 
 - **Corrección de inyección de comandos en ExecTool** — Se resolvió una vulnerabilidad crítica de inyección de comandos (CWE-78) en la ejecución de shell usando parseo seguro de argumentos con `shlex` y ejecución directa de procesos (`create_subprocess_exec`).
 - **Vulnerabilidades de seguridad en dependencias** — Se resolvieron vulnerabilidades de seguridad en dependencias npm de bridge actualizando los overrides para `protobufjs` (v7.6.5) y `sharp` (v0.35.3).

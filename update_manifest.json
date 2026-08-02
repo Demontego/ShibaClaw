@@ -1,36 +1,26 @@
 {
-    "version": "0.9.12",
-    "release_notes": "Dynamic thinking/reasoning effort support across all LLM providers and models, Anthropic extended thinking integration, OpenRouter API parameter extraction, single-line WebUI chat footer layout fix, and compact reasoning effort popover UI.",
+    "version": "0.9.13",
+    "release_notes": "Telegram Secretary tools, Chat Automation peer archiving, Telegram Mini App initData authentication, Profile tool allow/deny lists, WebUI Telegram session grouping and speaker autolabeling, and Gemini 3.x reasoning details streaming.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped version to 0.9.12."
+            "note": "Bumped version to 0.9.13."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v0.9.12 release notes."
+            "note": "Added v0.9.13 release notes."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated documentation version to 0.9.12."
+            "note": "Updated documentation version to 0.9.13."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Bumped packaged update manifest to v0.9.12."
-        },
-        {
-            "path": "shibaclaw/webui/frontend/index.html",
-            "overwrite": true,
-            "note": "Added WebUI login troubleshooting notice."
-        },
-        {
-            "path": "shibaclaw/webui/frontend/js/update_panel.js",
-            "overwrite": true,
-            "note": "Added WebUI login troubleshooting notice to update settings."
+            "note": "Bumped packaged update manifest to v0.9.13."
         }
     ]
 }
