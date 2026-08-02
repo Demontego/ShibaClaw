@@ -14,8 +14,10 @@ from telegram import (
     BotCommand,
     InlineQueryResultArticle,
     InputTextMessageContent,
+    MenuButtonWebApp,
     ReplyParameters,
     Update,
+    WebAppInfo,
 )
 from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
@@ -485,6 +487,8 @@ class TelegramConfig(Base):
     # always accepted when business_enabled (otherwise owner-only allowFrom
     # blocks the archive). Non-allowlisted senders get metadata.is_allowlisted=False.
     open_groups: bool = False
+    # Public HTTPS URL for Telegram Mini App (Menu Button / BotFather).
+    mini_app_url: str = ""
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -686,6 +690,7 @@ class TelegramChannel(BaseChannel):
             logger.debug("Telegram bot commands registered")
         except Exception as e:
             logger.warning("Failed to register bot commands: {}", e)
+        await self._maybe_set_mini_app_menu_button()
         allowed_updates = ["message", "edited_message"]
         if self.config.guest_mode:
             allowed_updates.append("guest_message")
@@ -701,6 +706,22 @@ class TelegramChannel(BaseChannel):
         )
         while self._running:
             await asyncio.sleep(1)
+
+    async def _maybe_set_mini_app_menu_button(self) -> None:
+        """Point the chat menu button at channels.telegram.miniAppUrl when set."""
+        url = (getattr(self.config, "mini_app_url", None) or "").strip()
+        if not url or not self._app:
+            return
+        try:
+            await self._app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="ShibaClaw",
+                    web_app=WebAppInfo(url=url),
+                )
+            )
+            logger.info("Telegram Mini App menu button set → {}", url)
+        except Exception as e:
+            logger.warning("Failed to set Telegram Mini App menu button: {}", e)
 
     async def stop(self) -> None:
         """Stop the Telegram bot."""

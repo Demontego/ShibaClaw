@@ -246,7 +246,14 @@ async def api_notifications_delete(request: Request):
 
 
 # ── Re-exports (server.py imports everything from here) ──────────────
-from .routers.auth import api_auth_login, api_auth_setup, api_auth_status, api_auth_verify, api_auth_change_password  # noqa: E402, F401
+from .routers.auth import (  # noqa: E402, F401
+    api_auth_change_password,
+    api_auth_login,
+    api_auth_setup,
+    api_auth_status,
+    api_auth_telegram,
+    api_auth_verify,
+)
 from .routers.automation import (  # noqa: E402, F401
     api_automation_job_delete,
     api_automation_job_get,

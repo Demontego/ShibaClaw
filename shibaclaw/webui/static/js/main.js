@@ -170,6 +170,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         window.history.replaceState({}, document.title, window.location.pathname);
     }
 
+    // Telegram Mini App only (real Telegram.WebApp — not browser CDN stub)
+    if (typeof attemptTelegramMiniAuth === "function" && typeof isTelegramMiniApp === "function" && isTelegramMiniApp()) {
+        const handled = await attemptTelegramMiniAuth();
+        if (handled) {
+            return;
+        }
+    }
+
     // Wire up login form
     const loginBtn = document.getElementById("btn-login");
     const loginUsernameInput = document.getElementById("login-username");
@@ -209,6 +217,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!data.auth_required) {
             // Auth disabled — start directly
             startApp();
+            return;
+        }
+
+        // Password login disabled on telegram-mini surface (nginx header)
+        if (data.telegram_mini && data.password_login === false) {
+            showTelegramAccessDenied("Open this page from the Telegram Mini App menu.");
             return;
         }
 

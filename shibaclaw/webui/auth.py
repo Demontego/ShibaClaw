@@ -53,6 +53,11 @@ def mask_token(token: str) -> str:
     return token[:4] + "*" * (len(token) - 4)
 
 
+def is_telegram_mini_surface(request: Request) -> bool:
+    """True when nginx marks the request as the public Telegram Mini App vhost."""
+    return request.headers.get("x-shiba-surface", "").strip().lower() == "telegram-mini"
+
+
 def check_token(request: Request) -> bool:
     """Validate a request's credentials.
 
