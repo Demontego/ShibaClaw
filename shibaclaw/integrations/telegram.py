@@ -691,7 +691,8 @@ class TelegramChannel(BaseChannel):
         except Exception as e:
             logger.warning("Failed to register bot commands: {}", e)
         await self._maybe_set_mini_app_menu_button()
-        allowed_updates = ["message", "edited_message"]
+        # callback_query required for inline keyboards (e.g. profile pickers).
+        allowed_updates = ["message", "edited_message", "callback_query"]
         if self.config.guest_mode:
             allowed_updates.append("guest_message")
         if self.config.business_enabled:
