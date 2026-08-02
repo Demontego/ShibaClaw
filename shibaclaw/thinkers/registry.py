@@ -514,3 +514,78 @@ def find_by_name(name: str) -> ProviderSpec | None:
         if spec.name == name:
             return spec
     return None
+
+
+def get_model_reasoning_efforts(model_id: str) -> list[str]:
+    """Return compatible reasoning effort levels for a given model ID.
+
+    Returns ["low", "medium", "high"] if reasoning/thinking is supported,
+    or an empty list [] if unsupported.
+    """
+    if not model_id:
+        return []
+
+    mid = model_id.lower().strip()
+    raw_name = mid.split("/")[-1]
+    base_name = raw_name.split(":")[0]
+
+    # 1. OpenAI o-series & Azure/OpenRouter o-deployments (o1, o3, o4)
+    if (
+        base_name.startswith(("o1", "o3", "o4"))
+        or "-o1" in base_name
+        or "o1-" in base_name
+        or "-o3" in base_name
+        or "o3-" in base_name
+        or "-o4" in base_name
+        or "o4-" in base_name
+    ):
+        return ["low", "medium", "high"]
+
+    # 2. Anthropic Claude 3.7+
+    if "claude-3-7" in base_name or "claude-3.7" in base_name or "claude-4" in base_name:
+        return ["low", "medium", "high"]
+
+    # 3. Gemini thinking models
+    if "thinking" in base_name or "gemini-2.5" in base_name or "gemini-3" in base_name:
+        return ["low", "medium", "high"]
+
+    # 4. DeepSeek R1 / Reasoner models
+    if (
+        "deepseek-r1" in base_name
+        or "reasoner" in base_name
+        or "-r1" in base_name
+        or "r1-" in base_name
+        or "r1:" in raw_name
+        or base_name == "r1"
+    ):
+        return ["low", "medium", "high"]
+
+    # 5. Qwen QwQ / QvQ reasoning models
+    if "qwq" in base_name or "qvq" in base_name:
+        return ["low", "medium", "high"]
+
+    # 6. Grok 3 / xAI reasoning models
+    if "grok-3" in base_name or "grok-beta" in base_name:
+        return ["low", "medium", "high"]
+
+    # 7. Kimi / Moonshot reasoning models
+    if "kimi-k1.5" in base_name or "kimi-k2" in base_name or ("kimi" in base_name and ("1.5" in base_name or "2" in base_name)):
+        return ["low", "medium", "high"]
+
+    # 8. Zhipu GLM zero/reasoning models
+    if "glm-4-zero" in base_name or "glm-zero" in base_name:
+        return ["low", "medium", "high"]
+
+    # 9. Generic open reasoning models & keywords
+    if (
+        "marco-o1" in base_name
+        or "sky-t1" in base_name
+        or "smallthinker" in base_name
+        or "reasoning" in base_name
+        or "think" in base_name
+        or "thought" in base_name
+    ):
+        return ["low", "medium", "high"]
+
+    return []
+

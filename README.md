@@ -36,10 +36,29 @@
 
 ---
 
+<details open>
+<summary>📢 <b>What's new — v0.9.13</b> (click to expand)</summary>
+
+**Latest release (2026-08-01):**
+
+- **Telegram Secretary, Archives & Owner Tools** — Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary search & send tools, secretary summons via trigger words or replies, guest/secretary safety preambles, and Telegram session history age trimming.
+- **Telegram Mini App & Profile Controls** — Telegram Mini App initData authentication, per-profile tool allow/deny lists with fail-closed security, profile temperature overrides, default KB pinning, and WebUI Telegram session grouping with speaker autolabeling.
+- **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window.
+- **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks.
+- **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.
+- **Cloud RAG Dependencies** — Corrected Cloud RAG dependency bounds and default embedding model configuration.
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
+
+</details>
+
+---
+
 ShibaClaw is a self-hosted AI agent you run on your own machine or server: a Python engine with a built-in web UI, native SDK support for 28 model providers, and 11 chat-platform integrations (Discord, Telegram, Slack, WhatsApp, Matrix, and more). It's built around three priorities — simplicity, security, and privacy — with defenses like install-time CVE auditing, prompt-injection wrapping, and SSRF protection shipped in the core engine instead of bolted on as external glue.
 
 <p align="center">
-  <img src="assets/webui_chat.webp" width="640" alt="ShibaClaw WebUI chat">
+  <img src="assets/shibdemo.webp" width="480" alt="ShibaClaw Desktop Demo" style="margin-right: 12px; vertical-align: middle;">
+  <img src="assets/shibmobiledemo.webp" width="188" alt="ShibaClaw Mobile Demo" style="vertical-align: middle;">
 </p>
 
 > [!NOTE]
@@ -65,12 +84,12 @@ One command downloads the latest release, sets up shortcuts, and launches the UI
 > [!TIP]
 > Bring your own model: connect to local endpoints (Ollama, LM Studio) or use free API tiers via OpenRouter to start chatting at zero cost.
 
-**Windows (PowerShell):**
+**🪟 Windows (PowerShell):**
 ```powershell
-iwr -useb https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | iex
+irm https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | iex
 ```
 
-**Linux / macOS:**
+**🐧 Linux / 🍎 macOS:**
 ```bash
 curl -fsSL https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.sh | bash
 ```
@@ -165,10 +184,23 @@ ShibaClaw uses native SDKs — no LiteLLM proxy — and resolves the provider fr
 **OAuth**
 
 | Provider | Flow | Setup |
-|---|---|---|
-| OpenRouter | PKCE browser flow | WebUI Settings |
-| GitHub Copilot | Device flow, auto refresh | `shibaclaw provider login github-copilot` |
-| OpenAI Codex | PKCE browser flow | `shibaclaw provider login openai-codex` |
+|----------|------|-------|
+| OpenRouter | PKCE browser flow, stores returned API key in provider config | WebUI Settings |
+| GitHub Copilot | Device flow, auto token refresh | `shibaclaw provider login github-copilot` or WebUI Settings |
+| OpenAI Codex | PKCE browser flow | `shibaclaw provider login openai-codex` or WebUI Settings |
+| Google Gemini CLI | PKCE browser flow, requires `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` and `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET` env vars. **Note:** Unofficial third-party integration, Google may apply account restrictions. Use a separate account if this is a concern. | WebUI Settings |
+
+For OpenRouter, the callback reuses the current WebUI URL and port by default, so `http://localhost:3000` is not a dedicated OAuth-only port. If you expose the WebUI behind a reverse proxy or need a different public callback origin, set `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://your-public-webui-host` before starting the server.
+
+### 💡 Pro Tip: Cost-Effective & Premium Models
+
+ShibaClaw performs exceptionally well even without expensive API usage:
+- **Free/Open Models:** We highly recommend using **OpenRouter** to access powerful free models like `nvidia/nemotron-3-super-120b-a12b:free` or `gemma-4-31b-it:free`.
+- **Unlimited Premium:** If you use the **GitHub Copilot** OAuth integration, you gain access to premium models like `raptor` (`oswe-vscode-prime`) at zero additional cost, effectively giving you unlimited requests.
+
+***
+
+## 📊 How ShibaClaw Compares (Security-First)
 
 > [!NOTE]
 > OpenRouter's OAuth callback reuses the current WebUI URL and port. Behind a reverse proxy, set `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL` before starting the server.

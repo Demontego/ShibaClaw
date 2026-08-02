@@ -95,7 +95,7 @@ async def api_context_get(request: Request):
     )
     if runtime_block:
         system_prompt += "\n\n" + runtime_block
-        prompt_tokens += estimate_prompt_tokens(runtime_block)
+        prompt_tokens += estimate_prompt_tokens([{"role": "system", "content": runtime_block}])
         
     total_tokens = prompt_tokens
     sections.append(
@@ -117,7 +117,23 @@ async def api_context_get(request: Request):
             )
     total_tokens += msg_tokens
 
-    ctx_window = defaults.context_window_tokens or 0
+    # ── Resolve active model & context window limit ──
+    active_model = None
+    if session_id and agent_manager.pm:
+        sess_ctx = agent_manager.pm.get_or_create(session_id)
+        active_model = sess_ctx.metadata.get("model")
+    if not active_model and agent_manager.config:
+        active_model = agent_manager.config.agents.defaults.model
+
+    model_limit = None
+    if active_model:
+        from shibaclaw.cli.model_info import get_model_context_limit
+        model_limit = get_model_context_limit(active_model)
+
+    user_cfg_limit = defaults.context_window_tokens or 0
+    # Auto-detection priority: if model_limit found, use it; otherwise fallback to user setting or default 65536
+    ctx_window = model_limit if (model_limit and model_limit > 0) else (user_cfg_limit if user_cfg_limit > 0 else 65536)
+
     pct = min(100, round(total_tokens / ctx_window * 100)) if ctx_window > 0 else 0
 
     if request.query_params.get("summary", "").lower() in ("1", "true", "yes"):
@@ -130,6 +146,8 @@ async def api_context_get(request: Request):
                     "total": total_tokens,
                     "context_window": ctx_window,
                     "usage_pct": pct,
+                    "auto_detected": model_limit is not None,
+                    "active_model": active_model,
                 }
             }
         )
@@ -228,7 +246,14 @@ async def api_notifications_delete(request: Request):
 
 
 # ── Re-exports (server.py imports everything from here) ──────────────
-from .routers.auth import api_auth_login, api_auth_setup, api_auth_status, api_auth_verify, api_auth_change_password  # noqa: E402, F401
+from .routers.auth import (  # noqa: E402, F401
+    api_auth_change_password,
+    api_auth_login,
+    api_auth_setup,
+    api_auth_status,
+    api_auth_telegram,
+    api_auth_verify,
+)
 from .routers.automation import (  # noqa: E402, F401
     api_automation_job_delete,
     api_automation_job_get,

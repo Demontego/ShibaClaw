@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -59,9 +59,30 @@ class Session:
 
         return start
 
-    def get_history(self, max_messages: int = 500) -> list[dict[str, Any]]:
-        """Return unconsolidated messages for LLM input, aligned to a legal tool-call boundary."""
+    @staticmethod
+    def _parse_message_timestamp(value: Any) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            timestamp = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return timestamp.astimezone().replace(tzinfo=None) if timestamp.tzinfo else timestamp
+
+    def get_history(
+        self, max_messages: int = 500, max_age_hours: float | None = None
+    ) -> list[dict[str, Any]]:
+        """Return unconsolidated messages aligned to a legal tool-call boundary."""
         unconsolidated = self.messages[self.last_consolidated :]
+        if max_age_hours is not None and max_age_hours > 0:
+            cutoff = datetime.now() - timedelta(hours=max_age_hours)
+            for index, message in enumerate(unconsolidated):
+                timestamp = self._parse_message_timestamp(message.get("timestamp"))
+                if timestamp is not None and timestamp >= cutoff:
+                    unconsolidated = unconsolidated[index:]
+                    break
+            else:
+                unconsolidated = []
         sliced = unconsolidated if max_messages <= 0 else unconsolidated[-max_messages:]
 
         # Drop leading non-user messages to avoid starting mid-turn when possible.
@@ -79,7 +100,7 @@ class Session:
         out: list[dict[str, Any]] = []
         for message in sliced:
             entry: dict[str, Any] = {"role": message["role"], "content": message.get("content", "")}
-            for key in ("tool_calls", "tool_call_id", "name"):
+            for key in ("tool_calls", "tool_call_id", "name", "reasoning_details"):
                 if key in message:
                     entry[key] = message[key]
             out.append(entry)

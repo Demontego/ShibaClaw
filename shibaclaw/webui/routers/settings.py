@@ -43,19 +43,34 @@ def _canonical_model_id(provider_name: str, raw_model_id: str) -> str:
     return f"{provider_name}/{raw_model_id}"
 
 
-def _normalize_model_entry(provider_name: str, model: dict[str, str]) -> dict[str, str] | None:
+def _normalize_model_entry(provider_name: str, model: dict[str, str]) -> dict[str, Any] | None:
+    from shibaclaw.thinkers.registry import get_model_reasoning_efforts
+
     raw_id = str((model or {}).get("id") or "").strip()
     if not raw_id:
         return None
 
+    canonical_id = _canonical_model_id(provider_name, raw_id)
     name = str((model or {}).get("name") or raw_id).strip()
+    efforts = get_model_reasoning_efforts(raw_id) or get_model_reasoning_efforts(canonical_id)
+
+    if not efforts and isinstance(model, dict):
+        supp = model.get("supported_parameters") or model.get("supported_params") or []
+        if isinstance(supp, list):
+            supp_str = " ".join(str(p).lower() for p in supp)
+            if any(k in supp_str for k in ("reasoning", "include_reasoning", "reasoning_effort", "thinking")):
+                efforts = ["low", "medium", "high"]
+
     return {
-        "id": _canonical_model_id(provider_name, raw_id),
+        "id": canonical_id,
         "raw_id": raw_id,
         "name": name,
         "provider": provider_name,
         "provider_label": _provider_label(provider_name),
+        "supports_reasoning": bool(efforts),
+        "reasoning_efforts": efforts,
     }
+
 
 
 def _is_provider_configured(cfg, spec) -> bool:
@@ -185,6 +200,11 @@ async def _inject_vault_placeholders(data: dict) -> dict:
     except (KeyError, TypeError):
         pass
 
+    # --- RAG API key ---
+    rag_cfg = data.get("rag", {})
+    if isinstance(rag_cfg, dict):
+        await _maybe_mask("rag", "api_key", rag_cfg, "apiKey")
+
     # --- Audio API key ---
     audio_cfg = data.get("audio", {})
     if isinstance(audio_cfg, dict):
@@ -267,6 +287,7 @@ async def api_settings_post(request: Request):
         try:
             new_cfg = Config.model_validate(merged)
         except Exception as e:
+            logger.error(f"Validation failed: {e}")
             return JSONResponse({"error": f"Invalid config: {e}"}, status_code=422)
 
         # ----------------------------------------------------------------

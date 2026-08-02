@@ -401,6 +401,8 @@ async def gateway_command(
                         or result.get("summary")
                         or (f"🆕 *ShibaClaw update available!*\n{current} → {latest}")
                     )
+                    if result.get("action_kind") == "automatic":
+                        msg += "\n\n💡 _You can type_ `/update` _to install it now._"
                     logger.info("🆕 Update available: {} → {}", current, latest)
                     await on_automation_notify(
                         msg,
@@ -463,7 +465,7 @@ async def gateway_command(
                     payload = msg.get("payload", {})
                     await _handle_ws_request(websocket, request_id, action, payload)
 
-        except websockets.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
             logger.debug("WS handler error: {}", e)
@@ -545,7 +547,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                     async def _on_ws_response_token(token_text):
@@ -560,7 +562,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                     try:
@@ -604,7 +606,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
                     except Exception as e:
                         try:
@@ -618,7 +620,7 @@ async def gateway_command(
                                     }
                                 )
                             )
-                        except websockets.ConnectionClosed:
+                        except websockets.exceptions.ConnectionClosed:
                             pass
 
                 task = asyncio.create_task(_run_chat(ws, request_id, payload))
@@ -627,9 +629,9 @@ async def gateway_command(
 
             elif action == "cancel":
                 target_id = payload.get("request_id", "")
-                task = _chat_tasks.get(target_id)
-                if task and not task.done():
-                    task.cancel()
+                cancel_task = _chat_tasks.get(target_id)
+                if cancel_task and not cancel_task.done():
+                    cancel_task.cancel()
                     await ws.send(_ok({"cancelled": True, "request_id": target_id}))
                 else:
                     await ws.send(_ok({"cancelled": False, "request_id": target_id}))
@@ -780,7 +782,7 @@ async def gateway_command(
             else:
                 await ws.send(_err(f"unknown action: {action}"))
 
-        except websockets.ConnectionClosed:
+        except websockets.exceptions.ConnectionClosed:
             pass
         except Exception as e:
             try:

@@ -102,6 +102,11 @@ def _scrub_secrets_from_dump(data: dict, cm: Any = None) -> dict:
                         if isinstance(ch_cfg[k], str) and ch_cfg[k]:
                             ch_cfg[k] = ""
 
+    # --- RAG API key ---
+    rag = data.get("rag", {})
+    if isinstance(rag, dict):
+        _clear_secret_fields(rag)
+
     # --- Audio API key ---
     audio = data.get("audio", {})
     if isinstance(audio, dict):
@@ -305,6 +310,19 @@ def _migrate_config(data: dict) -> dict:
             email[key] = default_val
     channels["email"] = email
 
+    # Expose Telegram security and secretary controls in the WebUI even when
+    # they were absent from an older config.
+    telegram = channels.get("telegram", {})
+    if isinstance(telegram, dict):
+        telegram_defaults: dict = {
+            "openGroups": False,
+            "businessAutoReply": False,
+            "historyMaxAgeHours": 24.0,
+            "triggerWords": [],
+        }
+        for key, default_val in telegram_defaults.items():
+            telegram.setdefault(key, default_val)
+
     # Remove stale consentGranted from non-email channels (UI bug legacy)
     for _ch_name, _ch_cfg in channels.items():
         if _ch_name != "email" and isinstance(_ch_cfg, dict):
@@ -390,6 +408,14 @@ def _migrate_secrets_from_raw_dict(data: dict, cm: Any) -> bool:
                 if api_key:
                     cm.set_secret("tools", "web_search.api_key", api_key)
                     migrated = True
+
+    # --- RAG API key ---
+    rag = data.get("rag", {})
+    if isinstance(rag, dict):
+        key = rag.pop("apiKey", "") or rag.pop("api_key", "")
+        if key:
+            cm.set_secret("rag", "api_key", key)
+            migrated = True
 
     # --- Audio API key ---
     audio = data.get("audio", {})

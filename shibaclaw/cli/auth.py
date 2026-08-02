@@ -38,7 +38,7 @@ def _is_oauth_authenticated(spec) -> bool:
             return True
         return any(os.path.exists(tp) for tp in token_paths)
 
-    if spec.name in ("anthropic", "google_gemini_cli", "xai", "qwen_oauth", "minimax_portal", "z_ai"):
+    if spec.name == "xai":
         from shibaclaw.security.oauth_store import OAuthTokenStore
         store = OAuthTokenStore()
         token = store.load_token(spec.name)
@@ -67,7 +67,7 @@ def _oauth_provider_status(spec) -> str:
             return "[green]✓ (OAuth authenticated)[/green]"
         return "[dim]not authenticated[/dim]"
 
-    if spec.name in ("anthropic", "google_gemini_cli", "xai", "qwen_oauth", "minimax_portal", "z_ai"):
+    if spec.name == "xai":
         if _is_oauth_authenticated(spec):
             return "[green]✓ (OAuth authenticated)[/green]"
         return "[dim]not authenticated[/dim]"
@@ -104,6 +104,39 @@ def provider_login(provider: str):
 
     get_console().print(f"{__logo__} OAuth Login - {spec.label}\n")
     handler()
+
+def provider_logout(provider: str):
+    """Log out of an OAuth provider."""
+    from shibaclaw.thinkers.registry import PROVIDERS
+
+    key = provider.replace("-", "_")
+    spec = next((s for s in PROVIDERS if s.name == key and s.is_oauth), None)
+    if not spec:
+        names = ", ".join(s.name.replace("_", "-") for s in PROVIDERS if s.is_oauth)
+        get_console().print(f"[red]Unknown OAuth provider: {provider}[/red]  Supported: {names}")
+        raise typer.Exit(1)
+
+    if spec.name == "openai_codex":
+        try:
+            from oauth_cli_kit.providers import OPENAI_CODEX_PROVIDER
+            from oauth_cli_kit.storage import FileTokenStorage
+            storage = FileTokenStorage(token_filename=OPENAI_CODEX_PROVIDER.token_filename)
+            token_path = storage.get_token_path()
+            if os.path.exists(token_path):
+                os.remove(token_path)
+        except Exception:
+            pass
+    elif spec.name == "github_copilot":
+        home = os.path.expanduser("~")
+        token_path = os.path.join(home, ".shibaclaw", "github_copilot", "access-token")
+        if os.path.exists(token_path):
+            os.remove(token_path)
+    else:
+        from shibaclaw.security.oauth_store import OAuthTokenStore
+        store = OAuthTokenStore()
+        store.delete_token(spec.name)
+
+    get_console().print(f"[green]✓[/green] Logged out of {spec.label}")
 
 
 @register_login("openai_codex")
@@ -241,22 +274,6 @@ def _prompt_token_login(provider_name: str, display_name: str, instruction: str)
     store.save_token(provider_name, {"access_token": token.strip()})
     get_console().print(f"[green]✓ Successfully authenticated with {display_name}[/green]")
 
-@register_login("anthropic")
-def _login_anthropic() -> None:
-    _prompt_token_login(
-        "anthropic", 
-        "Anthropic / Claude", 
-        "Please get an API Key from the Anthropic Console: https://console.anthropic.com/settings/keys"
-    )
-
-@register_login("google_gemini_cli")
-def _login_google_gemini_cli() -> None:
-    _prompt_token_login(
-        "google_gemini_cli", 
-        "Google Gemini CLI", 
-        "Please get an API Key from Google AI Studio (https://aistudio.google.com/app/apikey) or enter your Google OAuth refresh token."
-    )
-
 @register_login("xai")
 def _login_xai() -> None:
     get_console().print("[cyan]Starting xAI Grok device flow...[/cyan]\n")
@@ -363,27 +380,3 @@ def _login_xai() -> None:
     except Exception as e:
         get_console().print(f"[red]Authentication error: {e}[/red]")
         raise typer.Exit(1)
-
-@register_login("qwen_oauth")
-def _login_qwen_oauth() -> None:
-    _prompt_token_login(
-        "qwen_oauth", 
-        "Qwen / Alibaba", 
-        "Please copy your portal token from the Alibaba Cloud Qwen Portal: https://portal.qwen.ai/"
-    )
-
-@register_login("minimax_portal")
-def _login_minimax_portal() -> None:
-    _prompt_token_login(
-        "minimax_portal", 
-        "MiniMax", 
-        "Please get your portal token from the MiniMax Developer Platform: https://platform.minimaxi.com/"
-    )
-
-@register_login("z_ai")
-def _login_z_ai() -> None:
-    _prompt_token_login(
-        "z_ai", 
-        "Z.AI / GLM", 
-        "Please get your API Key from the Zhipu BigModel Platform: https://open.bigmodel.cn/"
-    )

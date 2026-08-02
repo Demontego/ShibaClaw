@@ -15,6 +15,7 @@ from shibaclaw.thinkers.registry import ProviderSpec, find_by_model, find_by_nam
 
 _ALNUM = string.ascii_letters + string.digits
 
+
 def _short_tool_id() -> str:
     """Generate a 9-char alphanumeric ID suitable for strict providers."""
     return "".join(secrets.choice(_ALNUM) for _ in range(9))
@@ -51,6 +52,44 @@ def _extract_extra_fields(obj: Any, known_keys: set[str]) -> dict[str, Any]:
             extras[key] = value
 
     return extras
+
+
+def _extract_reasoning_details(obj: Any) -> list[dict[str, Any]] | None:
+    value = getattr(obj, "reasoning_details", None)
+    if value is None and isinstance(getattr(obj, "model_extra", None), dict):
+        value = obj.model_extra.get("reasoning_details")
+    if value is None and isinstance(getattr(obj, "__pydantic_extra__", None), dict):
+        value = obj.__pydantic_extra__.get("reasoning_details")
+    if value is None and isinstance(obj, dict):
+        value = obj.get("reasoning_details")
+    return value if isinstance(value, list) else None
+
+
+def _reasoning_detail_key(detail: dict[str, Any], index: int) -> tuple[Any, ...]:
+    """Return a stable identity for a streamed reasoning block."""
+    if detail_id := detail.get("id"):
+        return ("id", detail_id)
+    if signature := detail.get("signature"):
+        return ("signature", signature)
+    return ("type-index", detail.get("type"), detail.get("index", index))
+
+
+def _merge_reasoning_details(
+    accumulated: list[dict[str, Any]], details: list[dict[str, Any]]
+) -> None:
+    """Replace repeated streamed reasoning blocks while preserving their order."""
+    positions = {
+        _reasoning_detail_key(detail, index): index for index, detail in enumerate(accumulated)
+    }
+
+    for index, detail in enumerate(details):
+        key = _reasoning_detail_key(detail, index)
+        position = positions.get(key)
+        if position is None:
+            positions[key] = len(accumulated)
+            accumulated.append(detail)
+        else:
+            accumulated[position] = detail
 
 
 class OpenAIThinker(Thinker):
@@ -100,7 +139,9 @@ class OpenAIThinker(Thinker):
             default_headers.setdefault("HTTP-Referer", "https://github.com/RikyZ90/ShibaClaw")
             default_headers.setdefault("X-Title", "ShibaClaw")
 
-        logger.debug(f"OpenAIThinker init: api_key={'SET' if api_key else 'UNSET'} resolved_key={'SET' if resolved_key else 'UNSET'} base_url={resolved_base}")
+        logger.debug(
+            f"OpenAIThinker init: api_key={'SET' if api_key else 'UNSET'} resolved_key={'SET' if resolved_key else 'UNSET'} base_url={resolved_base}"
+        )
 
         self._client = AsyncOpenAI(
             api_key=resolved_key or "no-key",
@@ -108,7 +149,9 @@ class OpenAIThinker(Thinker):
             default_headers=default_headers,
         )
 
-    def _resolve_api_key(self, api_key: str | None, spec: ProviderSpec | None, model: str) -> str | None:
+    def _resolve_api_key(
+        self, api_key: str | None, spec: ProviderSpec | None, model: str
+    ) -> str | None:
         """Resolve the API key from kwargs or environment variables."""
         if api_key:
             return api_key
@@ -123,7 +166,7 @@ class OpenAIThinker(Thinker):
         """Resolve model name by applying strip prefixes if needed."""
         # Get provider spec if we have a known provider
         provider_spec = find_by_name(self._provider_name) if self._provider_name else None
-        
+
         # Strip provider prefix UNLESS the provider explicitly preserves it
         if not (provider_spec and getattr(provider_spec, "preserve_model_prefix", False)):
             model = self._strip_provider_prefix(model, getattr(self, "_provider_name", None))
@@ -137,7 +180,12 @@ class OpenAIThinker(Thinker):
         # For non-gateway standard usage (e.g. hitting OpenAI directly)
         elif not self._gateway:
             spec = find_by_model(model)
-            if spec and not getattr(spec, "preserve_model_prefix", False) and "/" in model and model.startswith(f"{spec.name}/"):
+            if (
+                spec
+                and not getattr(spec, "preserve_model_prefix", False)
+                and "/" in model
+                and model.startswith(f"{spec.name}/")
+            ):
                 # Strip prefix if it exists to pass bare model name to OpenAI
                 model = model.split("/", 1)[1]
 
@@ -153,10 +201,19 @@ class OpenAIThinker(Thinker):
                     kwargs.update(overrides)
                     return
 
-    async def get_available_models(self) -> list[dict[str, str]]:
+    async def get_available_models(self) -> list[dict[str, Any]]:
         try:
             res = await self._client.models.list()
-            return [{"id": m.id, "name": getattr(m, "name", m.id)} for m in res.data]
+            models = []
+            for m in res.data:
+                entry: dict[str, Any] = {"id": m.id, "name": getattr(m, "name", m.id)}
+                supported = getattr(m, "supported_parameters", None) or getattr(
+                    m, "supported_params", None
+                )
+                if supported and isinstance(supported, list):
+                    entry["supported_parameters"] = supported
+                models.append(entry)
+            return models
         except Exception as e:
             logger.error("Failed to fetch models from OpenAI/compatible provider: {}", e)
             return []
@@ -199,7 +256,9 @@ class OpenAIThinker(Thinker):
         except Exception as e:
             body = getattr(e, "doc", None) or getattr(getattr(e, "response", None), "text", None)
             if body and body.strip():
-                return LLMResponse(content=f"Error calling LLM: {body.strip()[:500]}", finish_reason="error")
+                return LLMResponse(
+                    content=f"Error calling LLM: {body.strip()[:500]}", finish_reason="error"
+                )
             return LLMResponse(content=f"Error calling LLM: {e}", finish_reason="error")
 
     def _parse_response(self, response: Any) -> LLMResponse:
@@ -219,24 +278,34 @@ class OpenAIThinker(Thinker):
                     except Exception:
                         args = {"raw": args}
 
-                tool_calls.append(ToolCallRequest(
-                    id=tc.id or _short_tool_id(),
-                    name=tc.function.name,
-                    arguments=args,
-                    provider_specific_fields=_extract_extra_fields(
-                        tc, {"id", "type", "function", "index"},
-                    ) or None,
-                    function_provider_specific_fields=_extract_extra_fields(
-                        tc.function, {"name", "arguments"},
-                    ) or None,
-                ))
+                tool_calls.append(
+                    ToolCallRequest(
+                        id=tc.id or _short_tool_id(),
+                        name=tc.function.name,
+                        arguments=args,
+                        provider_specific_fields=_extract_extra_fields(
+                            tc,
+                            {"id", "type", "function", "index"},
+                        )
+                        or None,
+                        function_provider_specific_fields=_extract_extra_fields(
+                            tc.function,
+                            {"name", "arguments"},
+                        )
+                        or None,
+                    )
+                )
 
         u = getattr(response, "usage", None)
-        usage = {
-            "prompt_tokens": u.prompt_tokens if u else 0,
-            "completion_tokens": u.completion_tokens if u else 0,
-            "total_tokens": u.total_tokens if u else 0,
-        } if u else {}
+        usage = (
+            {
+                "prompt_tokens": u.prompt_tokens if u else 0,
+                "completion_tokens": u.completion_tokens if u else 0,
+                "total_tokens": u.total_tokens if u else 0,
+            }
+            if u
+            else {}
+        )
 
         return LLMResponse(
             content=msg.content,
@@ -244,6 +313,7 @@ class OpenAIThinker(Thinker):
             finish_reason=choice.finish_reason or "stop",
             usage=usage,
             reasoning_content=getattr(msg, "reasoning_content", None),
+            reasoning_details=_extract_reasoning_details(msg),
         )
 
     def get_default_model(self) -> str:
@@ -289,6 +359,7 @@ class OpenAIThinker(Thinker):
             finish_reason = "stop"
             usage_data = {}
             reasoning_content = ""
+            reasoning_details: list[dict[str, Any]] = []
 
             stream = await self._client.chat.completions.create(**kwargs)
 
@@ -319,6 +390,10 @@ class OpenAIThinker(Thinker):
                 # Reasoning content (DeepSeek-R1 etc.)
                 if delta and getattr(delta, "reasoning_content", None):
                     reasoning_content += delta.reasoning_content
+                if delta:
+                    delta_reasoning_details = _extract_reasoning_details(delta)
+                    if delta_reasoning_details:
+                        _merge_reasoning_details(reasoning_details, delta_reasoning_details)
 
                 # Tool call deltas
                 if delta and getattr(delta, "tool_calls", None):
@@ -356,13 +431,16 @@ class OpenAIThinker(Thinker):
                     args = json_repair.loads(args) if args else {}
                 except Exception:
                     args = {"raw": args}
-                tool_calls.append(ToolCallRequest(
-                    id=tc["id"] or _short_tool_id(),
-                    name=tc["name"],
-                    arguments=args,
-                    provider_specific_fields=tc["provider_specific_fields"] or None,
-                    function_provider_specific_fields=tc["function_provider_specific_fields"] or None,
-                ))
+                tool_calls.append(
+                    ToolCallRequest(
+                        id=tc["id"] or _short_tool_id(),
+                        name=tc["name"],
+                        arguments=args,
+                        provider_specific_fields=tc["provider_specific_fields"] or None,
+                        function_provider_specific_fields=tc["function_provider_specific_fields"]
+                        or None,
+                    )
+                )
 
             return LLMResponse(
                 content=content_text or None,
@@ -370,11 +448,12 @@ class OpenAIThinker(Thinker):
                 finish_reason=finish_reason,
                 usage=usage_data,
                 reasoning_content=reasoning_content or None,
+                reasoning_details=reasoning_details or None,
             )
         except Exception as e:
             body = getattr(e, "doc", None) or getattr(getattr(e, "response", None), "text", None)
             err_msg = body.strip()[:500] if body and body.strip() else str(e)
-            
+
             if content_text or tool_call_chunks or reasoning_content:
                 # We have partial data, do not discard it. Assemble what we have.
                 tool_calls = []
@@ -385,26 +464,32 @@ class OpenAIThinker(Thinker):
                         args = json_repair.loads(args) if args else {}
                     except Exception:
                         args = {"raw": args}
-                    tool_calls.append(ToolCallRequest(
-                        id=tc["id"] or _short_tool_id(),
-                        name=tc["name"],
-                        arguments=args,
-                        provider_specific_fields=tc["provider_specific_fields"] or None,
-                        function_provider_specific_fields=tc["function_provider_specific_fields"] or None,
-                    ))
-                
+                    tool_calls.append(
+                        ToolCallRequest(
+                            id=tc["id"] or _short_tool_id(),
+                            name=tc["name"],
+                            arguments=args,
+                            provider_specific_fields=tc["provider_specific_fields"] or None,
+                            function_provider_specific_fields=tc[
+                                "function_provider_specific_fields"
+                            ]
+                            or None,
+                        )
+                    )
+
                 final_content = content_text
                 if final_content:
                     final_content += f"\n\n[Stream interrupted: {err_msg}]"
                 elif not tool_calls:
                     final_content = f"Error calling LLM: {err_msg}"
-                
+
                 return LLMResponse(
                     content=final_content or None,
                     tool_calls=tool_calls,
                     finish_reason="error",
                     usage=usage_data,
                     reasoning_content=reasoning_content or None,
+                    reasoning_details=reasoning_details or None,
                 )
             else:
                 return LLMResponse(content=f"Error calling LLM: {err_msg}", finish_reason="error")

@@ -18,6 +18,7 @@ const jsFiles = [
     'frontend/js/onboard_wizard.js',
     'frontend/js/model_selector.js',
     'frontend/js/auth_ui.js',
+    'frontend/js/telegram_mini.js',
     'frontend/js/plugins_panel.js',
     'frontend/js/automation.js',
     'frontend/js/notification-center.js',

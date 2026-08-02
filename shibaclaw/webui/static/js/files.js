@@ -507,6 +507,11 @@ window.saveFile = async function(filePath) {
 
     function applyWidth(px) {
         root.style.setProperty("--chat-width", px + "px");
+        if (px < 800) {
+            root.setAttribute("data-layout-mode", "narrow");
+        } else {
+            root.removeAttribute("data-layout-mode");
+        }
         document.querySelectorAll(".width-preset").forEach(btn => {
             btn.classList.toggle("active", parseInt(btn.dataset.width) === px);
         });

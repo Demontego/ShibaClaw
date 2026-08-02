@@ -8,6 +8,53 @@
 .input-wrapper {
     max-width: var(--chat-width);
     margin: 0 auto;
+    container-type: inline-size;
+    container-name: input-container;
+}
+
+@container input-container (max-width: 740px) {
+    .input-hint {
+        display: none;
+    }
+    #active-model-display {
+        max-width: 90px;
+    }
+    .btn-input-action {
+        padding: 3px 6px;
+        gap: 3px;
+    }
+    #btn-context span:not(.material-icons-round),
+    #btn-stop span:not(.material-icons-round) {
+        display: none;
+    }
+}
+
+:root[data-layout-mode="narrow"] .input-hint {
+    display: none;
+}
+
+:root[data-layout-mode="narrow"] #active-model-display {
+    max-width: 90px;
+}
+
+:root[data-layout-mode="narrow"] .btn-input-action {
+    padding: 3px 6px;
+    gap: 3px;
+}
+
+:root[data-layout-mode="narrow"] #btn-context span:not(.material-icons-round),
+:root[data-layout-mode="narrow"] #btn-stop span:not(.material-icons-round) {
+    display: none;
+}
+
+@container input-container (max-width: 560px) {
+    #active-model-display {
+        max-width: 70px;
+    }
+    #active-reasoning-display,
+    #active-kb-display {
+        display: none;
+    }
 }
 
 .thinking-indicator {
@@ -179,11 +226,32 @@
     align-items: center;
     justify-content: space-between;
     padding: 6px 2px 0;
+    gap: 8px;
+    flex-wrap: nowrap;
+    width: 100%;
+    min-width: 0;
 }
 
 .input-actions {
     display: flex;
+    align-items: center;
     gap: 4px;
+    flex-wrap: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.model-selector-wrapper {
+    position: relative;
+    z-index: 20;
+}
+
+.input-footer-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .btn-input-action {
@@ -193,15 +261,33 @@
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-muted);
-    font-size: 0.78rem;
-    padding: 3px 10px;
+    font-size: 0.76rem;
+    padding: 3px 8px;
+    height: 28px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all var(--transition-fast);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .btn-input-action .material-icons-round {
-    font-size: 16px;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+#active-model-display {
+    max-width: 135px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+#active-reasoning-display,
+#active-kb-display {
+    white-space: nowrap;
 }
 
 .btn-input-action:hover:not(:disabled) {
@@ -298,4 +384,6 @@
 .input-hint {
     font-size: 11px;
     color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
 }

@@ -256,6 +256,8 @@ def web(
 
     try:
         asyncio.run(run_server(port=port, host=host, config=cfg, provider=provider))
+    except KeyboardInterrupt:
+        pass
     finally:
         stop_gateway_proc()
 
@@ -403,6 +405,14 @@ def provider_login_cmd(provider: str = typer.Argument(..., help="OAuth provider"
     from .auth import provider_login
 
     provider_login(provider)
+
+
+@provider_app.command("logout")
+def provider_logout_cmd(provider: str = typer.Argument(..., help="OAuth provider")):
+    """Log out of an OAuth provider."""
+    from .auth import provider_logout
+
+    provider_logout(provider)
 
 
 if __name__ == "__main__":

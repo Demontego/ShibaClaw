@@ -9,6 +9,16 @@ from loguru import logger
 from shibaclaw.thinkers.base import LLMResponse, Thinker, ToolCallRequest
 
 
+def _apply_thinking_kwargs(model: str, reasoning_effort: str | None, kwargs: dict[str, Any]) -> None:
+    """Configure extended thinking parameters for Claude 3.7+ models."""
+    if reasoning_effort and ("claude-3-7" in model or "claude-3.7" in model or "claude-4" in model):
+        budget_map = {"low": 2048, "medium": 4096, "high": 16384}
+        budget = budget_map.get(str(reasoning_effort).lower(), 4096)
+        kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        kwargs["max_tokens"] = max(kwargs.get("max_tokens", 4096), budget + 4096)
+        kwargs.pop("temperature", None)
+
+
 class AnthropicThinker(Thinker):
     """
     Thinker using the native anthropic SDK for claude-* models.
@@ -170,6 +180,9 @@ class AnthropicThinker(Thinker):
             "temperature": temperature,
         }
 
+        if reasoning_effort:
+            _apply_thinking_kwargs(model, reasoning_effort, kwargs)
+
         if system_prompt:
             kwargs["system"] = [
                 {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
@@ -238,6 +251,9 @@ class AnthropicThinker(Thinker):
             "messages": anthropic_messages,
             "temperature": temperature,
         }
+
+        if reasoning_effort:
+            _apply_thinking_kwargs(model, reasoning_effort, kwargs)
 
         if system_prompt:
             kwargs["system"] = [

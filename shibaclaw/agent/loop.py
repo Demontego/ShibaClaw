@@ -36,6 +36,29 @@ from shibaclaw.thinkers.base import Thinker
 
 _MEDIA_RE = re.compile(r'\{\s*"media"\s*:\s*\[\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]\s*\}')
 
+
+def _telegram_allow_from_ids(channels_config: Any | None) -> set[str]:
+    """Owner Telegram ids from channels.telegram.allowFrom (``*`` ignored)."""
+    if channels_config is None:
+        return set()
+    extra = getattr(channels_config, "model_extra", None) or {}
+    tg = extra.get("telegram") if isinstance(extra, dict) else None
+    if tg is None:
+        tg = getattr(channels_config, "telegram", None)
+    if tg is None:
+        return set()
+    if hasattr(tg, "model_dump"):
+        data = tg.model_dump(by_alias=True)
+    elif isinstance(tg, dict):
+        data = tg
+    else:
+        return set()
+    raw = data.get("allowFrom") or data.get("allow_from") or []
+    if not isinstance(raw, list):
+        return set()
+    return {str(x) for x in raw if x is not None and str(x).strip() and str(x) != "*"}
+
+
 if TYPE_CHECKING:
     from shibaclaw.config.schema import ExecToolConfig, WebSearchConfig
 
@@ -84,9 +107,21 @@ class ShibaBrain:
         self.automation_service = automation_service
         self.restrict_to_workspace = restrict_to_workspace
         self.session_router = session_router
-        self.tool_timeout = config.agents.defaults.tool_timeout if config else int(os.getenv("SHIBACLAW_TOOL_TIMEOUT", "660"))
-        self.loop_wall_timeout = config.agents.defaults.loop_wall_timeout if config else int(os.getenv("SHIBACLAW_LOOP_WALL_TIMEOUT", "600"))
-        subagent_timeout = config.agents.defaults.subagent_timeout if config else int(os.getenv("SHIBACLAW_SUBAGENT_TIMEOUT", "600"))
+        self.tool_timeout = (
+            config.agents.defaults.tool_timeout
+            if config
+            else int(os.getenv("SHIBACLAW_TOOL_TIMEOUT", "660"))
+        )
+        self.loop_wall_timeout = (
+            config.agents.defaults.loop_wall_timeout
+            if config
+            else int(os.getenv("SHIBACLAW_LOOP_WALL_TIMEOUT", "600"))
+        )
+        subagent_timeout = (
+            config.agents.defaults.subagent_timeout
+            if config
+            else int(os.getenv("SHIBACLAW_SUBAGENT_TIMEOUT", "600"))
+        )
 
         self.context = ScentBuilder(workspace)
         self.sessions = session_manager or PackManager(workspace)
@@ -108,7 +143,7 @@ class ShibaBrain:
         self.mcp = MCPManager(self.tools)
         if mcp_servers:
             self.mcp.reconfigure(mcp_servers)
-            
+
         self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
         self._background_tasks: set[asyncio.Task] = set()
         self._session_locks: dict[str, asyncio.Lock] = {}
@@ -148,6 +183,23 @@ class ShibaBrain:
             if enabled:
                 names.append(name)
         return names
+
+    def _history_max_age_hours(self, channel: str) -> float | None:
+        """Return Telegram's configured prompt-history window."""
+        if channel != "telegram":
+            return None
+        telegram = getattr(self.channels_config, "telegram", None)
+        if telegram is None:
+            extras = getattr(self.channels_config, "model_extra", None) or {}
+            telegram = extras.get("telegram") if isinstance(extras, dict) else None
+        if isinstance(telegram, dict):
+            value = telegram.get("historyMaxAgeHours", telegram.get("history_max_age_hours", 24))
+        else:
+            value = getattr(telegram, "history_max_age_hours", 24)
+        try:
+            return None if float(value) <= 0 else float(value)
+        except (TypeError, ValueError):
+            return 24.0
 
     async def reconfigure(self, new_cfg: Any, new_provider: Any) -> None:
         """Hot-reload agent configuration without restarting the gateway process.
@@ -204,6 +256,7 @@ class ShibaBrain:
     @staticmethod
     def _mcp_configs_differ(a: dict, b: dict) -> bool:
         """Compare two MCP server config dicts via JSON serialization, connection-affecting fields only."""
+
         def _serialize(servers: dict) -> dict:
             if not servers:
                 return {}
@@ -268,6 +321,65 @@ class ShibaBrain:
             return resolved_provider
         return self.provider
 
+
+    def _filter_tools_for_profile(
+        self, tool_defs: list[dict], profile_id: str | None
+    ) -> list[dict]:
+        """Apply profile enabled_tools allowlist and/or disabled_tools denylist.
+
+        Precedence: enabled_tools (if set) wins as allowlist.
+        disabled_tools "*" means deny-all unless enabled_tools is set.
+        """
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            pm = ProfileManager(self.workspace)
+            enabled = pm.get_enabled_tools(profile_id)
+            disabled = pm.get_disabled_tools(profile_id)
+        except Exception:
+            return tool_defs
+
+        out = tool_defs
+        if enabled is not None:
+            allow = set(enabled)
+            if "*" not in allow:
+                filtered: list[dict] = []
+                for d in out:
+                    name = (d.get("function") or {}).get("name") or d.get("name") or ""
+                    if name in allow:
+                        filtered.append(d)
+                out = filtered
+        elif disabled:
+            if "*" in disabled:
+                return []
+            blocked = set(disabled)
+            filtered = []
+            for d in out:
+                name = (d.get("function") or {}).get("name") or d.get("name") or ""
+                if name not in blocked:
+                    filtered.append(d)
+            out = filtered
+        return out
+
+    def _tool_disabled_for_profile(self, tool_name: str, profile_id: str | None) -> bool:
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            pm = ProfileManager(self.workspace)
+            enabled = pm.get_enabled_tools(profile_id)
+            disabled = pm.get_disabled_tools(profile_id)
+        except Exception:
+            return profile_id is not None
+        if enabled is not None:
+            if "*" in enabled:
+                return False
+            return tool_name not in set(enabled)
+        if not disabled:
+            return False
+        if "*" in disabled:
+            return True
+        return tool_name in disabled
+
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
         allowed_dir = self.workspace if self.restrict_to_workspace else None
@@ -295,6 +407,7 @@ class ShibaBrain:
             )
         self.tools.register(WebSearchTool(config=self.web_search_config, proxy=self.web_proxy))
         from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+
         if RAG_AVAILABLE:
             self.tools.register(KnowledgeSearchTool())
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
@@ -310,6 +423,24 @@ class ShibaBrain:
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
 
+        # Telegram Chat Automation secretary archive (owner-only via allowFrom).
+        try:
+            from shibaclaw.agent.tools.secretary import BusinessSearchTool, BusinessSendTool
+
+            owner_ids = _telegram_allow_from_ids(self.channels_config)
+            self.tools.register(
+                BusinessSearchTool(sessions=self.sessions, owner_ids=owner_ids)
+            )
+            self.tools.register(
+                BusinessSendTool(
+                    sessions=self.sessions,
+                    send_callback=self.bus.publish_outbound,
+                    owner_ids=owner_ids,
+                )
+            )
+        except Exception as e:
+            logger.error("Failed to register secretary tools: {}", e)
+
         self.mcp.restore_active_tools()
 
     def inject_steering_message(
@@ -319,8 +450,14 @@ class ShibaBrain:
         media: list[str] | None = None,
         attachments: list[dict] | None = None,
     ) -> bool:
-        if session_key in self._steering_queues:
-            self._steering_queues[session_key].append(
+        target_key = session_key
+        session_router = getattr(self, "session_router", None)
+        if target_key not in self._steering_queues and session_router:
+            if resolved := session_router.resolve(session_key):
+                target_key = resolved
+
+        if target_key in self._steering_queues:
+            self._steering_queues[target_key].append(
                 {
                     "role": "user",
                     "content": content,
@@ -332,9 +469,71 @@ class ShibaBrain:
             return True
         return False
 
+    # Default-deny for non-allowlisted Telegram (openGroups / Chat Automation peers).
+    # Only these tools are exposed; memory/knowledge/FS/exec/MCP/plugins stay owner-side.
+    _NON_ALLOWLISTED_ALLOWED_TOOLS = frozenset(
+        {
+            "web_search",
+            "web_fetch",
+        }
+    )
+
+    def _is_allowlisted_turn(
+        self, metadata: dict | None, channel: str | None = None
+    ) -> bool:
+        """WebUI/CLI/system and allowlisted Telegram senders keep full tools.
+
+        Telegram is fail-closed: missing ``is_allowlisted`` → restricted tools.
+        Other channels keep legacy fail-open when the flag is absent.
+        """
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
+        if ch in {"webui", "cli", "system", "automation"}:
+            return True
+        flag = (metadata or {}).get("is_allowlisted")
+        if ch == "telegram":
+            return flag is True
+        if flag is False:
+            return False
+        return True
+
+    def _non_allowlisted_tool_allowed(self, tool_name: str) -> bool:
+        return tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS
+
+    def _filter_tools_for_allowlist(
+        self,
+        tool_defs: list[dict],
+        metadata: dict | None,
+        channel: str | None = None,
+    ) -> list[dict]:
+        """Allow-list only for non-allowlisted Telegram turns (default-deny)."""
+        if self._is_allowlisted_turn(metadata, channel):
+            return tool_defs
+        out: list[dict] = []
+        for d in tool_defs:
+            name = (d.get("function") or {}).get("name") or d.get("name") or ""
+            if self._non_allowlisted_tool_allowed(name):
+                out.append(d)
+        return out
+
+    def _tool_blocked_for_non_allowlisted(
+        self,
+        tool_name: str,
+        metadata: dict | None,
+        channel: str | None = None,
+    ) -> bool:
+        if self._is_allowlisted_turn(metadata, channel):
+            return False
+        return not self._non_allowlisted_tool_allowed(tool_name)
+
     def _set_tool_context(
-        self, channel: str, chat_id: str, message_id: str | None, session_key: str | None = None,
-        model: str | None = None, provider: Any | None = None,
+        self,
+        channel: str,
+        chat_id: str,
+        message_id: str | None,
+        session_key: str | None = None,
+        model: str | None = None,
+        provider: Any | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
         for name in ("message", "spawn", "automation", "think"):
@@ -343,9 +542,16 @@ class ShibaBrain:
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
                     elif name == "spawn":
-                        tool.set_context(channel, chat_id, session_key, model=model, provider=provider)
+                        tool.set_context(
+                            channel, chat_id, session_key, model=model, provider=provider
+                        )
                     else:
                         tool.set_context(channel, chat_id, session_key)
+        # Secretary tools need turn metadata for owner ACL.
+        for name in ("business_search", "business_send"):
+            if tool := self.tools.get(name):
+                if hasattr(tool, "set_context"):
+                    tool.set_context(channel, chat_id, metadata=metadata or {})
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -358,14 +564,45 @@ class ShibaBrain:
     def _tool_hint(tool_calls: list) -> str:
         """Format tool calls as concise hint, e.g. 'web_search("query")'."""
 
+        def _mask_sensitive(val: str) -> str:
+            val = re.sub(r'(?i)(bearer\s+)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
+            val = re.sub(r'(?i)(api[_-]?key["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
+            val = re.sub(r'(?i)(token["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
+            val = re.sub(r'(?i)([?&](?:token|key|api[_-]?key|access[_-]?token)=)[A-Za-z0-9\-\._~+/]{10,}', r'\1***', val)
+            if len(val) > 100:
+                val = val[:47] + "..."
+            return val
+
         def _fmt(tc):
             args = (tc.arguments[0] if isinstance(tc.arguments, list) else tc.arguments) or {}
             val = next(iter(args.values()), None) if isinstance(args, dict) else None
             if not isinstance(val, str):
                 return tc.name
+            val = _mask_sensitive(val)
             return f'{tc.name}("{val}")'
 
         return ", ".join(_fmt(tc) for tc in tool_calls)
+
+    @staticmethod
+    def _resolve_temperature(
+        profile_id: str | None,
+        session_metadata: dict | None,
+        workspace: str | Path,
+    ) -> float | None:
+        """Session metadata temperature wins over profile manifest."""
+        meta = session_metadata or {}
+        raw = meta.get("temperature")
+        if raw is not None:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                pass
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            return ProfileManager(workspace).get_temperature(profile_id)
+        except Exception:
+            return None
 
     async def _run_agent_loop(
         self,
@@ -373,13 +610,14 @@ class ShibaBrain:
         on_progress: Callable[..., Awaitable[None]] | None = None,
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         *,
-        channel: str | None = None,
-        chat_id: str | None = None,
+        channel: str = "cli",
+        chat_id: str = "direct",
         skill_names: list[str] | None = None,
         profile_id: str | None = None,
         model: str | None = None,
         session_key: str | None = None,
         metadata: dict | None = None,
+        temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         """Run the agent iteration loop.
 
@@ -404,56 +642,82 @@ class ShibaBrain:
 
         # Update context again just in case the provider needed to be resolved
         # and wasn't available when _set_tool_context was initially called
-        self._set_tool_context(channel, chat_id, metadata.get("message_id") if metadata else None, session_key, model=active_model, provider=active_provider)
+        self._set_tool_context(
+            channel,
+            chat_id,
+            metadata.get("message_id") if metadata else None,
+            session_key,
+            model=active_model,
+            provider=active_provider,
+            metadata=metadata,
+        )
 
         if not active_provider:
             return "No provider is configured for the selected model.", tools_used, messages
 
         # Tool definitions don't change mid-loop; compute once.
-        tool_defs = self.tools.get_definitions()
+        tool_defs = self._filter_tools_for_profile(
+            self.tools.get_definitions(), profile_id
+        )
+        tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
 
         if session_key:
-            self._steering_queues[session_key] = []
+            self._steering_queues.setdefault(session_key, [])
 
         active_kbs = None
         try:
             from shibaclaw.agent.knowledge_manager import KnowledgeManager, RAG_AVAILABLE
             import asyncio
-            
+
             if RAG_AVAILABLE:
                 km = KnowledgeManager(self.context.workspace)
                 all_collections = await asyncio.to_thread(km.list_collections)
-            
+
             session_kb_ids = []
             if chat_id:
                 from shibaclaw.webui.agent_manager import agent_manager
+
                 if agent_manager.pm:
                     sess = agent_manager.pm.get_or_create(chat_id)
                     session_kb_ids = sess.metadata.get("knowledge_bases", [])
-            
-            mentioned_kb_names = [k.lower() for k in (metadata.get("mentioned_kbs", []) if metadata else [])]
+                    try:
+                        from shibaclaw.agent.profiles import ProfileManager
+
+                        pid = sess.metadata.get("profile_id") or profile_id
+                        if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
+                            sess.metadata, pid, None
+                        ):
+                            agent_manager.pm.save(sess)
+                            session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                    except Exception:
+                        pass
+
+            mentioned_kb_names = [
+                k.lower() for k in (metadata.get("mentioned_kbs", []) if metadata else [])
+            ]
 
             if all_collections and (session_kb_ids or mentioned_kb_names):
                 active_kbs = []
                 new_session_kb_ids = list(session_kb_ids)
                 changed = False
-                
+
                 for col in all_collections:
                     col_id = col.get("id", "")
                     col_name = col.get("name", "")
-                    
+
                     is_mentioned = col_name.lower() in mentioned_kb_names
                     if is_mentioned and col_id not in new_session_kb_ids:
                         new_session_kb_ids.append(col_id)
                         changed = True
-                        
+
                     if col_id in new_session_kb_ids:
                         col_desc = col.get("description", "")
                         desc_part = f" - Desc: {col_desc}" if col_desc else ""
                         active_kbs.append(f"ID: {col_id} (Name: '{col_name}'){desc_part}")
-                        
+
                 if changed and chat_id:
                     from shibaclaw.webui.agent_manager import agent_manager
+
                     if agent_manager.pm:
                         sess = agent_manager.pm.get_or_create(chat_id)
                         sess.metadata["knowledge_bases"] = new_session_kb_ids
@@ -469,17 +733,17 @@ class ShibaBrain:
                     for msg in steer_msgs:
                         # Prefix the steering message so the LLM clearly understands it's an interruption
                         steer_text = f"**[USER INJECTION DURING TASK]**\n\n{msg['content']}"
-                        
+
                         # Properly construct content with media so the model can see the images
                         content = self.context._build_user_content(steer_text, msg.get("media"))
-                        
+
                         entry = {
                             "role": "user",
                             "content": content,
                         }
                         if msg.get("timestamp"):
                             entry["timestamp"] = msg.get("timestamp")
-                            
+
                         metadata = {}
                         if msg.get("media"):
                             metadata["media"] = msg["media"]
@@ -487,13 +751,15 @@ class ShibaBrain:
                             metadata["attachments"] = msg["attachments"]
                         if metadata:
                             entry["metadata"] = metadata
-                            
+
                         messages.append(entry)
                     self._steering_queues[session_key] = []
             # Wall-clock safety: abort if the loop has been running too long
             elapsed = time.monotonic() - loop_start
             if self.loop_wall_timeout > 0 and elapsed > self.loop_wall_timeout:
-                logger.warning(f"Session wall timeout ({self.loop_wall_timeout}s) reached after {elapsed:.1f}s.")
+                logger.warning(
+                    f"Session wall timeout ({self.loop_wall_timeout}s) reached after {elapsed:.1f}s."
+                )
                 final_content = (
                     f"I reached the maximum time limit for processing "
                     f"(elapsed: {elapsed:.0f}s, cap: {self.loop_wall_timeout}s). "
@@ -516,12 +782,28 @@ class ShibaBrain:
                 "content": static_prompt + "\n\n---\n\n" + live_block,
             }
 
+            session_reasoning_effort = None
+            if session_key and hasattr(self, "sessions") and self.sessions:
+                try:
+                    sess = self.sessions.get_or_create(session_key)
+                    session_reasoning_effort = sess.metadata.get("reasoning_effort")
+                except Exception:
+                    pass
+
+            call_kwargs = {}
+            if session_reasoning_effort:
+                call_kwargs["reasoning_effort"] = session_reasoning_effort
+            if temperature is not None:
+                call_kwargs["temperature"] = temperature
+
             response = await active_provider.chat_with_retry_streaming(
                 messages=messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
+                **call_kwargs,
             )
+
 
             if response.has_tool_calls:
                 if on_progress:
@@ -538,6 +820,7 @@ class ShibaBrain:
                     response.content,
                     tool_call_dicts,
                     reasoning_content=response.reasoning_content,
+                    reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
                 )
 
@@ -545,6 +828,30 @@ class ShibaBrain:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
+                    if self._tool_disabled_for_profile(tool_call.name, profile_id):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Tool '{tool_call.name}' is disabled "
+                                f"for this profile."
+                            ),
+                        )
+                        continue
+                    if self._tool_blocked_for_non_allowlisted(
+                        tool_call.name, metadata, channel
+                    ):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Tool '{tool_call.name}' is allowlist-only. "
+                                "Non-allowlisted senders may only use web_search/web_fetch."
+                            ),
+                        )
+                        continue
                     try:
                         tool_future = asyncio.ensure_future(
                             self.tools.execute(tool_call.name, tool_call.arguments)
@@ -557,7 +864,11 @@ class ShibaBrain:
                             remaining = self.tool_timeout - _waited
                             if remaining <= 0 and self.tool_timeout > 0:
                                 break
-                            step_timeout = max(0.1, min(float(_heartbeat), float(remaining))) if self.tool_timeout > 0 else _heartbeat
+                            step_timeout = (
+                                max(0.1, min(float(_heartbeat), float(remaining)))
+                                if self.tool_timeout > 0
+                                else _heartbeat
+                            )
                             try:
                                 await asyncio.wait_for(
                                     asyncio.shield(tool_future),
@@ -605,21 +916,22 @@ class ShibaBrain:
                     logger.error("LLM returned error: {}", (clean or "")[:200])
                     final_content = clean or "Sorry, I encountered an error calling the AI model."
                     break
-                
+
                 messages = self.context.add_assistant_message(
                     messages,
                     response.content,
                     reasoning_content=response.reasoning_content,
+                    reasoning_details=response.reasoning_details,
                     thinking_blocks=response.thinking_blocks,
                 )
                 # Preserve full content (including <think>) for the UI
                 final_content = response.content
-                
+
                 # Check for steering messages: if we have some, continue the loop
                 # instead of breaking, so the agent can respond to the injected message
                 if session_key and self._steering_queues.get(session_key):
                     continue
-                    
+
                 break
 
         if final_content is None and self.max_iterations > 0 and iteration >= self.max_iterations:
@@ -646,7 +958,8 @@ class ShibaBrain:
             except asyncio.TimeoutError:
                 continue
             except asyncio.CancelledError:
-                if asyncio.current_task().cancelling():
+                task = asyncio.current_task()
+                if task and task.cancelling():
                     raise
                 continue
             except Exception as e:
@@ -694,6 +1007,7 @@ class ShibaBrain:
     def _safe_argv() -> list[str]:
         """Return only trusted argv entries (flags + known subcommands)."""
         import sys
+
         if getattr(sys, "frozen", False):
             safe = [sys.executable]
             for arg in sys.argv[1:]:
@@ -719,6 +1033,7 @@ class ShibaBrain:
         async def _do_restart():
             await asyncio.sleep(1)
             import subprocess
+
             subprocess.Popen(safe_argv)
             os._exit(0)
 
@@ -772,7 +1087,7 @@ class ShibaBrain:
                 await asyncio.gather(*self._background_tasks, return_exceptions=True)
             finally:
                 self._background_tasks.clear()
-        
+
         await self.mcp.close()
 
     def _schedule_background(self, coro) -> None:
@@ -822,6 +1137,7 @@ class ShibaBrain:
                 msg.metadata.get("message_id"),
                 session_key=key,
                 model=session.metadata.get("model") or None,
+                metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
@@ -835,6 +1151,9 @@ class ShibaBrain:
                 available_channels=self._available_channels,
                 profile_id=profile_id,
             )
+            _temp = self._resolve_temperature(
+                profile_id, session.metadata, self.workspace
+            )
             final_content, _, all_msgs = await self._run_agent_loop(
                 messages,
                 channel=channel,
@@ -842,6 +1161,7 @@ class ShibaBrain:
                 profile_id=profile_id,
                 session_key=key,
                 metadata=msg.metadata,
+                temperature=_temp,
             )
             self._save_turn(session, all_msgs, 1 + len(history))
             self.sessions.save(session)
@@ -867,6 +1187,23 @@ class ShibaBrain:
             preview,
         )
         session = self.sessions.get_or_create(key)
+        # Auto nicknames for Telegram sessions in the WebUI sessions list.
+        if msg.channel == "telegram":
+            try:
+                from shibaclaw.integrations.telegram_labels import (
+                    maybe_autolabel_session,
+                    telegram_owner_ids,
+                )
+
+                if maybe_autolabel_session(
+                    session,
+                    msg.metadata or {},
+                    self.workspace,
+                    owner_ids=telegram_owner_ids(self.channels_config),
+                ):
+                    self.sessions.save(session)
+            except Exception as e:
+                logger.warning("telegram session autolabel failed: {}", e)
         profile_id = profile_id_override or session.metadata.get("profile_id") or None
         if profile_id_override and session.metadata.get("profile_id") != profile_id_override:
             session.metadata["profile_id"] = profile_id_override
@@ -900,6 +1237,7 @@ class ShibaBrain:
                 "/new — Start a new conversation",
                 "/stop — Stop the current task",
                 "/restart — Restart the bot",
+                "/update — Check for and install updates",
                 "/help — Show available commands",
             ]
             return OutboundMessage(
@@ -908,21 +1246,134 @@ class ShibaBrain:
                 content="\n".join(lines),
             )
 
+        if cmd == "/update":
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content="Checking for updates...",
+                    metadata={"msg_type": "system"}
+                )
+            )
+            try:
+                from shibaclaw.updater.checker import check_for_update
+                from shibaclaw.updater.apply import apply_update
+                import asyncio
+                
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, check_for_update)
+                
+                if not result.get("update_available"):
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=result.get("summary") or "You are already up to date.",
+                    )
+                
+                if result.get("action_kind") != "automatic":
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=f"An update is available ({result.get('latest')}), but it requires manual installation. Please check the WebUI for instructions.",
+                    )
+                
+                await self.bus.publish_outbound(
+                    OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=f"Installing update: {result.get('latest')}...\nThis might take a minute.",
+                        metadata={"msg_type": "system"}
+                    )
+                )
+                
+                workspace_root = self.workspace
+                manifest_url = result.get("manifest_url")
+                manifest = None
+                if manifest_url:
+                    try:
+                        from shibaclaw.updater.manifest import fetch_manifest
+                        manifest = await loop.run_in_executor(None, lambda: fetch_manifest(manifest_url))
+                    except Exception as e:
+                        logger.warning("Failed to fetch manifest: {}", e)
+
+                report = await loop.run_in_executor(
+                    None,
+                    lambda: apply_update(result, workspace_root, manifest=manifest),
+                )
+                
+                pip_result = report.get("pip") or {}
+                exe_result = report.get("exe") or {}
+                
+                if pip_result.get("ok") or exe_result.get("ok"):
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content="✅ Update installed successfully!\n\n**IMPORTANT:** You must now restart ShibaClaw manually (e.g. from the terminal or WebUI) for the update to take effect.",
+                    )
+                else:
+                    err = pip_result.get("output") or exe_result.get("output") or report.get("message") or "Unknown error"
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=f"❌ Update failed:\n```text\n{err}\n```",
+                    )
+            except Exception as e:
+                logger.exception("Update failed")
+                return OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=f"❌ Error checking for updates: {e}",
+                )
+
         self._set_tool_context(
             msg.channel,
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
             model=session.metadata.get("model") or None,
+            metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
 
-        history = session.get_history(max_messages=0)
+        message_metadata = msg.metadata or {}
+        max_age_hours = self._history_max_age_hours(msg.channel)
+        if message_metadata.get("secretary_summon") or message_metadata.get(
+            "business_connection_id"
+        ):
+            max_age_hours = None
+        history = session.get_history(max_messages=0, max_age_hours=max_age_hours)
+        current_message = msg.content
+        if message_metadata.get("is_guest") or message_metadata.get("secretary_summon"):
+            try:
+                from shibaclaw.agent.tools.secretary.preamble import (
+                    build_guest_preamble,
+                    build_secretary_preamble,
+                )
+
+                owner_ids = _telegram_allow_from_ids(self.channels_config)
+                preamble = (
+                    build_secretary_preamble(
+                        self.sessions,
+                        chat_id=str(msg.chat_id),
+                        meta=message_metadata,
+                        owner_ids=owner_ids,
+                    )
+                    if message_metadata.get("secretary_summon")
+                    else build_guest_preamble(
+                        self.sessions,
+                        chat_id=str(msg.chat_id),
+                        meta=message_metadata,
+                        owner_ids=owner_ids,
+                    )
+                )
+                current_message = preamble + (msg.content or "")
+            except Exception as error:
+                logger.warning("Guest/secretary preamble failed: {}", error)
         initial_messages = self.context.build_messages(
             history=history,
-            current_message=msg.content,
+            current_message=current_message,
             media=msg.media if msg.media else None,
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -931,7 +1382,11 @@ class ShibaBrain:
             profile_id=profile_id,
         )
 
-        _user_entry = {"role": "user", "content": msg.content, "timestamp": datetime.now().isoformat()}
+        _user_entry = {
+            "role": "user",
+            "content": msg.content,
+            "timestamp": datetime.now().isoformat(),
+        }
         metadata = {}
         if msg.metadata:
             metadata.update(msg.metadata)
@@ -941,12 +1396,14 @@ class ShibaBrain:
             _user_entry["metadata"] = metadata
         session.messages.append(_user_entry)
         self.sessions.save(session)
-        
+
         if msg.metadata and msg.metadata.get("no_reply"):
             return None
         _pre_saved_count = 1
 
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
+            if msg.metadata and msg.metadata.get("secretary_summon"):
+                return
             meta = {"_progress": True, "_tool_hint": tool_hint, **(msg.metadata or {})}
             await self.bus.publish_outbound(
                 OutboundMessage(
@@ -957,6 +1414,9 @@ class ShibaBrain:
                 )
             )
 
+        _temp = self._resolve_temperature(
+            profile_id, session.metadata, self.workspace
+        )
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
@@ -966,10 +1426,12 @@ class ShibaBrain:
             profile_id=profile_id,
             model=session.metadata.get("model") or None,
             session_key=key,
+            metadata=msg.metadata,
+            temperature=_temp,
         )
 
         if final_content is None:
-            final_content = "I've completed processing but have no response to give."
+            final_content = ""
 
         self._save_turn(session, all_msgs, 1 + len(history) + _pre_saved_count)
         self.sessions.save(session)
@@ -993,12 +1455,21 @@ class ShibaBrain:
             except Exception as _e:
                 logger.debug("Ignored error: {}", _e)
 
+        final_content = (final_content or "").strip()
+        if not final_content and not media_list:
+            logger.debug(
+                "Silent skip: no content/media for {}:{}",
+                msg.channel,
+                msg.sender_id,
+            )
+            return None
+
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.debug("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
-        
+
         out_metadata = dict(msg.metadata or {})
         out_metadata.pop("hidden", None)
-        
+
         return OutboundMessage(
             channel=msg.channel,
             chat_id=msg.chat_id,
@@ -1028,7 +1499,9 @@ class ShibaBrain:
                                         mt.latest_resolved_media_map.get(p, p)
                                         for p in args["media"]
                                     ]
-                                    tc["function"]["arguments"] = json.dumps(args, ensure_ascii=False)
+                                    tc["function"]["arguments"] = json.dumps(
+                                        args, ensure_ascii=False
+                                    )
                             except Exception as _e:
                                 logger.debug("Ignored error: {}", _e)
 
@@ -1050,14 +1523,18 @@ class ShibaBrain:
             ):
                 entry["content"] = content[: self._TOOL_RESULT_MAX_CHARS] + "\n... (truncated)"
             elif role == "user":
-                if isinstance(content, str) and content.startswith(
-                    ScentBuilder._RUNTIME_CONTEXT_TAG
-                ):
-                    parts = content.split("\n\n", 1)
-                    if len(parts) > 1 and parts[1].strip():
-                        entry["content"] = parts[1]
-                    else:
-                        continue
+                if isinstance(content, str):
+                    if content.startswith("**[USER INJECTION DURING TASK]**\n\n"):
+                        content = content.replace("**[USER INJECTION DURING TASK]**\n\n", "", 1)
+                        entry["content"] = content
+                    if content.startswith(
+                        ScentBuilder._RUNTIME_CONTEXT_TAG
+                    ):
+                        parts = content.split("\n\n", 1)
+                        if len(parts) > 1 and parts[1].strip():
+                            entry["content"] = parts[1]
+                        else:
+                            continue
                 if isinstance(content, list):
                     filtered = []
                     for c in content:
@@ -1088,7 +1565,7 @@ class ShibaBrain:
         session_key: str = "cli:direct",
         channel: str = "cli",
         chat_id: str = "direct",
-        on_progress: Callable[[str], Awaitable[None]] | None = None,
+        on_progress: Callable[[str, bool], Awaitable[None]] | None = None,
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         on_notify: Callable[..., Awaitable[None]] | None = None,
         media: list[str] | None = None,
@@ -1101,7 +1578,7 @@ class ShibaBrain:
             sender_id="user",
             chat_id=chat_id,
             content=content,
-            media=media,
+            media=media or [],
             metadata=metadata or {},
         )
         return await self._process_message(

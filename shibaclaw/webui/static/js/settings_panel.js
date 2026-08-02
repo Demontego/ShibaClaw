@@ -73,10 +73,11 @@ window.switchSettingsTab = function (tab, options = {}) {
     if (panel) panel.style.display = "block";
     if (tab === "oauth") loadOAuthPanel();
     if (tab === "update") loadUpdatePanel();
-    if (tab === "skills") loadSkillsPanel();
-    if (tab === "plugins") loadPluginsPanel();
+    if (tab === "extensions") {
+        const storedSubtab = localStorage.getItem("shibaclaw_extensions_subtab") || "skills";
+        switchExtensionsSubTab(storedSubtab);
+    }
     if (tab === "heartbeat") loadHeartbeatSettingsPanel();
-    if (tab === "mcp") { if (typeof loadMcpManagerPanel === "function") loadMcpManagerPanel(); }
     try { localStorage.setItem("shibaclaw_settings_tab", tab); } catch (e) { }
 
     const isMobile = window.matchMedia("(max-width: 768px)").matches;
@@ -99,6 +100,23 @@ window.switchSettingsTab = function (tab, options = {}) {
         document.getElementById("settings-mobile-dashboard").style.display = "none";
         document.getElementById("settings-body").style.display = "block";
     }
+};
+
+/* ── Extensions Subtabs ── */
+window.switchExtensionsSubTab = function(subtab) {
+    document.querySelectorAll(".extensions-inner-tab").forEach(t => t.classList.remove("active"));
+    const tabEl = document.querySelector(`.extensions-inner-tab[data-subtab="${subtab}"]`);
+    if (tabEl) tabEl.classList.add("active");
+
+    document.querySelectorAll(".extensions-subpanel").forEach(p => p.classList.remove("active"));
+    const panel = document.getElementById("subpanel-" + subtab);
+    if (panel) panel.classList.add("active");
+
+    try { localStorage.setItem("shibaclaw_extensions_subtab", subtab); } catch (e) { }
+
+    if (subtab === "skills") loadSkillsPanel();
+    if (subtab === "plugins") loadPluginsPanel();
+    if (subtab === "mcp" && typeof loadMcpManagerPanel === "function") loadMcpManagerPanel();
 };
 
 /* ── Skills panel ── */
@@ -336,7 +354,7 @@ async function loadOAuthPanel() {
             const badge = document.getElementById("oauth-badge-" + p.name);
             const logsEl = document.getElementById("oauth-logs-" + p.name);
             btn.disabled = true; btn.innerHTML = '<span class="material-icons-round spin" style="font-size:14px;vertical-align:middle">progress_activity</span> Contacting...';
-            logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : "Requesting device code...\n";
+            logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : (p.name === "google_gemini_cli" ? "Preparing Google login...\n" : "Requesting device code...\n");
             const loginBtnHtml = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> Login';
             try {
                 const resp = await authFetch("/api/oauth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: p.name }) });
@@ -635,11 +653,60 @@ function populateSettings(cfg) {
     $("s-agent-maxTokens").value = d.maxTokens ?? 8192;
     $("s-agent-ctxTokens").value = d.contextWindowTokens ?? 65536;
     $("s-agent-maxIter").value = d.maxToolIterations ?? 40;
-    $("s-agent-toolTimeout").value = d.toolTimeout ?? 660;
-    $("s-agent-loopWallTimeout").value = d.loopWallTimeout ?? 600;
-    $("s-agent-subagentTimeout").value = d.subagentTimeout ?? 600;
+    $("s-agent-toolTimeout").value = d.toolTimeout ?? 0;
+    $("s-agent-loopWallTimeout").value = d.loopWallTimeout ?? 0;
+    $("s-agent-subagentTimeout").value = d.subagentTimeout ?? 0;
     $("s-agent-workspace").value = d.workspace || "~/.shibaclaw/workspace";
     $("s-agent-reasoning").value = d.reasoningEffort || "";
+    void syncSettingsReasoningDropdown(d.model || "");
+
+async function syncSettingsReasoningDropdown(modelId = null) {
+    const el = $("s-agent-reasoning");
+    if (!el) return;
+    const selectedModel = modelId || $("s-agent-model")?.value || "";
+    const currentVal = el.value;
+
+    let supports = false;
+    if (typeof window.checkModelSupportsReasoning === "function") {
+        supports = window.checkModelSupportsReasoning(selectedModel);
+    } else {
+        const mid = selectedModel.toLowerCase();
+        const raw = mid.split("/").pop();
+        if (raw.startsWith("o1") || raw.startsWith("o3") || raw.includes("claude-3-7") || raw.includes("thinking") || raw.includes("r1") || raw.includes("think") || raw.includes("reasoner")) {
+            supports = true;
+        }
+    }
+
+    if (supports) {
+        el.disabled = false;
+        el.style.opacity = "";
+        el.innerHTML = `
+            <option value="">Default (Inherit / Provider default)</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+        `;
+        el.value = currentVal || "";
+    } else {
+        el.innerHTML = `<option value="">Not Supported for this model</option>`;
+        el.value = "";
+        el.disabled = true;
+        el.style.opacity = "0.6";
+    }
+}
+window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
+
+
+    // RAG settings
+    const rg = cfg.rag || {};
+    const rgProvEl = $("s-rag-provider");
+    if (rgProvEl) rgProvEl.value = rg.provider || "local";
+    const rgKeyEl = $("s-rag-apiKey");
+    if (rgKeyEl) rgKeyEl.value = rg.apiKey || "";
+    const rgBaseEl = $("s-rag-apiBase");
+    if (rgBaseEl) rgBaseEl.value = rg.apiBase || "";
+    const rgModelEl = $("s-rag-model");
+    if (rgModelEl) rgModelEl.value = rg.model || "";
 
     // Audio settings
     const au = cfg.audio || {};
@@ -830,12 +897,13 @@ function populateSettings(cfg) {
     const tw = cfg.tools?.web || {};
     const ts = tw.search || {};
     $("s-tool-searchProvider").value = ts.provider || "brave";
-    $("s-tool-searchKey").value = ts.apiKey || "";
+    const searchKeyEl = $("s-tool-searchKey");
+    if (searchKeyEl) searchKeyEl.value = ts.apiKey || "";
     $("s-tool-searchMax").value = ts.maxResults ?? 5;
     $("s-tool-proxy").value = tw.proxy || "";
     const te = cfg.tools?.exec || {};
     $("s-tool-execEnable").checked = te.enable !== false;
-    $("s-tool-execTimeout").value = te.timeout ?? 60;
+    $("s-tool-execTimeout").value = te.timeout ?? 0;
     $("s-tool-restrict").checked = !!cfg.tools?.restrictToWorkspace;
 
 
@@ -915,7 +983,7 @@ function populateSettings(cfg) {
         markSeen: { label: "Mark as Read", section: "general", type: "boolean" },
         maxBodyChars: { label: "Max Body Length", section: "general", type: "number", placeholder: "12000" },
         subjectPrefix: { label: "Reply Prefix", section: "general", type: "text", placeholder: "Re: " },
-        allowFrom: { label: "Allowed Senders", section: "general", type: "array", placeholder: "email1@test.com, email2@test.com" },
+        allowFrom: { label: "Allowed Senders <i class=\"material-icons\" style=\"font-size:14px;cursor:pointer;\" title=\"You can enter usernames, emails, or IDs. For chat platforms, adding a Group/Channel ID here allows all users inside it to interact with the bot.\">&#9432;</i>", section: "general", type: "array", placeholder: "email1@test.com, email2@test.com" },
     };
 
     const channelEntries = [];
@@ -931,87 +999,137 @@ function populateSettings(cfg) {
     let activeCount = 0;
     let selectedChannel = null;
 
+    const CHANNEL_FIELD_REGISTRY = {
+        enabled: { section: "credentials", tooltip: "Activate this channel. The bot will start listening on save." },
+        token: { section: "credentials", tooltip: "Bot token from the platform. Stored encrypted in the credential vault." },
+        bot_token: { section: "credentials", tooltip: "Slack bot token (xoxb-…). Required for sending and receiving messages." },
+        app_token: { section: "credentials", tooltip: "Slack app-level token (xapp-…). Required for Socket Mode connections." },
+        client_id: { section: "credentials", tooltip: "Application client ID from the platform developer console." },
+        client_secret: { section: "credentials", tooltip: "Application secret key. Stored encrypted in the credential vault." },
+        app_id: { section: "credentials", tooltip: "Application ID from the Feishu/Lark developer console." },
+        app_secret: { section: "credentials", tooltip: "Application secret from Feishu. Stored encrypted in the vault." },
+        encrypt_key: { section: "credentials", tooltip: "Event encryption key from Feishu. Used to decrypt incoming webhooks." },
+        verification_token: { section: "credentials", tooltip: "Webhook verification token. Validates that events originate from Feishu." },
+        access_token: { section: "credentials", tooltip: "Matrix access token. Authenticate with your homeserver." },
+        claw_token: { section: "credentials", tooltip: "Mochat authentication token. Stored encrypted in the vault." },
+        allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs. Adding a group ID allows all its members." },
+        group_allow_from: { section: "credentials", tooltip: "Comma-separated IDs allowed to trigger the bot in group channels." },
+        homeserver: { section: "credentials", tooltip: "Matrix homeserver URL (e.g., https://matrix.org)." },
+        user_id: { section: "credentials", tooltip: "The bot's full Matrix user ID (e.g., @bot:matrix.org)." },
+        device_id: { section: "credentials", tooltip: "Matrix device identifier. Required for E2EE session management." },
+        agent_user_id: { section: "credentials", tooltip: "Mochat user ID that identifies the bot agent in conversations." },
+
+        group_policy: { section: "logic", tooltip: "How the bot responds in groups: on mention, trigger word, or openly." },
+        reply_to_message: { section: "logic", tooltip: "Quote the original message when the bot sends its reply." },
+        reply_in_thread: { section: "logic", tooltip: "Reply inside the message thread instead of the main channel." },
+        streaming: { section: "logic", tooltip: "Stream the response incrementally instead of sending one final message." },
+        guest_mode: { section: "logic", tooltip: "Allow unauthenticated users to interact (bypasses allow_from check)." },
+        allow_bot_messages: { section: "logic", tooltip: "Process messages from other bots, not just human users." },
+        open_groups: { section: "logic", tooltip: "Accept messages from any group member. Private bot DMs remain restricted to allow_from." },
+        business_enabled: { section: "logic", tooltip: "Enable Telegram Business API features (requires BotFather toggle)." },
+        business_auto_reply: { section: "logic", tooltip: "Automatically reply to Telegram Business messages. Leave off to archive peers without replying." },
+        history_max_age_hours: { section: "logic", tooltip: "Discard Telegram conversation history older than this many hours." },
+        trigger_words: { section: "logic", tooltip: "Words that summon the bot in Telegram groups and Chat Automation peer DMs." },
+        managed_bots_enabled: { section: "logic", tooltip: "Allow the bot to be managed by other bots (Bot API 9.3+)." },
+        mini_app_url: { section: "logic", tooltip: "Public HTTPS URL for the Telegram Mini App menu button (e.g. https://host:8444/?tgWebApp=1)." },
+        miniAppUrl: { section: "logic", tooltip: "Public HTTPS URL for the Telegram Mini App menu button (e.g. https://host:8444/?tgWebApp=1)." },
+        group_context_buffer_size: { section: "logic", tooltip: "Number of recent group messages kept as context for replies." },
+        intents: { section: "logic", tooltip: "Discord Gateway intent bitmask. Controls which events the bot receives." },
+        mode: { section: "logic", tooltip: "Connection mode: socket for Socket Mode, events for HTTP Events API." },
+        webhook_path: { section: "logic", tooltip: "URL path for Slack Events API webhook endpoint." },
+        react_emoji: { section: "logic", tooltip: "Emoji reaction added when the bot starts processing a message." },
+        done_emoji: { section: "logic", tooltip: "Emoji reaction added when the bot finishes processing a message." },
+        user_token_read_only: { section: "logic", tooltip: "Restrict the user token to read-only operations for safety." },
+        e2ee_enabled: { section: "logic", tooltip: "Enable end-to-end encryption for Matrix messages. Requires libolm." },
+        allow_room_mentions: { section: "logic", tooltip: "Respond to @room mentions in addition to direct bot mentions." },
+        dm: { section: "logic", tooltip: "Direct Message policy sub-config: enabled, policy, and allowlist." },
+        mention: { section: "logic", tooltip: "Mochat mention behavior — require @mention to trigger in groups." },
+        groups: { section: "logic", tooltip: "Per-group override rules for mention requirements and access." },
+        sessions: { section: "logic", tooltip: "Mochat session IDs to monitor for incoming messages." },
+        panels: { section: "logic", tooltip: "Mochat panel IDs to monitor for incoming messages." },
+        reply_delay_mode: { section: "logic", tooltip: "When to apply reply delay: non-mention, always, or never." },
+        reply_delay_ms: { section: "logic", tooltip: "Milliseconds to wait before sending a reply (human-like pacing)." },
+
+        proxy: { section: "network", tooltip: "HTTP/SOCKS5 proxy URL for outbound connections from this channel." },
+        proxy_username: { section: "network", tooltip: "Username for proxy authentication (if required)." },
+        proxy_password: { section: "network", tooltip: "Password for proxy authentication. Stored encrypted in the vault." },
+        gateway_url: { section: "network", tooltip: "Discord WebSocket gateway URL. Override only for custom deployments." },
+        base_url: { section: "network", tooltip: "Mochat server base URL. The API root for all HTTP requests." },
+        socket_url: { section: "network", tooltip: "Mochat WebSocket URL. Leave empty to auto-derive from base URL." },
+        socket_path: { section: "network", tooltip: "Socket.IO path prefix. Default: /socket.io." },
+        socket_disable_msgpack: { section: "network", tooltip: "Disable msgpack encoding. Use JSON transport instead (slower)." },
+        socket_reconnect_delay_ms: { section: "network", tooltip: "Initial delay before reconnecting after a WebSocket disconnect." },
+        socket_max_reconnect_delay_ms: { section: "network", tooltip: "Maximum backoff delay between reconnection attempts." },
+        socket_connect_timeout_ms: { section: "network", tooltip: "Maximum time to wait for a WebSocket connection to establish." },
+        connection_pool_size: { section: "network", tooltip: "Max concurrent HTTP connections to the Telegram Bot API." },
+        pool_timeout: { section: "network", tooltip: "Seconds to wait for a free connection from the pool." },
+        refresh_interval_ms: { section: "network", tooltip: "How often to refresh session/channel data from the server (ms)." },
+        watch_timeout_ms: { section: "network", tooltip: "Server-side watch timeout for long-polling events (ms)." },
+        watch_limit: { section: "network", tooltip: "Maximum number of events returned per watch/poll cycle." },
+        retry_delay_ms: { section: "network", tooltip: "Base delay between retry attempts on transient failures (ms)." },
+        max_retry_attempts: { section: "network", tooltip: "Maximum retries on failure. 0 = unlimited retries." },
+        max_media_bytes: { section: "network", tooltip: "Maximum file attachment size in bytes (default: 20 MB)." },
+        sync_stop_grace_seconds: { section: "network", tooltip: "Seconds to wait for Matrix sync to stop cleanly on shutdown." }
+    };
+
+    function getRegistryEntry(keyPath) {
+        // Fallback matching: try full key, then last part of key, then lowercase, then snake_case
+        const key = keyPath.split('.').pop();
+        const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+        return CHANNEL_FIELD_REGISTRY[key] || CHANNEL_FIELD_REGISTRY[snakeKey] || CHANNEL_FIELD_REGISTRY[key.toLowerCase()] || { section: "logic", tooltip: "" };
+    }
+
     function buildChannelFields(name, cc) {
         const enabled = cc.enabled === true;
-        let fieldsHtml = `
+        let fieldsHtml = "";
+
+        if (name === "email") {
+            fieldsHtml += `
             <div class="field-row">
                 <label>Enabled</label>
                 <label class="toggle"><input type="checkbox" class="ch-enabled" data-ch="${name}" ${enabled ? "checked" : ""}><span class="toggle-slider"></span></label>
             </div>
-        `;
-
-        if (name === "email") {
-            fieldsHtml += `
             <div class="field-row">
                 <label>Authorize IMAP/SMTP access</label>
                 <label class="toggle"><input type="checkbox" class="ch-field" data-ch="${name}" data-key="consentGranted" data-type="boolean" ${(cc.consentGranted || cc.consent_granted) ? "checked" : ""}><span class="toggle-slider"></span></label>
             </div>
             `;
-        }
+            if (EMAIL_FIELD_CONFIG) {
+                const sections = { inbound: [], outbound: [], general: [] };
+                for (const [key, val] of Object.entries(cc)) {
+                    if (key === "enabled" || key === "consentGranted" || key === "consent_granted") continue;
+                    const fieldConfig = EMAIL_FIELD_CONFIG[key] || null;
+                    const section = fieldConfig?.section || "general";
+                    const label = fieldConfig?.label || key;
+                    const placeholder = fieldConfig?.placeholder || "";
 
-        if (name === "email" && EMAIL_FIELD_CONFIG) {
-            const sections = { inbound: [], outbound: [], general: [] };
-            for (const [key, val] of Object.entries(cc)) {
-                if (key === "enabled" || key === "consentGranted" || key === "consent_granted") continue;
-                const fieldConfig = EMAIL_FIELD_CONFIG[key] || null;
-                const section = fieldConfig?.section || "general";
-                const label = fieldConfig?.label || key;
-                const placeholder = fieldConfig?.placeholder || "";
+                    let valStr = "";
+                    let originalType = typeof val;
+                    if (Array.isArray(val)) { originalType = "array"; valStr = val.join(", "); }
+                    else if (val !== null && originalType === "object") { originalType = "object"; valStr = JSON.stringify(val); }
+                    else { if (val === null) originalType = "string"; valStr = val === null ? "" : String(val); }
 
-                let valStr = "";
-                let originalType = typeof val;
-                if (Array.isArray(val)) { originalType = "array"; valStr = val.join(", "); }
-                else if (val !== null && originalType === "object") { originalType = "object"; valStr = JSON.stringify(val); }
-                else { if (val === null) originalType = "string"; valStr = val === null ? "" : String(val); }
-
-                let inputHtml = "";
-                if (originalType === "boolean" || fieldConfig?.type === "boolean") {
-                    inputHtml = `<div class="field-row"><label>${label}</label><label class="toggle"><input type="checkbox" class="ch-field" data-ch="${name}" data-key="${key}" data-type="boolean" ${valStr === "true" || val === true ? "checked" : ""}><span class="toggle-slider"></span></label></div>`;
-                } else {
-                    const isPassword = fieldConfig?.type === "password" || key.toLowerCase().includes("password") || key.toLowerCase().includes("secret");
-                    const safeVal = String(valStr).replace(/"/g, '&quot;');
-                    inputHtml = `<div class="field-row"><label>${label}</label><input type="${isPassword ? "password" : (fieldConfig?.type || "text")}" class="form-input ch-field" data-ch="${name}" data-key="${key}" data-type="${originalType}" value="${safeVal}" placeholder="${placeholder}"></div>`;
+                    let inputHtml = "";
+                    if (originalType === "boolean" || fieldConfig?.type === "boolean") {
+                        inputHtml = `<div class="field-row"><label>${label}</label><label class="toggle"><input type="checkbox" class="ch-field" data-ch="${name}" data-key="${key}" data-type="boolean" ${valStr === "true" || val === true ? "checked" : ""}><span class="toggle-slider"></span></label></div>`;
+                    } else {
+                        const isPassword = fieldConfig?.type === "password" || key.toLowerCase().includes("password") || key.toLowerCase().includes("secret");
+                        const safeVal = String(valStr).replace(/"/g, '&quot;');
+                        inputHtml = `<div class="field-row"><label>${label}</label><input type="${isPassword ? "password" : (fieldConfig?.type || "text")}" class="form-input ch-field" data-ch="${name}" data-key="${key}" data-type="${originalType}" value="${safeVal}" placeholder="${placeholder}"></div>`;
+                    }
+                    if (!sections[section]) sections[section] = [];
+                    sections[section].push(inputHtml);
                 }
-                if (!sections[section]) sections[section] = [];
-                sections[section].push(inputHtml);
-            }
 
-            const sectionLabels = { inbound: '📥 Email IN (IMAP)', outbound: '📤 Email OUT (SMTP)', general: '⚙️ General' };
-            for (const [sectionKey, sectionFields] of Object.entries(sections)) {
-                if (sectionFields.length > 0) {
-                    fieldsHtml += `<div class="channel-detail-section-label">${sectionLabels[sectionKey] || sectionKey}</div>`;
-                    fieldsHtml += sectionFields.join("");
+                const sectionLabels = { inbound: '📥 Email IN (IMAP)', outbound: '📤 Email OUT (SMTP)', general: '⚙️ General' };
+                for (const [sectionKey, sectionFields] of Object.entries(sections)) {
+                    if (sectionFields.length > 0) {
+                        fieldsHtml += `<div class="channel-detail-section-label">${sectionLabels[sectionKey] || sectionKey}</div>`;
+                        fieldsHtml += sectionFields.join("");
+                    }
                 }
             }
         } else {
-            const compareConfigKeys = (a, b) => {
-                const getWeight = (key) => {
-                    const lower = key.toLowerCase();
-                    if (lower.includes("token") || lower.includes("secret") || lower.includes("password") || lower.includes("key")) {
-                        if (lower.includes("proxy")) return 90;
-                        return 10;
-                    }
-                    if (["mode", "webhookpath", "replyinthread", "replytomessage", "grouppolicy"].includes(lower)) {
-                        return 20;
-                    }
-                    if (lower.includes("allow")) {
-                        return 30;
-                    }
-                    if (lower === "dm" || lower === "mention") {
-                        return 40;
-                    }
-                    if (lower.includes("proxy")) {
-                        return 90;
-                    }
-                    return 50;
-                };
-
-                const wA = getWeight(a);
-                const wB = getWeight(b);
-                if (wA !== wB) return wA - wB;
-                return a.localeCompare(b);
-            };
-
             const formatLabel = (keyPath) => {
                 const ABBR_MAP = {
                     dm: "DM", imap: "IMAP", smtp: "SMTP", url: "URL", ip: "IP", api: "API", ssl: "SSL", tls: "TLS", id: "ID", tts: "TTS", stt: "STT"
@@ -1043,7 +1161,7 @@ function populateSettings(cfg) {
                         valStr = JSON.stringify(val);
                     } else {
                         let html = "";
-                        const subEntries = Object.entries(val).sort((a, b) => compareConfigKeys(a[0], b[0]));
+                        const subEntries = Object.entries(val);
                         for (const [childKey, childVal] of subEntries) {
                             html += buildFieldHtml(keyPath ? `${keyPath}.${childKey}` : childKey, childVal);
                         }
@@ -1053,33 +1171,71 @@ function populateSettings(cfg) {
                     valStr = String(val);
                 }
 
+                const reg = getRegistryEntry(keyPath);
+                let label = formatLabel(keyPath);
+                
+                let tooltipHtml = "";
+                if (reg.tooltip) {
+                    tooltipHtml = `<span class="field-info-trigger"><span class="material-icons-round">info_outline</span><span class="field-info-bubble">${escHtml(reg.tooltip)}</span></span>`;
+                }
+
                 if (originalType === "boolean") {
-                    const label = formatLabel(keyPath);
-                    return `<div class="field-row"><label>${label}</label><label class="toggle"><input type="checkbox" class="ch-field" data-ch="${name}" data-key="${keyPath}" data-type="boolean" ${val ? "checked" : ""}><span class="toggle-slider"></span></label></div>`;
+                    return `<div class="field-row" data-section="${reg.section}"><label>${label}${tooltipHtml}</label><label class="toggle"><input type="checkbox" class="ch-field" data-ch="${name}" data-key="${keyPath}" data-type="boolean" ${val ? "checked" : ""}><span class="toggle-slider"></span></label></div>`;
                 }
 
                 const lowerKey = keyPath.toLowerCase();
-                if (lowerKey.includes("token") || lowerKey.includes("secret") || lowerKey.includes("password")) {
+                if (lowerKey.includes("token") || lowerKey.includes("secret") || lowerKey.includes("password") || lowerKey.includes("key")) {
                     inputType = "password";
                 }
 
                 const safeVal = String(valStr).replace(/"/g, '&quot;');
-                const label = formatLabel(keyPath);
 
                 if (keyPath === "group_policy" || keyPath === "groupPolicy") {
                     const options = ["open", "mention", "trigger", "mention_or_trigger", "allowlist"]
                         .map(opt => `<option value="${opt}" ${valStr === opt ? "selected" : ""}>${opt}</option>`)
                         .join("");
-                    return `<div class="field-row"><label>${label}</label><select class="form-input ch-field" data-ch="${name}" data-key="${keyPath}" data-type="string">${options}</select></div>`;
+                    return `<div class="field-row" data-section="${reg.section}"><label>${label}${tooltipHtml}</label><select class="form-input ch-field" data-ch="${name}" data-key="${keyPath}" data-type="string">${options}</select></div>`;
                 }
 
-                return `<div class="field-row"><label>${label}</label><input type="${inputType}" class="form-input ch-field" data-ch="${name}" data-key="${keyPath}" data-type="${originalType}" value="${safeVal}"></div>`;
+                return `<div class="field-row" data-section="${reg.section}"><label>${label}${tooltipHtml}</label><input type="${inputType}" class="form-input ch-field" data-ch="${name}" data-key="${keyPath}" data-type="${originalType}" value="${safeVal}"></div>`;
             };
 
+            const sections = { credentials: [], logic: [], network: [] };
+            
+            // Enabled is always first in credentials
+            const enabledReg = getRegistryEntry("enabled");
+            const enabledTooltipHtml = `<span class="field-info-trigger"><span class="material-icons-round">info_outline</span><span class="field-info-bubble">${escHtml(enabledReg.tooltip)}</span></span>`;
+            sections.credentials.push(`
+                <div class="field-row">
+                    <label>Enabled${enabledTooltipHtml}</label>
+                    <label class="toggle"><input type="checkbox" class="ch-enabled" data-ch="${name}" ${enabled ? "checked" : ""}><span class="toggle-slider"></span></label>
+                </div>
+            `);
+
             const entries = Object.entries(cc).filter(([key]) => key !== "enabled" && key !== "consentGranted" && key !== "consent_granted");
-            entries.sort((a, b) => compareConfigKeys(a[0], b[0]));
+            
+            // Build raw HTML for each field and sort them into sections
             for (const [key, val] of entries) {
-                fieldsHtml += buildFieldHtml(key, val);
+                const fieldHtmlList = buildFieldHtml(key, val);
+                // buildFieldHtml can return multiple rows if it expands an object. Let's parse them and assign them correctly.
+                const tempDiv = document.createElement("div");
+                tempDiv.innerHTML = fieldHtmlList;
+                Array.from(tempDiv.children).forEach(row => {
+                    const sec = row.dataset.section || "logic";
+                    if (sections[sec]) {
+                        sections[sec].push(row.outerHTML);
+                    } else {
+                        sections.logic.push(row.outerHTML);
+                    }
+                });
+            }
+
+            const sectionLabels = { credentials: '🔐 Credentials & Status', logic: '⚡ Channel Logic & Security', network: '🌐 Network & Performance' };
+            for (const [sectionKey, sectionFields] of Object.entries(sections)) {
+                if (sectionFields.length > 0) {
+                    fieldsHtml += `<div class="channel-detail-section-label">${sectionLabels[sectionKey]}</div>`;
+                    fieldsHtml += sectionFields.join("");
+                }
             }
         }
         return fieldsHtml;
@@ -1202,6 +1358,12 @@ function populateSettings(cfg) {
 /* Legacy MCP accordion card functions removed in favor of MCP Server Manager panel */
 
 window.saveSettings = async function () {
+    const ragData = {
+        provider: $("s-rag-provider") ? $("s-rag-provider").value : "local",
+        apiKey: $("s-rag-apiKey") ? ($("s-rag-apiKey").value || "") : "",
+        apiBase: $("s-rag-apiBase") ? ($("s-rag-apiBase").value || "") : "",
+        model: $("s-rag-model") ? ($("s-rag-model").value || "") : "",
+    };
     const patch = {
         agents: {
             defaults: {
@@ -1221,13 +1383,14 @@ window.saveSettings = async function () {
                 maxPinnedSkills: window._skillsMaxPinned || 5,
             }
         },
+        rag: ragData,
         providers: (typeof lastSettingsConfig !== "undefined" && lastSettingsConfig.providers) ? JSON.parse(JSON.stringify(lastSettingsConfig.providers)) : {},
         tools: {
             web: {
                 proxy: $("s-tool-proxy").value || null,
                 search: {
                     provider: $("s-tool-searchProvider").value,
-                    apiKey: $("s-tool-searchKey").value,
+                    apiKey: $("s-tool-searchKey") ? $("s-tool-searchKey").value : "",
                     maxResults: parseInt($("s-tool-searchMax").value),
                 }
             },
@@ -1331,6 +1494,9 @@ window.saveSettings = async function () {
             body: JSON.stringify(patch)
         });
         const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || "Unknown error saving settings");
+        }
         if (typeof closeSettingsView === "function") closeSettingsView();
         _availableModels = []; // Clear model cache to force refresh
         _hasFetchedModels = false;

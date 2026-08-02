@@ -136,6 +136,18 @@ function usageColor(pct) {
 function buildTokenCard(t) {
     const pct = t.usage_pct || 0;
     const tier = usageTier(pct);
+    const isAuto = t.auto_detected === true;
+    const modelName = t.active_model ? String(t.active_model).split("/").pop() : "";
+    const sourceHtml = isAuto
+        ? `<div style="font-size:0.75rem; margin-top:8px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
+            <span class="material-icons-round" style="font-size:14px; color:var(--shiba-gold);">auto_awesome</span>
+            <span>Auto-detected limit for <b>${escapeHtml(modelName || 'active model')}</b> (${fmtTokens(t.context_window)})</span>
+           </div>`
+        : `<div style="font-size:0.75rem; margin-top:8px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
+            <span class="material-icons-round" style="font-size:14px;">settings</span>
+            <span>Fallback limit from Settings (${fmtTokens(t.context_window)})</span>
+           </div>`;
+
     return `
     <div class="context-token-card">
         <h3>📊 Token Estimate</h3>
@@ -152,7 +164,8 @@ function buildTokenCard(t) {
         <div class="context-usage-label">
             <span>${fmtTokens(t.total)} / ${fmtTokens(t.context_window)}</span>
             <span style="color:${usageColor(pct)}">${pct}%</span>
-        </div>` : ""}
+        </div>
+        ${sourceHtml}` : ""}
     </div>`;
 }
 
@@ -166,6 +179,14 @@ function updateTokenBadge(t) {
     badge.className = "token-badge usage-" + tier;
     if (fill) fill.style.width = `${pct}%`;
     text.textContent = `${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} · ${pct}%`;
+
+    const isAuto = t.auto_detected === true;
+    const modelName = t.active_model ? String(t.active_model).split("/").pop() : "";
+    if (isAuto) {
+        badge.title = `Model Context: ${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} (${pct}%)\n✨ Auto-detected limit for ${modelName}\nClick for context breakdown`;
+    } else {
+        badge.title = `Model Context: ${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} (${pct}%)\n⚙️ Using fallback limit from Settings\nClick for context breakdown`;
+    }
 }
 
 async function refreshTokenBadge() {

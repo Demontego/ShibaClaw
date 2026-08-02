@@ -1,26 +1,26 @@
 {
-"version": "0.9.8",
-    "release_notes": "Channel Config Dropdowns — Changed group_policy fields in channel configuration to use dropdown selectors in the WebUI for better UX. Fixed External Package Installation on Modern Linux (PEP 668) — Auto-injects --break-system-packages on externally-managed-environment errors during pip operations. Fixed Sub-agent Session Key Propagation — Added session_key to sub-agent metadata for proper context during parallel execution. Fixed RAG Soft Restart Import Error — Fixed NameError for dynamic RAG imports during soft restarts when Local RAG plugin is installed. Fixed Transient LLM Error Handling — Added 'empty choices' to transient error markers for automatic retry on empty API responses. Fixed Channel Hot-Reload on Secret Updates — Fixed channel hot-reload not triggering when secrets are updated. Fixed Proactive Learning Tool Choice — Gracefully handles unsupported tool_choice parameter in proactive learning. Removed Base64 Tool Output Encoding — Eliminated Base64 encoding logic for tool outputs to simplify the pipeline. Refined Terminal Skeleton UI — Refined terminal-style skeleton loader to be seamless and minimal. Improved Persian README localization and feature documentation. Fixed RTL issues in contribution guide and bullet points.",
+    "version": "0.9.13",
+    "release_notes": "Telegram Secretary tools, Chat Automation peer archiving, Telegram Mini App initData authentication, Profile tool allow/deny lists, WebUI Telegram session grouping and speaker autolabeling, and Gemini 3.x reasoning details streaming.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped version to 0.9.8."
+            "note": "Bumped version to 0.9.13."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v0.9.8 release notes."
+            "note": "Added v0.9.13 release notes."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated documentation version to 0.9.8."
+            "note": "Updated documentation version to 0.9.13."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Bumped packaged update manifest to v0.9.8."
+            "note": "Bumped packaged update manifest to v0.9.13."
         }
     ]
 }

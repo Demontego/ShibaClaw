@@ -51,13 +51,14 @@ async def api_sessions_get(request: Request):
             "nickname": session.metadata.get("nickname"),
             "profile_id": session.metadata.get("profile_id", "default"),
             "model": session.metadata.get("model", ""),
+            "reasoning_effort": session.metadata.get("reasoning_effort", None),
             "knowledge_bases": session.metadata.get("knowledge_bases", []),
         }
     )
 
 
 async def api_sessions_patch(request: Request):
-    """Update session metadata (like nickname)."""
+    """Update session metadata (like nickname, model, reasoning_effort)."""
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=400)
     session_id = request.path_params["session_id"]
@@ -70,17 +71,34 @@ async def api_sessions_patch(request: Request):
     if "nickname" in data:
         session.metadata["nickname"] = data["nickname"]
     if "profile_id" in data:
+        old_profile_id = session.metadata.get("profile_id", "default")
         session.metadata["profile_id"] = data["profile_id"]
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            wp = agent_manager.config.workspace_path
+            ProfileManager(wp).sync_session_knowledge_bases(
+                session.metadata, data["profile_id"], old_profile_id
+            )
+        except Exception:
+            pass
     if "model" in data:
         session.metadata["model"] = data["model"]
+    if "reasoning_effort" in data:
+        session.metadata["reasoning_effort"] = data["reasoning_effort"]
     if "knowledge_bases" in data:
         session.metadata["knowledge_bases"] = data["knowledge_bases"]
-    if "nickname" in data or "profile_id" in data or "model" in data or "knowledge_bases" in data:
+    if any(k in data for k in ("nickname", "profile_id", "model", "reasoning_effort", "knowledge_bases")):
         pm.save(session)
         return JSONResponse(
-            {"status": "updated", "profile_id": session.metadata.get("profile_id", "default")}
+            {
+                "status": "updated",
+                "profile_id": session.metadata.get("profile_id", "default"),
+                "reasoning_effort": session.metadata.get("reasoning_effort"),
+            }
         )
     return JSONResponse({"error": "Nothing to update"}, status_code=400)
+
 
 
 async def api_sessions_delete(request: Request):

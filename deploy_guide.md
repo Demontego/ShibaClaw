@@ -40,13 +40,25 @@ docker run -d --name shibaclaw -p 3000:3000 -v shibaclaw_data:/root/.shibaclaw r
 
 ---
 
-## 🐍 Option 2: Bare Metal (Without Docker)
+## 🐍 Option 2: Linux / macOS / Bare Metal (Without Docker)
 
 Ideal for local development or lightweight environments.
 
+### ⚡ Quick Install (Recommended for Linux / macOS)
+
+Run this command to automatically install ShibaClaw via pip in an isolated environment and create terminal launchers:
+
+```bash
+curl -fsSL https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.sh | bash
+```
+
+---
+
+### 📦 Manual / PyPI Installation
+
 1. **Install**: Choose your preferred method:
 
-   **From PyPI (recommended):**
+   **From PyPI:**
    ```bash
    pip install shibaclaw
    ```
@@ -84,6 +96,18 @@ Ideal for local development or lightweight environments.
 ## 🪟 Option 3: Windows Desktop (.exe / Native Window)
 
 For the native Windows build, ShibaClaw runs as a desktop window with tray integration.
+
+### ⚡ Quick Install (Recommended)
+
+No Python or Git required. Run this command in PowerShell to download the latest pre-built release, set up Desktop/Start Menu shortcuts, add `shibaclaw` to your `PATH`, and launch the app:
+
+```powershell
+irm https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | iex
+```
+
+---
+
+### 🛠️ Manual / Build from Source
 
 1. **Install desktop build dependencies**:
    ```powershell

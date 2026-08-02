@@ -1,8 +1,85 @@
-## [Unreleased]
+## [0.9.13] - 2026-08-01
+
+### Added
+- **Telegram Secretary Summon, Chat Automation Archive & Owner Tools (PR #159)** — Integrated Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary tools (`business_search` for searching archives and `qmd` vector search projections, `business_send` for queueing outbound peer DMs via Telegram Business Connection), peer secretary summons via `triggerWords` or bot/secretary replies, contextual safety preambles (`build_guest_preamble`, `build_secretary_preamble`), and `historyMaxAgeHours` (default 24h) history age trimming for Telegram sessions.
+- **Telegram Mini App `initData` Auth & WebUI Surface (PR #154)** — Opt-in Telegram Mini App authentication via `initData` (HMAC-SHA256 data-check-string validation) with `auth_date` freshness check. Restricts access strictly to `allowFrom` owner IDs and usernames (rejecting wildcard `*` for Mini App access), introduces dedicated Mini App WebUI mode with custom CSS (`telegram_mini.css`), automatic theme adaptation (`applyTelegramTheme`), auto-expanded UI, and sliding-window rate limiting on `/api/auth/telegram`.
+- **Profile Tool Allow/Deny Lists, Temperature & Default KBs (PR #156)** — Added per-profile tool allow/deny lists (`disabled_tools` and `enabled_tools`) enforced at prompt generation, tool definition filtering, and tool call execution with fail-closed security. Added profile temperature override (`temperature`), automatic session default Knowledge Base pinning (`knowledge_bases`), Telegram video file support (`.mp4`, `.mov`, `.webm`, `.mkv`), and optional HuggingFace embeddings import handling for OpenRouter RAG environments.
+- **WebUI Telegram Session Grouping, Search & Speaker Autolabeling (PR #153)** — Session sidebar channel grouping (Telegram, WebUI, CLI, etc.) with collapsible headers and real-time search filtering. Added automatic session autolabeling for Telegram chats (group titles, `"You + <Peer>"`, `"You"`) and speaker label indicators ("You", "Peer", "Shiba") on WebUI chat history message bubbles.
+
+### Changed
+- **Telegram Ingress Access Control (`openGroups`) & Default-Deny Sandboxing (PR #159 & PR #151)** — Added `openGroups` setting allowing non-allowlisted group members to talk to the bot while keeping DMs locked to `allowFrom`. Implemented fail-closed security sandboxing for non-allowlisted Telegram turns, restricting them strictly to safe web tools (`web_search`, `web_fetch`) while stripping filesystem, execution, MCP, and memory tools.
+
+### Fixed
+- **Telegram Edited Message Lifecycle & Truncation (PR #157)** — Automatically edits previous response bubbles when a user edits their message, with automatic 4096-character chunking for overlong responses. Handles Telegram `BadRequest("Message is not modified")` gracefully without sending duplicate fallback messages, and suppresses empty agent responses cleanly.
+- **Gemini 3.x / OpenRouter Reasoning Details & Injection Filtering (PR #155)** — Preserves and streams `reasoning_details` list across agent turns for Gemini 3.x / OpenRouter compatibility, with in-place deduplication during streaming chunk accumulation. Hardened prompt injection filter regex (`_YOU_ARE_NOW_ROLE_RE`) preventing false positives on benign system text, and added vault-backed API key resolution for `WebSearchTool` (`Brave`, `Tavily`, `Jina`).
+- **Profile Modal WebUI Form Submit Fix (PR #156)** — Fixed HTML form element nesting in profile modal (`profiles.js` & `bundle.js`), ensuring `<form>` encloses the submit button so profile settings can be saved from the WebUI.
+- **Path Traversal Protection for Secretary Archives (PR #159)** — Replaced string suffix matching with canonical path resolution (`resolved.is_relative_to(secretary_dir)`) in `filesystem.py`.
+- **Legacy Manual Session Nickname Preservation (PR #153)** — Preserved custom manual nicknames for legacy sessions by checking `nickname_auto is not True`.
+
+## [0.9.12] - 2026-07-23
+
+### Added
+- **Dynamic Reasoning & Thinking Effort Support Across Providers** — Expanded reasoning/thinking model pattern detection and API capability extraction across all LLM providers and model formats:
+  - **OpenAI & Azure OpenAI**: Full reasoning effort support for `o1`, `o3`, `o4`, `o1-mini`, `o1-preview`, `o3-mini`, `o3-high`, and custom Azure deployments (`-o1`, `o1-`, `-o3`, `o3-`).
+  - **Anthropic**: Extended thinking support for Claude 3.7+ (`claude-3-7-sonnet`, `claude-3.7-sonnet`). Automatically maps `reasoning_effort` (low/medium/high) to Anthropic's API parameter `thinking={"type": "enabled", "budget_tokens": ...}` with automatic token budget and temperature adjustments.
+  - **Gemini / Google**: Dynamic reasoning effort support for `gemini-2.0-flash-thinking-exp`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-3.6-flash`, `gemini-3-flash`.
+  - **DeepSeek & Qwen**: Comprehensive support for DeepSeek R1 models (`deepseek-r1`, `deepseek/r1`, `r1:8b`, `deepseek-reasoner`) and Qwen QwQ/QvQ models (`qwq-32b`, `qwen/qwq-32b`, `qvq-72b`).
+  - **xAI, Moonshot Kimi, Zhipu GLM & Open Models**: Native reasoning effort support for Grok 3 (`grok-3`, `grok-3-think`), Kimi (`kimi-k1.5`, `kimi-k2`), GLM Zero (`glm-4-zero`), Marco-o1, Sky-T1, and SmallThinker.
+- **API Model Parameter Metadata Extraction** — `OpenAIProvider.get_available_models()` and WebUI settings model normalizer now extract `supported_parameters` directly from provider API responses (e.g. OpenRouter), enabling instant reasoning effort detection for new models without requiring client updates.
+- **Model Context Window Auto-Detection & Visual Indicators** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window (e.g. 1M/2M for Gemini 2.5/3.6, 200k for Claude 3.5/3.7, 128k for GPT-4o, DeepSeek, Qwen, and Llama). Added visual indicators (`✨ Auto-detected limit for model` vs `⚙️ Fallback limit from Settings`) in the Active Context modal and hover tooltips on the token badge.
+- **Default No-Timeout (Infinite) Mode & Visual Info Tooltips** — Standardized all default timeout configuration values (`tool_timeout`, `loop_wall_timeout`, `subagent_timeout`, `exec_timeout`, `mcp.tool_timeout`, `mcp.callback_timeout`) to `0` (no timeout / infinite execution). Added interactive native info icons (ℹ️) with `0 = no timeout (infinito)` tooltips across WebUI settings forms and MCP editor modals.
+
+### Changed
+- **Settings Sidebar & Mobile Dashboard Reorganization** — Restructured the Settings navigation by logical priority: `AI & Models` (Providers, OAuth) -> `Connectivity & Channels` (Channels, Gateway) -> `Core & Agent` (Agent, Voice & Audio) -> `Capabilities & Extensions` (Tools, Extensions) -> `System & Maintenance` (Update).
+
+### Fixed
+- **Instant Token Badge Refresh on Model Selection** — Fixed an issue where selecting a new model in the WebUI dropdown did not immediately refresh the footer token badge's context limit until opening the context modal. `refreshTokenBadge()` is now triggered automatically upon model selection.
+- **Narrow Layout Icon-Only Collapse** — Added CSS container queries and `:root[data-layout-mode="narrow"]` rules so action buttons (Context, Stop) collapse into sleek icon-only buttons on narrow viewports or narrow layout presets, preventing UI overlap.
+- **Full Model Name Hover Tooltip** — Updated the model selector button hover tooltip (`btn.title`) to show the full model name, provider, and raw model ID when the model label is truncated by the UI.
+- **WebUI Chat Footer Layout & Single-Line Overflow** — Resolved an issue in the WebUI chat input area where footer controls (Model selector, Reasoning Effort, KBs, Context, Stop, Token Badge, Shift+Enter hint) wrapped onto multiple lines ("vanno a capo") on default and narrow viewports. Added `flex-wrap: nowrap`, text truncation (`text-overflow: ellipsis; max-width: 135px`) for long model names, and responsive layout rules.
+- **Sleek Compact Reasoning Effort Popover Menu** — Redesigned the Reasoning Effort dropdown menu from bulky multi-line boxes into a compact, single-line glassmorphism popover (`backdrop-filter: blur(12px)`) with gold checkmarks for selected options. Fixed clipping caused by container `overflow: hidden`.
+- **WebUI Context Token Badge Visual Overflow** — Resolved an issue where sessions exceeding default `65536` historical tokens displayed an inaccurate red `172%` usage badge in the WebUI. The badge and context modal now scale dynamically against the active model's real context limit and active prompt context, matching VS Code / Antigravity IDE compact display behavior.
+- **Agent CLI Console ImportError** — Resolved an `ImportError` for `console` in `shibaclaw/cli/agent.py` by replacing direct `console` import references with `get_console()` helper calls for interactive agent CLI output (#148).
+
+## [0.9.11] - 2026-07-22
+
+### Security
+- **Command Injection Vulnerability Fix in ExecTool** — Resolved a critical command injection vulnerability (CWE-78) in shell execution by replacing shell-based execution (`create_subprocess_shell` / PowerShell `-Command`) with safe `shlex` argument parsing and direct process execution (`create_subprocess_exec`).
+- **Dependency Security Vulnerabilities** — Resolved 2 security vulnerabilities in bridge npm dependencies by updating overrides for `protobufjs` (v7.6.5) and `sharp` (v0.35.3).
+
+### Fixed
+- **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks, and resolved typing issues in `loop.py`.
+- **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.
+- **Cloud RAG Dependencies** — Corrected Cloud RAG dependency bounds and default embedding model configuration.
+
+## [0.9.10] - 2026-07-19
+
+### Added
+- **Hybrid RAG** — The RAG Knowledge Base now supports Cloud Embedding providers (Gemini, OpenRouter, OpenAI) in addition to Local HuggingFace embeddings. By selecting a cloud provider in Settings, memory-constrained edge devices (like Raspberry Pi) can run RAG with zero local RAM impact, avoiding the need to download the ~300MB PyTorch model weights.
+
+### Changed
+- **Lighter RAG Installation Footprint** — Extracted heavy machine-learning dependencies (`sentence-transformers`, `torch`) out of the default `shibaclaw[rag]` extras. The default RAG plugin installation now strictly installs lightweight packages for cloud embeddings. To run the RAG offline, users must explicitly install `shibaclaw[rag-local]`.
+- **Lazy Loaded Local Embeddings** — `sentence-transformers` and `torch` dependencies are now strictly lazy-loaded in the Knowledge Manager. They are entirely bypassed if the user selects a Cloud Embedding provider.
+- **RAG Terminology** — Renamed "Local RAG" references across the WebUI to "RAG & Knowledge Base" to reflect the new hybrid architecture.
+
+## [0.9.9] - 2026-07-19
 
 ### Added
 - **Telegram AI / agent Bot API features** — Guest Mode (`answerGuestQuery`), private-chat streaming via `sendMessageDraft`, bot-to-bot messages, Business / Chat Automation updates, and Managed Bot update tracking. See `docs/TELEGRAM_AI_FEATURES.md`.
-- **Telegram config flags** — `streaming`, `guestMode`, `allowBotMessages`, `businessEnabled`, `managedBotsEnabled`.
+- **Telegram config flags** — `streaming`, `guestMode`, `allowBotMessages`, `businessEnabled`, `managedBotsEnabled`. Thanks to @Demontego
+
+### Changed
+- **Settings UI Refactoring** — Completely restructured the Settings workspace. Grouped the sidebar into 4 logical sections, consolidated Skills, Plugins, and MCP into a unified Extensions tab, implemented a declarative 3-section layout for all channel configuration forms, and added native tooltip support for configuration fields.
+
+### Fixed
+- **Discord Allow-from by Username and Stuck Typing** — Fixed an issue where adding a username in `allow_from` failed to authorize the user in the secondary check, causing the Discord bot's "Typing..." indicator to get stuck indefinitely without sending a response.
+- **Agent Loop Task Cancellation Safety** — Guarded `asyncio.current_task()` against `None` in `shibaclaw/agent/loop.py` before calling `.cancelling()` during event-loop shutdown / cancellation scenarios, preventing `AttributeError` and type-checker errors. Added a regression integration test.
+- **WebUI Missing OAuth Providers** — The Settings panel provider dropdown used a hardcoded list that omitted recently added providers (e.g. `anthropic`, `qwen`, `minimax`, `zhipu`, `google_gemini_cli`). The list now reflects all configured providers; the WebUI was rebuilt (`bundle.js`).
+- **Gateway Client Disconnect Stability** — `GatewayClient` now explicitly catches `asyncio.CancelledError` to properly discard the pending future and re-raise (fixing memory leaks and potential loop crashes), and references the correct `websockets.exceptions.ConnectionClosed` namespace in `_recv_loop` (fixing an `AttributeError` that aborted the client on disconnect). Resolves sporadic "Gateway disconnected" reports.
+- **MCP Tools NameError** — Resolved a `NameError` for `_registry` in `shibaclaw/agent/tools/mcp.py` and removed unused imports. Added a regression test (`tests/test_mcp_registry_bug.py`).
+
+### Documentation
+- **README Localizations** — Synced the translated README versions (`README.de.md`, `README.es.md`, `README.fr.md`, `README.ja.md`, `README.pt-BR.md`, `README.zh-CN.md`) with the restructured English `README.md`.
 
 ### Notes
 - Rich Messages (`sendRichMessage`) are documented but not implemented yet — waiting on `python-telegram-bot` support beyond 22.8.

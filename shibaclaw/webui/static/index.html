@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1784316613418">
+    <link rel="stylesheet" href="/static/bundle.css?v=1785667008810">
     <link rel="stylesheet" href="/static/css/mcp_manager.css?v=1">
     <link rel="stylesheet" href="/static/css/connected_apps.css?v=1">
     <link rel="stylesheet" href="/static/css/subagent-feedback.css?v=1">
@@ -33,6 +33,9 @@
     <!-- Highlight.js for syntax highlighting -->
     <link rel="stylesheet" href="/static/vendor/github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
+
+    <!-- Telegram Mini App SDK (stub in browsers; real initData only inside Telegram) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 </head>
 
@@ -115,7 +118,14 @@
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
-                <div class="section-title">SESSIONS</div>
+                <div class="history-section-head">
+                    <div class="section-title">SESSIONS</div>
+                    <div class="session-search-wrap">
+                        <span class="material-icons-round session-search-icon">search</span>
+                        <input id="session-search" class="session-search" type="search"
+                            placeholder="Filter sessions…" autocomplete="off" spellcheck="false" />
+                    </div>
+                </div>
                 <div id="history-list" class="history-list">
                     <div class="history-item loading">Loading...</div>
                 </div>
@@ -299,6 +309,25 @@
                                         style="margin-left: 4px; font-size: 16px;">arrow_drop_up</span>
                                 </button>
                             </div>
+                            <!-- Reasoning Effort Selector Dropdown -->
+                            <div class="model-selector-wrapper" id="reasoning-selector-wrapper" style="position: relative;">
+                                <button class="btn-input-action" id="btn-reasoning-select"
+                                    title="Change reasoning effort for active session">
+                                    <span class="material-icons-round">psychology</span>
+                                    <span id="active-reasoning-display">Effort: Default</span>
+                                    <span class="material-icons-round"
+                                        style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
+                                </button>
+                                <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
+                                    style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 150px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary); backdrop-filter: blur(12px);">
+                                    <div style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;">Reasoning Effort</span>
+                                    </div>
+                                    <div class="model-dropdown-list" id="reasoning-dropdown-list" style="max-height: 200px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
+                                        <!-- populated dynamically -->
+                                    </div>
+                                </div>
+                            </div>
                             <!-- Knowledge Base Selector Dropdown -->
                             <div class="model-selector-wrapper" id="kb-selector-wrapper" style="position: relative;">
                                 <button class="btn-input-action" id="btn-kb-select"
@@ -306,15 +335,15 @@
                                     <span class="material-icons-round">library_books</span>
                                     <span id="active-kb-display">KBs (0)</span>
                                     <span class="material-icons-round"
-                                        style="margin-left: 4px; font-size: 16px;">arrow_drop_up</span>
+                                        style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
                                 </button>
                                 <div class="model-dropdown-menu premium-dropdown" id="kb-dropdown-menu"
-                                    style="display: none; bottom: calc(100% + 12px); top: auto; min-width: 180px; width: max-content; padding: 0; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; background: var(--bg-secondary);">
-                                    <div style="padding: 10px 12px 6px 12px; display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">Collections</span>
-                                        <span class="material-icons-round" onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';" style="font-size: 16px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--text-color)'" onmouseout="this.style.color='var(--text-muted)'" title="Manage Collections">settings</span>
+                                    style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 170px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary);">
+                                    <div style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;">Collections</span>
+                                        <span class="material-icons-round" onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';" style="font-size: 15px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--text-color)'" onmouseout="this.style.color='var(--text-muted)'" title="Manage Collections">settings</span>
                                     </div>
-                                    <div class="model-dropdown-list" id="kb-dropdown-list" style="max-height: 250px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px;">
+                                    <div class="model-dropdown-list" id="kb-dropdown-list" style="max-height: 220px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
                                         <!-- populated dynamically -->
                                     </div>
                                 </div>
@@ -329,9 +358,6 @@
                                         Loading models...</div>
                                 </div>
                             </div>
-                        </div>
-
-                        <div style="display: flex; gap: 4px; align-items: center;">
                             <button class="btn-input-action" id="btn-context" onclick="openModal('context-modal')"
                                 title="View context">
                                 <span class="material-icons-round">psychology</span>
@@ -343,7 +369,7 @@
                             </button>
                         </div>
                         
-                        <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
+                        <div class="input-footer-right">
                             <span class="input-hint">Shift + <span class="material-icons-round"
                                 style="font-size: 12px; vertical-align: middle; margin-bottom: 2px;">keyboard_return</span>
                                 for new line</span>
@@ -380,36 +406,39 @@
         <div class="settings-layout">
             <!-- Vertical sidebar nav -->
             <nav class="settings-sidebar" id="settings-sidebar">
-                <button class="settings-sidebar-item active" data-tab="agent" onclick="switchSettingsTab('agent')">
-                    <span class="material-icons-round">smart_toy</span><span>Agent</span>
-                </button>
+                <div class="settings-sidebar-section">AI &amp; Models</div>
                 <button class="settings-sidebar-item" data-tab="providers" onclick="switchSettingsTab('providers')">
                     <span class="material-icons-round">key</span><span>Provider</span>
                 </button>
                 <button class="settings-sidebar-item" data-tab="oauth" onclick="switchSettingsTab('oauth')">
                     <span class="material-icons-round">lock_open</span><span>OAuth</span>
                 </button>
-                <button class="settings-sidebar-item" data-tab="audio" onclick="switchSettingsTab('audio')">
-                    <span class="material-icons-round">mic</span><span>Voice & Audio</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')">
-                    <span class="material-icons-round">build</span><span>Tools</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="mcp" onclick="switchSettingsTab('mcp')">
-                    <span class="material-icons-round">hub</span><span>MCP</span>
+
+                <div class="settings-sidebar-section">Connectivity &amp; Channels</div>
+                <button class="settings-sidebar-item" data-tab="channels" onclick="switchSettingsTab('channels')">
+                    <span class="material-icons-round">forum</span><span>Channels</span>
                 </button>
                 <button class="settings-sidebar-item" data-tab="gateway" onclick="switchSettingsTab('gateway')">
                     <span class="material-icons-round">dns</span><span>Gateway</span>
                 </button>
-                <button class="settings-sidebar-item" data-tab="channels" onclick="switchSettingsTab('channels')">
-                    <span class="material-icons-round">forum</span><span>Channels</span>
+
+                <div class="settings-sidebar-section">Core &amp; Agent</div>
+                <button class="settings-sidebar-item active" data-tab="agent" onclick="switchSettingsTab('agent')">
+                    <span class="material-icons-round">smart_toy</span><span>Agent</span>
                 </button>
-                <button class="settings-sidebar-item" data-tab="skills" onclick="switchSettingsTab('skills')">
-                    <span class="material-icons-round">menu_book</span><span>Skills</span>
+                <button class="settings-sidebar-item" data-tab="audio" onclick="switchSettingsTab('audio')">
+                    <span class="material-icons-round">mic</span><span>Voice &amp; Audio</span>
                 </button>
-                <button class="settings-sidebar-item" data-tab="plugins" onclick="switchSettingsTab('plugins')">
-                    <span class="material-icons-round">extension</span><span>Plugins</span>
+
+                <div class="settings-sidebar-section">Capabilities &amp; Extensions</div>
+                <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')">
+                    <span class="material-icons-round">build</span><span>Tools</span>
                 </button>
+                <button class="settings-sidebar-item" data-tab="extensions" onclick="switchSettingsTab('extensions')">
+                    <span class="material-icons-round">extension</span><span>Extensions</span>
+                </button>
+
+                <div class="settings-sidebar-section">System &amp; Maintenance</div>
                 <button class="settings-sidebar-item" data-tab="update" onclick="switchSettingsTab('update')">
                     <span class="material-icons-round">system_update</span><span>Update</span>
                 </button>
@@ -418,19 +447,12 @@
             <!-- Mobile category list dashboard -->
             <div class="settings-mobile-dashboard" id="settings-mobile-dashboard">
                 <div class="mobile-dashboard-grid">
-                    <button class="dashboard-card" onclick="switchSettingsTab('agent')">
-                        <span class="material-icons-round dash-icon">smart_toy</span>
-                        <div class="dash-content">
-                            <div class="dash-title">Agent</div>
-                            <div class="dash-desc">Workspace, default model, thought settings</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
+                    <div class="dashboard-section-label">AI &amp; Models</div>
                     <button class="dashboard-card" onclick="switchSettingsTab('providers')">
                         <span class="material-icons-round dash-icon">key</span>
                         <div class="dash-content">
                             <div class="dash-title">Provider</div>
-                            <div class="dash-desc">Configure API keys & endpoints</div>
+                            <div class="dash-desc">Configure API keys &amp; endpoints</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
@@ -442,27 +464,13 @@
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('audio')">
-                        <span class="material-icons-round dash-icon">mic</span>
+
+                    <div class="dashboard-section-label">Connectivity &amp; Channels</div>
+                    <button class="dashboard-card" onclick="switchSettingsTab('channels')">
+                        <span class="material-icons-round dash-icon">forum</span>
                         <div class="dash-content">
-                            <div class="dash-title">Voice & Audio</div>
-                            <div class="dash-desc">Speech to text & audio settings</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('tools')">
-                        <span class="material-icons-round dash-icon">build</span>
-                        <div class="dash-content">
-                            <div class="dash-title">Tools</div>
-                            <div class="dash-desc">Web search, proxy & execution options</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('mcp')">
-                        <span class="material-icons-round dash-icon">hub</span>
-                        <div class="dash-content">
-                            <div class="dash-title">MCP</div>
-                            <div class="dash-desc">Model Context Protocol servers</div>
+                            <div class="dash-title">Channels</div>
+                            <div class="dash-desc">Progress reporting &amp; notifications</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
@@ -470,39 +478,53 @@
                         <span class="material-icons-round dash-icon">dns</span>
                         <div class="dash-content">
                             <div class="dash-title">Gateway</div>
-                            <div class="dash-desc">Server port, host & connection settings</div>
+                            <div class="dash-desc">Server port, host &amp; connection settings</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('channels')">
-                        <span class="material-icons-round dash-icon">forum</span>
+
+                    <div class="dashboard-section-label">Core &amp; Agent</div>
+                    <button class="dashboard-card" onclick="switchSettingsTab('agent')">
+                        <span class="material-icons-round dash-icon">smart_toy</span>
                         <div class="dash-content">
-                            <div class="dash-title">Channels</div>
-                            <div class="dash-desc">Progress reporting & notifications</div>
+                            <div class="dash-title">Agent</div>
+                            <div class="dash-desc">Workspace, default model, thought settings</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('skills')">
-                        <span class="material-icons-round dash-icon">menu_book</span>
+                    <button class="dashboard-card" onclick="switchSettingsTab('audio')">
+                        <span class="material-icons-round dash-icon">mic</span>
                         <div class="dash-content">
-                            <div class="dash-title">Skills</div>
-                            <div class="dash-desc">Browse, pin & import workspace skills</div>
+                            <div class="dash-title">Voice &amp; Audio</div>
+                            <div class="dash-desc">Speech to text &amp; audio settings</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('plugins')">
+
+                    <div class="dashboard-section-label">Capabilities &amp; Extensions</div>
+                    <button class="dashboard-card" onclick="switchSettingsTab('tools')">
+                        <span class="material-icons-round dash-icon">build</span>
+                        <div class="dash-content">
+                            <div class="dash-title">Tools</div>
+                            <div class="dash-desc">Web search, proxy &amp; execution options</div>
+                        </div>
+                        <span class="material-icons-round dash-arrow">chevron_right</span>
+                    </button>
+                    <button class="dashboard-card" onclick="switchSettingsTab('extensions')">
                         <span class="material-icons-round dash-icon">extension</span>
                         <div class="dash-content">
-                            <div class="dash-title">Plugins</div>
-                            <div class="dash-desc">Manage custom extensions and TTS voice engines</div>
+                            <div class="dash-title">Extensions</div>
+                            <div class="dash-desc">Skills, Plugins, and MCP Servers</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
+
+                    <div class="dashboard-section-label">System &amp; Maintenance</div>
                     <button class="dashboard-card" onclick="switchSettingsTab('update')">
                         <span class="material-icons-round dash-icon">system_update</span>
                         <div class="dash-content">
                             <div class="dash-title">Update</div>
-                            <div class="dash-desc">Check for updates & onboard wizard</div>
+                            <div class="dash-desc">Check for updates &amp; onboard wizard</div>
                         </div>
                         <span class="material-icons-round dash-arrow">chevron_right</span>
                     </button>
@@ -582,17 +604,23 @@
                     <div class="field-row"><label for="s-agent-maxIter">Max Tool Iterations</label><input type="number"
                             id="s-agent-maxIter" class="form-input" value="40" min="0"
                             title="Max tool iterations (0 for no limit)"></div>
-                    <div class="field-row"><label for="s-agent-toolTimeout">Tool Timeout (s)</label><input type="number"
-                            id="s-agent-toolTimeout" class="form-input" value="660" min="0"
+                    <div class="field-row"><label for="s-agent-toolTimeout">Tool Timeout (s) <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble">0 = no timeout (infinito)</span></span></label><input type="number"
+                            id="s-agent-toolTimeout" class="form-input" value="0" min="0"
                             title="Max seconds for all tool executions combined (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-loopWallTimeout">Agent Loop Timeout (s)</label><input
-                            type="number" id="s-agent-loopWallTimeout" class="form-input" value="600" min="0"
+                    <div class="field-row"><label for="s-agent-loopWallTimeout">Agent Loop Timeout (s) <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble">0 = no timeout (infinito)</span></span></label><input
+                            type="number" id="s-agent-loopWallTimeout" class="form-input" value="0" min="0"
                             title="Max seconds for the entire agent loop (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-subagentTimeout">Subagent Timeout (s)</label><input
-                            type="number" id="s-agent-subagentTimeout" class="form-input" value="600" min="0"
+                    <div class="field-row"><label for="s-agent-subagentTimeout">Subagent Timeout (s) <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble">0 = no timeout (infinito)</span></span></label><input
+                            type="number" id="s-agent-subagentTimeout" class="form-input" value="0" min="0"
                             title="Max seconds for a single subagent execution (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-reasoning">Reasoning Effort</label><input type="text"
-                            id="s-agent-reasoning" class="form-input" placeholder="null (not set)"></div>
+                    <div class="field-row"><label for="s-agent-reasoning">Reasoning Effort</label>
+                        <select id="s-agent-reasoning" class="form-input">
+                            <option value="">Default (Inherit / Provider default)</option>
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
 
                     <div class="field-row">
                         <label for="s-ui-hide-thoughts">Thought Blocks (Reasoning Models)</label>
@@ -605,10 +633,11 @@
                             <div style="display:flex;align-items:center;gap:8px;min-width:0">
                                 <label class="toggle"><input type="checkbox" id="s-ui-collapse-thoughts"><span
                                         class="toggle-slider"></span></label>
-                                <span class="settings-note">Collapse Thought Blocks</span>
+                                <span class="settings-note">Collapse reasoning blocks by default</span>
                             </div>
                         </div>
                     </div>
+
 
                     <div class="field-row">
                         <label for="s-ui-mobile-enter-newline">Mobile: Enter inserts newline</label>
@@ -712,17 +741,138 @@
                             class="toggle"><input type="checkbox" id="s-tool-execEnable"><span
                                 class="toggle-slider"></span></label>
                     </div>
-                    <div class="field-row"><label for="s-tool-execTimeout">Exec Timeout (s)</label><input type="number"
-                            id="s-tool-execTimeout" class="form-input" value="60"></div>
+                    <div class="field-row"><label for="s-tool-execTimeout">Exec Timeout (s) <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble">0 = no timeout (infinito)</span></span></label><input type="number"
+                            id="s-tool-execTimeout" class="form-input" value="0" min="0" title="Max seconds for shell execution (0 for no timeout)"></div>
                     <div class="field-row"><label for="s-tool-restrict">Restrict to Workspace</label><label
-                            class="toggle"><input type="checkbox" id="s-tool-restrict"><span
+                            class="toggle toggle-danger"><input type="checkbox" id="s-tool-restrict"><span
                                 class="toggle-slider"></span></label>
                     </div>
                 </div>
 
-                <!-- Tab: MCP Servers -->
-                <div class="settings-panel" id="panel-mcp" style="display:none">
-                    <div id="mcp-manager-container"></div>
+                <!-- Tab: Extensions (Skills, Plugins, MCP) -->
+                <div class="settings-panel" id="panel-extensions" style="display:none">
+                    <div class="extensions-inner-tabs">
+                        <button class="extensions-inner-tab active" data-subtab="skills" onclick="switchExtensionsSubTab('skills')">
+                            <span class="material-icons-round">menu_book</span> Skills
+                        </button>
+                        <button class="extensions-inner-tab" data-subtab="plugins" onclick="switchExtensionsSubTab('plugins')">
+                            <span class="material-icons-round">extension</span> Plugins
+                        </button>
+                        <button class="extensions-inner-tab" data-subtab="mcp" onclick="switchExtensionsSubTab('mcp')">
+                            <span class="material-icons-round">hub</span> MCP Servers
+                        </button>
+                    </div>
+
+                    <!-- Subpanel: Skills -->
+                    <div class="extensions-subpanel active" id="subpanel-skills">
+                        <!-- Skills toolbar -->
+                        <div class="skills-toolbar">
+                            <input type="text" id="skills-search" class="form-input"
+                                placeholder="Filter skills by name or description..."
+                                aria-label="Filter skills by name or description...">
+                            <div class="skills-toolbar-actions">
+                                <select id="skills-profile-select" class="form-select"
+                                    style="min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); margin-right: 8px;"
+                                    aria-label="Select profile for skills" onchange="loadSkillsPanel()">
+                                    <option value="default">Default Profile</option>
+                                </select>
+                                <button type="button" class="btn-secondary" onclick="loadSkillsPanel()">
+                                    <span class="material-icons-round"
+                                        style="font-size:16px;vertical-align:middle">refresh</span> Refresh
+                                </button>
+                                <button type="button" class="btn-secondary"
+                                    onclick="window.open('https://clawhub.ai/','_blank')">
+                                    <span class="material-icons-round"
+                                        style="font-size:16px;vertical-align:middle">store</span> ClawHub
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Always Active pinning section -->
+                        <div class="skills-pinned-section">
+                            <div class="skills-section-header">
+                                <span class="material-icons-round">push_pin</span>
+                                <span>Always Active</span>
+                                <span class="skills-pin-counter" id="skills-pin-counter">0 / 5</span>
+                            </div>
+                            <p class="settings-note">Skills marked always: true in SKILL.md and manually pinned skills.
+                                Injected every turn.</p>
+                            <div id="skills-pinned-list" class="skills-pinned-list"></div>
+                        </div>
+
+                        <!-- All skills browse -->
+                        <div class="skills-browse-section">
+                            <div class="skills-section-header">
+                                <span class="material-icons-round">menu_book</span>
+                                <span>Installed Skills</span>
+                            </div>
+                            <div id="skills-list" class="skills-list">
+                                <div class="settings-loader"><span
+                                        class="material-icons-round spin">progress_activity</span> Loading skills...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Import section -->
+                        <div class="skills-import-section">
+                            <div class="skills-section-header">
+                                <span class="material-icons-round">upload_file</span>
+                                <span>Import Skills (.zip)</span>
+                            </div>
+                            <div class="skills-import-form">
+                                <input type="file" id="skills-import-file" accept=".zip" style="display:none"
+                                    onchange="handleSkillsFileSelect(event)">
+                                <button type="button" class="btn-secondary"
+                                    onclick="document.getElementById('skills-import-file').click()">
+                                    <span class="material-icons-round"
+                                        style="font-size:16px;vertical-align:middle">folder_zip</span> Select .zip
+                                </button>
+                                <span id="skills-import-filename" class="skills-import-filename">No file selected</span>
+                                <button type="button" class="btn-primary" id="skills-import-btn" onclick="importSkills()"
+                                    disabled>
+                                    Import
+                                </button>
+                            </div>
+                            <div id="skills-import-result" class="skills-import-result" style="display:none"></div>
+                        </div>
+                    </div>
+
+                    <!-- Subpanel: Plugins -->
+                    <div class="extensions-subpanel" id="subpanel-plugins">
+                        <div class="skills-toolbar">
+                            <input type="text" id="plugin-install-name" class="form-input"
+                                placeholder="Plugin package name (e.g. shibaclaw-tts-supertonic) or Git URL..."
+                                aria-label="Plugin package name or Git URL">
+                            <div class="skills-toolbar-actions">
+                                <button type="button" class="btn-primary" onclick="installPlugin()">
+                                    <span class="material-icons-round"
+                                        style="font-size:16px;vertical-align:middle">download</span> Install
+                                </button>
+                            </div>
+                        </div>
+                        <div id="plugin-action-log" class="console-box"
+                            style="display:none; font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--text-secondary)">
+                        </div>
+                        <div class="skills-browse-section">
+                            <div class="skills-section-header">
+                                <span class="material-icons-round">extension</span>
+                                <span>Installed Plugins</span>
+                            </div>
+                            <div id="installed-plugins-list" class="skills-list"></div>
+                        </div>
+                        <div class="skills-browse-section" style="margin-top: 1.5rem;">
+                            <div class="skills-section-header">
+                                <span class="material-icons-round">cloud_download</span>
+                                <span>Available Plugins</span>
+                            </div>
+                            <div id="available-plugins-list" class="skills-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Subpanel: MCP -->
+                    <div class="extensions-subpanel" id="subpanel-mcp">
+                        <div id="mcp-manager-container"></div>
+                    </div>
                 </div>
 
                 <!-- Tab: Gateway -->
@@ -781,111 +931,6 @@
                         </div>
                     </div>
                     <div id="channels-detail" style="display:none"></div>
-                </div>
-
-                <!-- Tab: Skills -->
-                <div class="settings-panel" id="panel-skills" style="display:none">
-                    <!-- Skills toolbar -->
-                    <div class="skills-toolbar">
-                        <input type="text" id="skills-search" class="form-input"
-                            placeholder="Filter skills by name or description..."
-                            aria-label="Filter skills by name or description...">
-                        <div class="skills-toolbar-actions">
-                            <select id="skills-profile-select" class="form-select"
-                                style="min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); margin-right: 8px;"
-                                aria-label="Select profile for skills" onchange="loadSkillsPanel()">
-                                <option value="default">Default Profile</option>
-                            </select>
-                            <button type="button" class="btn-secondary" onclick="loadSkillsPanel()">
-                                <span class="material-icons-round"
-                                    style="font-size:16px;vertical-align:middle">refresh</span> Refresh
-                            </button>
-                            <button type="button" class="btn-secondary"
-                                onclick="window.open('https://clawhub.ai/','_blank')">
-                                <span class="material-icons-round"
-                                    style="font-size:16px;vertical-align:middle">store</span> ClawHub
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Always Active pinning section -->
-                    <div class="skills-pinned-section">
-                        <div class="skills-section-header">
-                            <span class="material-icons-round">push_pin</span>
-                            <span>Always Active</span>
-                            <span class="skills-pin-counter" id="skills-pin-counter">0 / 5</span>
-                        </div>
-                        <p class="settings-note">Skills marked always: true in SKILL.md and manually pinned skills.
-                            Injected every turn.</p>
-                        <div id="skills-pinned-list" class="skills-pinned-list"></div>
-                    </div>
-
-                    <!-- All skills browse -->
-                    <div class="skills-browse-section">
-                        <div class="skills-section-header">
-                            <span class="material-icons-round">menu_book</span>
-                            <span>Installed Skills</span>
-                        </div>
-                        <div id="skills-list" class="skills-list">
-                            <div class="settings-loader"><span
-                                    class="material-icons-round spin">progress_activity</span> Loading skills...
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Import section -->
-                    <div class="skills-import-section">
-                        <div class="skills-section-header">
-                            <span class="material-icons-round">upload_file</span>
-                            <span>Import Skills (.zip)</span>
-                        </div>
-                        <div class="skills-import-form">
-                            <input type="file" id="skills-import-file" accept=".zip" style="display:none"
-                                onchange="handleSkillsFileSelect(event)">
-                            <button type="button" class="btn-secondary"
-                                onclick="document.getElementById('skills-import-file').click()">
-                                <span class="material-icons-round"
-                                    style="font-size:16px;vertical-align:middle">folder_zip</span> Select .zip
-                            </button>
-                            <span id="skills-import-filename" class="skills-import-filename">No file selected</span>
-                            <button type="button" class="btn-primary" id="skills-import-btn" onclick="importSkills()"
-                                disabled>
-                                Import
-                            </button>
-                        </div>
-                        <div id="skills-import-result" class="skills-import-result" style="display:none"></div>
-                    </div>
-                </div>
-
-                <div class="settings-panel" id="panel-plugins" style="display:none">
-                    <div class="skills-toolbar">
-                        <input type="text" id="plugin-install-name" class="form-input"
-                            placeholder="Plugin package name (e.g. shibaclaw-tts-supertonic) or Git URL..."
-                            aria-label="Plugin package name or Git URL">
-                        <div class="skills-toolbar-actions">
-                            <button type="button" class="btn-primary" onclick="installPlugin()">
-                                <span class="material-icons-round"
-                                    style="font-size:16px;vertical-align:middle">download</span> Install
-                            </button>
-                        </div>
-                    </div>
-                    <div id="plugin-action-log" class="console-box"
-                        style="display:none; font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--text-secondary)">
-                    </div>
-                    <div class="skills-browse-section">
-                        <div class="skills-section-header">
-                            <span class="material-icons-round">extension</span>
-                            <span>Installed Plugins</span>
-                        </div>
-                        <div id="installed-plugins-list" class="skills-list"></div>
-                    </div>
-                    <div class="skills-browse-section" style="margin-top: 1.5rem;">
-                        <div class="skills-section-header">
-                            <span class="material-icons-round">cloud_download</span>
-                            <span>Available Plugins</span>
-                        </div>
-                        <div id="available-plugins-list" class="skills-list"></div>
-                    </div>
                 </div>
 
                 <!-- Tab: Update -->
@@ -1382,7 +1427,51 @@
         </div>
     </div>
 
-        <script src="/static/bundle.js?v=1784316613418"></script>
+    <!-- RAG Settings Modal -->
+    <div class="modal-backdrop" id="rag-settings-modal" data-backdrop-close="false">
+        <div class="modal" style="width: 500px; max-width: 95vw;">
+            <div class="modal-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="material-icons-round">settings</span>
+                    <h2>RAG Settings</h2>
+                </div>
+                <button class="btn-icon" onclick="closeModal('rag-settings-modal')" aria-label="Close modal">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p style="margin-bottom:16px; color:var(--text-muted)">Configure the Knowledge Base embedding provider.</p>
+                
+                <div class="field-row">
+                    <label for="s-rag-provider">Embedding Provider</label>
+                    <select id="s-rag-provider" class="form-input">
+                        <option value="local">Local (HuggingFace, Download ~300MB)</option>
+                        <option value="gemini">Gemini (Free tier, text-embedding-004)</option>
+                        <option value="openrouter">OpenRouter (nomic-embed-text)</option>
+                        <option value="openai">OpenAI (text-embedding-3-small)</option>
+                    </select>
+                    <p class="settings-note">Select 'Local' to process documents locally. Select 'Gemini' to use cloud embeddings with zero RAM impact.</p>
+                </div>
+                <div class="field-row">
+                    <label for="s-rag-apiKey">RAG Dedicated API Key (Optional)</label>
+                    <input type="password" id="s-rag-apiKey" class="form-input" placeholder="Leave blank to use provider's chat key">
+                </div>
+                <div class="field-row">
+                    <label for="s-rag-apiBase">API Base (for OpenRouter/Custom)</label>
+                    <input type="text" id="s-rag-apiBase" class="form-input" placeholder="https://openrouter.ai/api/v1">
+                </div>
+                <div class="field-row">
+                    <label for="s-rag-model">Override Model Name (Optional)</label>
+                    <input type="text" id="s-rag-model" class="form-input" placeholder="Leave blank for defaults">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="saveSettings(); closeModal('rag-settings-modal');">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+        <script src="/static/bundle.js?v=1785667008810"></script>
 </body>
 
 </html>

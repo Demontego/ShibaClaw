@@ -158,6 +158,18 @@ def test_migrate_config_keeps_empty_mcp_servers_empty():
     assert migrated["tools"]["mcpServers"] == {}
 
 
+def test_migrate_config_exposes_telegram_secretary_controls():
+    migrated = _migrate_config({"channels": {"telegram": {"token": "test"}}})
+
+    assert migrated["channels"]["telegram"] == {
+        "token": "test",
+        "openGroups": False,
+        "businessAutoReply": False,
+        "historyMaxAgeHours": 24.0,
+        "triggerWords": [],
+    }
+
+
 @pytest.mark.asyncio
 async def test_api_models_get_aggregates_all_configured_providers(monkeypatch):
     from unittest.mock import MagicMock
@@ -219,6 +231,8 @@ async def test_api_models_get_aggregates_all_configured_providers(monkeypatch):
                 "name": "Gemma 4 31B",
                 "provider": "openrouter",
                 "provider_label": "OpenRouter",
+                "supports_reasoning": False,
+                "reasoning_efforts": [],
             },
             {
                 "id": "github_copilot/gpt-4.1",
@@ -226,6 +240,8 @@ async def test_api_models_get_aggregates_all_configured_providers(monkeypatch):
                 "name": "GPT-4.1",
                 "provider": "github_copilot",
                 "provider_label": "Github Copilot",
+                "supports_reasoning": False,
+                "reasoning_efforts": [],
             },
         ]
     finally:

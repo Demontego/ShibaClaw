@@ -6,6 +6,7 @@ import itertools
 import logging
 import re
 import unicodedata
+from datetime import datetime, timezone
 from typing import Any, Literal
 from loguru import logger
 from pydantic import Field, field_validator
@@ -13,8 +14,10 @@ from telegram import (
     BotCommand,
     InlineQueryResultArticle,
     InputTextMessageContent,
+    MenuButtonWebApp,
     ReplyParameters,
     Update,
+    WebAppInfo,
 )
 from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
@@ -86,6 +89,236 @@ _RE_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 _RE_MD_BOLD_ITALIC = re.compile(r"\*\*\*(.+?)\*\*\*")
 _RE_MD_ITALIC = re.compile(r"(?<![^\W_])_([^_]+)_(?![^\W_])")
 _RE_MD_BULLET = re.compile(r"^[-*]\s+", flags=re.MULTILINE)
+
+# Rich Messages auto-blocks heuristics (math / GFM tables / image collages).
+_RE_RICH_DISPLAY_MATH = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_RE_RICH_MATH_FENCE = re.compile(r"```math\s*\n([\s\S]*?)```", re.IGNORECASE)
+_RE_RICH_IMG = re.compile(
+    r"!\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+\"([^\"]*)\")?\)"
+)
+_RE_RICH_TABLE_SEP_LINE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+
+
+def _rich_should_use_blocks(text: str) -> bool:
+    """True when content has constructs better sent as explicit rich blocks."""
+    if not text:
+        return False
+    if _RE_RICH_DISPLAY_MATH.search(text) or _RE_RICH_MATH_FENCE.search(text):
+        return True
+    if "<tg-collage>" in text.lower() or "<tg-slideshow>" in text.lower():
+        return True
+    imgs = _RE_RICH_IMG.findall(text)
+    if len(imgs) >= 2:
+        return True
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        if "|" in line and _RE_RICH_TABLE_SEP_LINE.match(lines[i + 1] or ""):
+            return True
+    return False
+
+
+def _rich_parse_table_block(lines: list[str], start: int) -> tuple[dict[str, Any] | None, int]:
+    """Parse a GFM pipe-table starting at *start*. Returns (block, next_index)."""
+    if start >= len(lines) or "|" not in lines[start]:
+        return None, start
+    if start + 1 >= len(lines) or not _RE_RICH_TABLE_SEP_LINE.match(lines[start + 1]):
+        return None, start
+    rows: list[list[str]] = []
+    i = start
+    while i < len(lines) and "|" in lines[i]:
+        if i == start + 1 and _RE_RICH_TABLE_SEP_LINE.match(lines[i]):
+            i += 1
+            continue
+        cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+        rows.append(cells)
+        i += 1
+        if i < len(lines) and not lines[i].strip():
+            break
+    if not rows:
+        return None, start
+    width = max(len(r) for r in rows)
+    sep = lines[start + 1]
+    aligns: list[str] = []
+    for raw in sep.strip().strip("|").split("|"):
+        cell = raw.strip()
+        if cell.startswith(":") and cell.endswith(":"):
+            aligns.append("center")
+        elif cell.endswith(":"):
+            aligns.append("right")
+        else:
+            aligns.append("left")
+    while len(aligns) < width:
+        aligns.append("left")
+    cells_out: list[list[dict[str, Any]]] = []
+    for r_idx, row in enumerate(rows):
+        padded = row + [""] * (width - len(row))
+        cells_out.append(
+            [
+                {
+                    "text": cell,
+                    "align": aligns[c_idx],
+                    "valign": "top",
+                    **({"is_header": True} if r_idx == 0 else {}),
+                }
+                for c_idx, cell in enumerate(padded)
+            ]
+        )
+    return {
+        "type": "table",
+        "cells": cells_out,
+        "is_bordered": True,
+    }, i
+
+
+def _rich_flush_prose(buf: list[str], blocks: list[dict[str, Any]]) -> None:
+    """Turn accumulated prose lines into heading/pre/paragraph/divider blocks."""
+    chunk = "\n".join(buf).strip("\n")
+    buf.clear()
+    if not chunk.strip():
+        return
+    for part in re.split(r"\n{2,}", chunk):
+        part = part.strip("\n")
+        if not part.strip():
+            continue
+        lines = part.splitlines()
+        if len(lines) == 1 and lines[0].strip() in ("---", "***", "___"):
+            blocks.append({"type": "divider"})
+            continue
+        m = re.match(r"^(#{1,6})\s+(.+)$", lines[0].strip())
+        if m and len(lines) == 1:
+            blocks.append(
+                {
+                    "type": "heading",
+                    "text": m.group(2).strip(),
+                    "size": min(6, len(m.group(1))),
+                }
+            )
+            continue
+        if lines[0].startswith("```"):
+            lang = lines[0][3:].strip() or None
+            body_lines = lines[1:]
+            if body_lines and body_lines[-1].strip() == "```":
+                body_lines = body_lines[:-1]
+            block: dict[str, Any] = {"type": "pre", "text": "\n".join(body_lines)}
+            if lang:
+                block["language"] = lang
+            blocks.append(block)
+            continue
+        blocks.append({"type": "paragraph", "text": part})
+
+
+def build_rich_message_body(text: str) -> dict[str, Any]:
+    """Build InputRichMessage body: markdown by default, blocks for math/table/collage.
+
+    ponytail: only switch to blocks when heuristics fire; prose stays as paragraph strings.
+    """
+    src = text or ""
+    if not _rich_should_use_blocks(src):
+        return {"markdown": src}
+
+    # Normalize math fences to $$ for one scanner.
+    normalized = _RE_RICH_MATH_FENCE.sub(lambda m: f"$${m.group(1).strip()}$$", src)
+
+    blocks: list[dict[str, Any]] = []
+    prose: list[str] = []
+    lines = normalized.splitlines(keepends=False)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Display math on its own or embedded — peel $$...$$ from the line stream.
+        if "$$" in line or (line.strip().startswith("$$")):
+            # Consume a math block that may span lines.
+            joined = "\n".join(lines[i:])
+            m = _RE_RICH_DISPLAY_MATH.search(joined)
+            if m and m.start() == 0:
+                _rich_flush_prose(prose, blocks)
+                blocks.append(
+                    {
+                        "type": "mathematical_expression",
+                        "expression": m.group(1).strip(),
+                    }
+                )
+                consumed = m.end()
+                # Advance by number of lines covered.
+                covered = joined[:consumed].count("\n") + 1
+                i += covered
+                continue
+            # Math not at start of remaining text — fall through to prose with split below.
+
+        table, next_i = _rich_parse_table_block(lines, i)
+        if table is not None:
+            _rich_flush_prose(prose, blocks)
+            blocks.append(table)
+            i = next_i
+            continue
+
+        # Cluster of consecutive image markdowns → collage (need ≥2).
+        imgs: list[tuple[str, str, str]] = []
+        j = i
+        while j < len(lines):
+            im = _RE_RICH_IMG.fullmatch(lines[j].strip())
+            if not im:
+                break
+            imgs.append((im.group(1) or "", im.group(2), im.group(3) or ""))
+            j += 1
+        if len(imgs) >= 2:
+            _rich_flush_prose(prose, blocks)
+            photo_blocks: list[dict[str, Any]] = []
+            for alt, url, _title in imgs:
+                photo: dict[str, Any] = {
+                    "type": "photo",
+                    "photo": {"type": "photo", "media": url},
+                }
+                if alt:
+                    photo["caption"] = {"text": alt}
+                photo_blocks.append(photo)
+            blocks.append({"type": "collage", "blocks": photo_blocks})
+            i = j
+            continue
+
+        # Single image → photo block (only when already in blocks mode).
+        im_one = _RE_RICH_IMG.fullmatch(line.strip())
+        if im_one:
+            _rich_flush_prose(prose, blocks)
+            photo = {
+                "type": "photo",
+                "photo": {"type": "photo", "media": im_one.group(2)},
+            }
+            if im_one.group(1):
+                photo["caption"] = {"text": im_one.group(1)}
+            blocks.append(photo)
+            i += 1
+            continue
+
+        # Inline $$math$$ inside a prose line → split.
+        if "$$" in line:
+            _rich_flush_prose(prose, blocks)
+            pos = 0
+            for m in _RE_RICH_DISPLAY_MATH.finditer(line):
+                before = line[pos : m.start()]
+                if before.strip():
+                    blocks.append({"type": "paragraph", "text": before})
+                blocks.append(
+                    {
+                        "type": "mathematical_expression",
+                        "expression": m.group(1).strip(),
+                    }
+                )
+                pos = m.end()
+            after = line[pos:]
+            if after.strip():
+                prose.append(after)
+            i += 1
+            continue
+
+        prose.append(line)
+        i += 1
+
+    _rich_flush_prose(prose, blocks)
+    if not blocks:
+        return {"markdown": src}
+    return {"blocks": blocks}
 
 
 def _strip_md(s: str) -> str:
@@ -199,6 +432,11 @@ _SEND_MAX_RETRIES = 3
 _SEND_RETRY_BASE_DELAY = 0.5
 
 
+def _is_message_not_modified_error(error: Exception) -> bool:
+    """Return whether Telegram rejected an edit because the content is unchanged."""
+    return "message is not modified" in str(error).lower()
+
+
 class TelegramConfig(Base):
     """Telegram channel configuration."""
 
@@ -238,6 +476,19 @@ class TelegramConfig(Base):
     allow_bot_messages: bool = False
     business_enabled: bool = False
     managed_bots_enabled: bool = False
+    # Bot API 10.1+ Rich Messages via do_api_request (PTB 22.8 has no wrappers).
+    # Opt-in: some clients still render unsupported placeholders.
+    rich_messages: bool = False
+    # Secretary / Chat Automation: archive inbound by default; do not auto-reply in DMs.
+    business_auto_reply: bool = False
+    history_max_age_hours: float = 24.0
+    # When True: groups accept any member (groupPolicy still gates replies).
+    # Private bot DMs stay locked to allowFrom. Chat Automation peer DMs are
+    # always accepted when business_enabled (otherwise owner-only allowFrom
+    # blocks the archive). Non-allowlisted senders get metadata.is_allowlisted=False.
+    open_groups: bool = False
+    # Public HTTPS URL for Telegram Mini App (Menu Button / BotFather).
+    mini_app_url: str = ""
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -277,6 +528,11 @@ class TelegramChannel(BaseChannel):
         self._CHAT_IDS_CAP = 500
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._media_group_buffers: dict[str, dict] = {}
+        # (chat_id, inbound_message_id) -> our outbound reply id (edit-on-user-edit)
+        self._inbound_reply_map: dict[tuple[int, int], int] = {}
+        self._INBOUND_REPLY_MAP_CAP = 500
+        self._secretary_outbound: dict[int, set[int]] = {}
+        self._SECRETARY_OUTBOUND_CAP = 40
         self._media_group_tasks: dict[str, asyncio.Task] = {}
         self._message_threads: dict[tuple[str, int], int] = {}
         self._THREADS_CAP = 1000
@@ -291,20 +547,55 @@ class TelegramChannel(BaseChannel):
         self._managed_bots: dict[int, dict[str, Any]] = {}
         self._MANAGED_BOTS_CAP = 200
 
-    def is_allowed(self, sender_id: str) -> bool:
-        """Preserve Telegram's legacy id|username allowlist matching."""
-        if super().is_allowed(sender_id):
+    def _is_allowlisted(self, sender_id: str, *other_ids: str) -> bool:
+        """True if sender matches allowFrom (id, username, or id|username)."""
+        if super().is_allowed(sender_id, *other_ids):
             return True
         allow_list = getattr(self.config, "allow_from", [])
         if not allow_list or "*" in allow_list:
             return False
         sender_str = str(sender_id)
-        if sender_str.count("|") != 1:
+        if sender_str.count("|") == 1:
+            sid, username = sender_str.split("|", 1)
+            if sid.lstrip("-").isdigit() and username:
+                if sid in allow_list or username in allow_list:
+                    return True
+        return False
+    def is_allowed(self, sender_id: str, *other_ids: str) -> bool:
+        """Ingress gate for the bus.
+
+        When ``open_groups`` is enabled (or Chat Automation is on), handlers
+        decide private vs group/business access; the bus must not re-deny.
+        Otherwise preserve classic allowFrom for all chats.
+        """
+        if self.config.open_groups or self.config.business_enabled:
+            return True
+        return self._is_allowlisted(sender_id, *other_ids)
+    def _sender_is_allowlisted(self, sender_id: str, username: str | None = None) -> bool:
+        extras = (username,) if username else ()
+        return self._is_allowlisted(sender_id, *extras)
+    def _ingress_allowed(
+        self,
+        *,
+        is_group: bool,
+        has_business: bool,
+        sender_id: str,
+        username: str | None,
+        is_guest: bool = False,
+    ) -> bool:
+        """Private bot DMs: allowFrom only. Groups/business: opt-in open + allowFrom.
+
+        Guest Mode always requires allowFrom (never open to arbitrary users).
+        """
+        if self._is_allowlisted(sender_id, username):
+            return True
+        if is_guest:
             return False
-        sid, username = sender_str.split("|", 1)
-        if not sid.lstrip("-").isdigit() or not username:
-            return False
-        return sid in allow_list or username in allow_list
+        if has_business and self.config.business_enabled:
+            return True
+        if is_group and self.config.open_groups:
+            return True
+        return False
 
     def _build_app(self, proxy: str | None = None) -> None:
         """Build the Telegram Application with separate HTTP pools."""
@@ -399,6 +690,7 @@ class TelegramChannel(BaseChannel):
             logger.debug("Telegram bot commands registered")
         except Exception as e:
             logger.warning("Failed to register bot commands: {}", e)
+        await self._maybe_set_mini_app_menu_button()
         allowed_updates = ["message", "edited_message"]
         if self.config.guest_mode:
             allowed_updates.append("guest_message")
@@ -414,6 +706,22 @@ class TelegramChannel(BaseChannel):
         )
         while self._running:
             await asyncio.sleep(1)
+
+    async def _maybe_set_mini_app_menu_button(self) -> None:
+        """Point the chat menu button at channels.telegram.miniAppUrl when set."""
+        url = (getattr(self.config, "mini_app_url", None) or "").strip()
+        if not url or not self._app:
+            return
+        try:
+            await self._app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="ShibaClaw",
+                    web_app=WebAppInfo(url=url),
+                )
+            )
+            logger.info("Telegram Mini App menu button set → {}", url)
+        except Exception as e:
+            logger.warning("Failed to set Telegram Mini App menu button: {}", e)
 
     async def stop(self) -> None:
         """Stop the Telegram bot."""
@@ -583,16 +891,74 @@ class TelegramChannel(BaseChannel):
                 and self._is_private_chat_id(chat_id)
                 and not metadata.get("business_connection_id")
             )
-            for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
-                if is_progress and use_draft:
-                    await self._send_message_draft(chat_id, chunk, thread_kwargs, metadata)
-                elif is_progress:
-                    await self._send_or_edit_progress(chat_id, chunk, reply_params, thread_kwargs)
+            use_rich = bool(self.config.rich_messages)
+            edit_mid = None if is_progress else metadata.get("edit_message_id")
+            last_mid = None
+            thread_id_pre = thread_kwargs.get("message_thread_id") if thread_kwargs else None
+            progress_id = (
+                None
+                if is_progress
+                else self._progress_messages.get(self._progress_key(chat_id, thread_id_pre))
+            )
+            finalize_edit = None
+            if not is_progress:
+                if edit_mid is not None:
+                    finalize_edit = int(edit_mid)
+                elif progress_id is not None and not use_draft:
+                    finalize_edit = int(progress_id)
+            if finalize_edit is not None and not is_progress:
+                chunks = list(split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN))
+                text_body, *remaining_chunks = chunks
+                if use_rich and await self._edit_rich_message(
+                    chat_id, finalize_edit, text_body, thread_kwargs
+                ):
+                    last_mid = finalize_edit
                 else:
-                    await self._send_with_streaming(
+                    last_mid = await self._send_with_streaming(
+                        chat_id,
+                        text_body,
+                        reply_params,
+                        thread_kwargs,
+                        use_draft=False,
+                        edit_message_id=finalize_edit,
+                    )
+                for chunk in remaining_chunks:
+                    last_mid = await self._send_with_streaming(
                         chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
                     )
+            elif use_rich and not is_progress:
+                last_mid = await self._send_rich_message(
+                    chat_id, msg.content, reply_params, thread_kwargs
+                )
+                if last_mid is None:
+                    for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
+                        last_mid = await self._send_with_streaming(
+                            chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
+                        )
+            else:
+                for chunk in split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN):
+                    if is_progress and use_draft:
+                        if use_rich and await self._send_rich_message_draft(
+                            chat_id, chunk, thread_kwargs, metadata
+                        ):
+                            continue
+                        await self._send_message_draft(
+                            chat_id, chunk, thread_kwargs, metadata
+                        )
+                    elif is_progress:
+                        await self._send_or_edit_progress(
+                            chat_id, chunk, reply_params, thread_kwargs, metadata
+                        )
+                    else:
+                        last_mid = await self._send_with_streaming(
+                            chat_id, chunk, reply_params, thread_kwargs, use_draft=use_draft
+                        )
             if not is_progress:
+                inbound_mid = metadata.get("message_id")
+                if last_mid is not None:
+                    self._remember_inbound_reply(chat_id, inbound_mid, last_mid)
+                    if metadata.get("business_connection_id"):
+                        self._remember_secretary_outbound(chat_id, last_mid)
                 thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
                 await self._clear_progress_message(chat_id, thread_id)
                 self._clear_draft_id(chat_id, thread_id)
@@ -650,9 +1016,13 @@ class TelegramChannel(BaseChannel):
                 parse_mode="HTML",
             )
             return True
-        except (NetworkError, RetryAfter, TimedOut):
+        except (NetworkError, RetryAfter, TimedOut) as e:
+            if _is_message_not_modified_error(e):
+                return True
             raise
         except Exception as e:
+            if _is_message_not_modified_error(e):
+                return True
             err_str = str(e).lower()
             if "parse" not in err_str and "entit" not in err_str:
                 logger.warning("Failed to edit progress message {}: {}", message_id, e)
@@ -666,9 +1036,13 @@ class TelegramChannel(BaseChannel):
                 text=text,
             )
             return True
-        except (NetworkError, RetryAfter, TimedOut):
+        except (NetworkError, RetryAfter, TimedOut) as e:
+            if _is_message_not_modified_error(e):
+                return True
             raise
         except Exception as e:
+            if _is_message_not_modified_error(e):
+                return True
             logger.warning("Failed to edit progress message {} with plain text: {}", message_id, e)
             return False
 
@@ -678,10 +1052,15 @@ class TelegramChannel(BaseChannel):
         text: str,
         reply_params=None,
         thread_kwargs: dict | None = None,
+        metadata: dict | None = None,
     ) -> None:
         """Send the first progress message or edit an existing one."""
         thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
         key = self._progress_key(chat_id, thread_id)
+        # User-edit path: stream into the prior reply instead of a new bubble.
+        seed = (metadata or {}).get("edit_message_id")
+        if seed is not None and key not in self._progress_messages:
+            self._progress_messages[key] = int(seed)
         existing_id = self._progress_messages.get(key)
         if existing_id is not None:
             success = await self._edit_progress_message(chat_id, existing_id, text)
@@ -732,19 +1111,74 @@ class TelegramChannel(BaseChannel):
         text: str,
         reply_params=None,
         thread_kwargs: dict | None = None,
-    ) -> None:
-        """Send a plain text message with HTML fallback."""
+        *,
+        edit_message_id: int | None = None,
+    ) -> int | None:
+        """Send or edit a plain text message with HTML fallback. Returns message_id."""
+        tk = dict(thread_kwargs or {})
+        biz = tk.get("business_connection_id")
+        if edit_message_id is not None:
+            edit_kw: dict[str, Any] = {}
+            if biz:
+                edit_kw["business_connection_id"] = biz
+            try:
+                html = _markdown_to_telegram_html(text)
+                await self._call_with_retry(
+                    self._app.bot.edit_message_text,
+                    chat_id=chat_id,
+                    message_id=edit_message_id,
+                    text=html,
+                    parse_mode="HTML",
+                    **edit_kw,
+                )
+                return int(edit_message_id)
+            except (NetworkError, RetryAfter, TimedOut) as e:
+                if _is_message_not_modified_error(e):
+                    return int(edit_message_id)
+                raise
+            except Exception as e:
+                if _is_message_not_modified_error(e):
+                    return int(edit_message_id)
+                err_str = str(e).lower()
+                if "parse" in err_str or "entit" in err_str:
+                    try:
+                        await self._call_with_retry(
+                            self._app.bot.edit_message_text,
+                            chat_id=chat_id,
+                            message_id=edit_message_id,
+                            text=text,
+                            **edit_kw,
+                        )
+                        return int(edit_message_id)
+                    except (NetworkError, RetryAfter, TimedOut) as e2:
+                        if _is_message_not_modified_error(e2):
+                            return int(edit_message_id)
+                        raise
+                    except Exception as e2:
+                        if _is_message_not_modified_error(e2):
+                            return int(edit_message_id)
+                        logger.warning(
+                            "Failed to edit message {} (plain), falling back to send: {}",
+                            edit_message_id,
+                            e2,
+                        )
+                else:
+                    logger.warning(
+                        "Failed to edit message {}, falling back to send: {}",
+                        edit_message_id,
+                        e,
+                    )
         try:
             html = _markdown_to_telegram_html(text)
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=html,
                 parse_mode="HTML",
                 reply_parameters=reply_params,
-                **(thread_kwargs or {}),
+                **tk,
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e:
@@ -753,19 +1187,20 @@ class TelegramChannel(BaseChannel):
                 raise
             logger.warning("HTML parse failed, falling back to plain text: {}", e)
         try:
-            await self._call_with_retry(
+            sent = await self._call_with_retry(
                 self._app.bot.send_message,
                 chat_id=chat_id,
                 text=text,
                 reply_parameters=reply_params,
-                **(thread_kwargs or {}),
+                **tk,
             )
-            return
+            return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
             raise
         except Exception as e2:
             logger.error("Error sending Telegram message: {}", e2)
             raise
+
 
     @staticmethod
     def _is_private_chat_id(chat_id: int) -> bool:
@@ -815,6 +1250,155 @@ class TelegramChannel(BaseChannel):
             await self._call_with_retry(self._app.bot.send_message_draft, **kwargs)
         except Exception as e:
             logger.debug("Telegram sendMessageDraft failed (falling back): {}", e)
+
+    def _rich_api_kwargs(
+        self,
+        chat_id: int,
+        text: str,
+        thread_kwargs: dict | None = None,
+        reply_params=None,
+        *,
+        message_id: int | None = None,
+        draft_id: int | None = None,
+        rich_body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build kwargs for sendRichMessage / sendRichMessageDraft / editMessageText."""
+        body = rich_body if rich_body is not None else build_rich_message_body(text or "")
+        kwargs: dict[str, Any] = {
+            "chat_id": chat_id,
+            "rich_message": body,
+        }
+        tk = thread_kwargs or {}
+        if tk.get("message_thread_id") is not None:
+            kwargs["message_thread_id"] = tk["message_thread_id"]
+        if tk.get("business_connection_id"):
+            kwargs["business_connection_id"] = tk["business_connection_id"]
+        if message_id is not None:
+            kwargs["message_id"] = message_id
+        if draft_id is not None:
+            kwargs["draft_id"] = draft_id
+        if reply_params is not None and message_id is None and draft_id is None:
+            # ReplyParameters serializes via PTB; dict also works for raw API.
+            kwargs["reply_parameters"] = reply_params
+        return kwargs
+
+    async def _send_rich_message(
+        self,
+        chat_id: int,
+        markdown: str,
+        reply_params=None,
+        thread_kwargs: dict | None = None,
+    ) -> int | None:
+        """Bot API 10.1 sendRichMessage via do_api_request. Returns message_id or None."""
+        if not self._app:
+            return None
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        # If auto-blocks fail, retry plain markdown once.
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        last_err: Exception | None = None
+        for attempt_body in attempts:
+            try:
+                result = await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "sendRichMessage",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        reply_params,
+                        rich_body=attempt_body,
+                    ),
+                )
+                if isinstance(result, dict) and result.get("message_id") is not None:
+                    return int(result["message_id"])
+                mid = getattr(result, "message_id", None)
+                return int(mid) if mid is not None else None
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                last_err = e
+                continue
+        logger.warning("Telegram sendRichMessage failed, falling back: {}", last_err)
+        return None
+
+    async def _send_rich_message_draft(
+        self,
+        chat_id: int,
+        markdown: str,
+        thread_kwargs: dict | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        """Bot API 10.1 sendRichMessageDraft (private chats). True on success."""
+        if not self._app:
+            return False
+        thread_id = (thread_kwargs or {}).get("message_thread_id")
+        draft_id = self._draft_id_for(chat_id, thread_id, metadata)
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        for attempt_body in attempts:
+            try:
+                await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "sendRichMessageDraft",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        draft_id=draft_id,
+                        rich_body=attempt_body,
+                    ),
+                )
+                return True
+            except (NetworkError, RetryAfter, TimedOut):
+                raise
+            except Exception as e:
+                logger.debug("Telegram sendRichMessageDraft failed (falling back): {}", e)
+        return False
+
+    async def _edit_rich_message(
+        self,
+        chat_id: int,
+        message_id: int,
+        markdown: str,
+        thread_kwargs: dict | None = None,
+    ) -> bool:
+        """editMessageText with rich_message. True on success."""
+        if not self._app:
+            return False
+        body = build_rich_message_body(markdown or "")
+        attempts: list[dict[str, Any]] = [body]
+        if "blocks" in body:
+            attempts.append({"markdown": markdown or ""})
+        last_err: Exception | None = None
+        for attempt_body in attempts:
+            try:
+                await self._call_with_retry(
+                    self._app.bot.do_api_request,
+                    "editMessageText",
+                    api_kwargs=self._rich_api_kwargs(
+                        chat_id,
+                        markdown,
+                        thread_kwargs,
+                        message_id=message_id,
+                        rich_body=attempt_body,
+                    ),
+                )
+                return True
+            except (NetworkError, RetryAfter, TimedOut) as e:
+                if _is_message_not_modified_error(e):
+                    return True
+                raise
+            except Exception as e:
+                if _is_message_not_modified_error(e):
+                    return True
+                last_err = e
+                continue
+        logger.warning("Telegram editMessageText(rich) failed, falling back: {}", last_err)
+        return False
 
     def _guest_result_title(self) -> str:
         """InlineQueryResultArticle title for Guest Mode answers."""
@@ -897,21 +1481,51 @@ class TelegramChannel(BaseChannel):
         thread_kwargs: dict | None = None,
         *,
         use_draft: bool = False,
-    ) -> None:
-        """Send final message text. Optional last draft flash for private chats."""
-        if use_draft and text:
+        edit_message_id: int | None = None,
+    ) -> int | None:
+        """Send or edit final message text. Optional last draft flash for private chats."""
+        if use_draft and text and edit_message_id is None:
             # Final animated draft, then persist with sendMessage (API contract).
             await self._send_message_draft(chat_id, text, thread_kwargs)
-        await self._send_text(chat_id, text, reply_params, thread_kwargs)
+        return await self._send_text(
+            chat_id,
+            text,
+            reply_params,
+            thread_kwargs,
+            edit_message_id=edit_message_id,
+        )
+
+
+    def _remember_inbound_reply(
+        self, chat_id: int, inbound_mid: int | None, outbound_mid: int | None
+    ) -> None:
+        """Map user message -> our reply so user edits can update in place."""
+        if inbound_mid is None or outbound_mid is None:
+            return
+        key = (int(chat_id), int(inbound_mid))
+        self._inbound_reply_map[key] = int(outbound_mid)
+        while len(self._inbound_reply_map) > self._INBOUND_REPLY_MAP_CAP:
+            self._inbound_reply_map.pop(next(iter(self._inbound_reply_map)))
+
+    def _lookup_inbound_reply(self, chat_id: int, inbound_mid: int | None) -> int | None:
+        if inbound_mid is None:
+            return None
+        return self._inbound_reply_map.get((int(chat_id), int(inbound_mid)))
 
     async def _on_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
         if not update.message or not update.effective_user:
             return
-        sender_id = self._sender_id(update.effective_user)
-        if not self.is_allowed(sender_id):
-            return
         user = update.effective_user
+        sender_id = self._sender_id(user)
+        is_group = update.message.chat.type in ("group", "supergroup")
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=False,
+            sender_id=sender_id,
+            username=user.username,
+        ):
+            return
         await update.message.reply_text(
             f"👋 Hi {user.first_name}! I'm shibaclaw.\n\n"
             "Send me a message and I'll respond!\n"
@@ -922,8 +1536,15 @@ class TelegramChannel(BaseChannel):
         """Handle /help command."""
         if not update.message or not update.effective_user:
             return
-        sender_id = self._sender_id(update.effective_user)
-        if not self.is_allowed(sender_id):
+        user = update.effective_user
+        sender_id = self._sender_id(user)
+        is_group = update.message.chat.type in ("group", "supergroup")
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=False,
+            sender_id=sender_id,
+            username=user.username,
+        ):
             return
         await update.message.reply_text(
             "🐕 shibaclaw commands:\n"
@@ -932,6 +1553,43 @@ class TelegramChannel(BaseChannel):
             "/restart — Restart the bot\n"
             "/help — Show available commands"
         )
+
+    def _remember_secretary_outbound(self, chat_id: int, message_id: int | None) -> None:
+        """Keep a bounded set of business replies that can be replied-to to summon."""
+        if message_id is None:
+            return
+        outbound = self._secretary_outbound.setdefault(chat_id, set())
+        outbound.add(message_id)
+        while len(outbound) > self._SECRETARY_OUTBOUND_CAP:
+            outbound.pop()
+        while len(self._secretary_outbound) > self._CHAT_IDS_CAP:
+            self._secretary_outbound.pop(next(iter(self._secretary_outbound)))
+    async def _message_has_bot_mention(self, message) -> bool:
+        """Whether this message is a Guest Mode @mention."""
+        bot_id, username = await self._ensure_bot_identity()
+        if not username:
+            return False
+        return self._has_mention_entity(
+            message.text or "", getattr(message, "entities", None), username, bot_id
+        ) or self._has_mention_entity(
+            message.caption or "", getattr(message, "caption_entities", None), username, bot_id
+        )
+    async def _is_secretary_summon(self, message) -> bool:
+        """Return true for a trigger word or reply to bot/secretary output."""
+        combined = f"{message.text or ''} {message.caption or ''}".lower()
+        for word in self.config.trigger_words:
+            trigger = str(word).strip().lower()
+            if trigger and trigger in combined:
+                return True
+        reply = getattr(message, "reply_to_message", None)
+        if reply is None:
+            return False
+        bot_id, _ = await self._ensure_bot_identity()
+        reply_user = getattr(reply, "from_user", None)
+        if bot_id and reply_user and getattr(reply_user, "id", None) == bot_id:
+            return True
+        reply_id = getattr(reply, "message_id", None)
+        return reply_id in self._secretary_outbound.get(int(message.chat_id), set())
 
     @staticmethod
     def _sender_id(user) -> str:
@@ -957,6 +1615,7 @@ class TelegramChannel(BaseChannel):
             "username": user.username,
             "first_name": user.first_name,
             "is_group": message.chat.type != "private",
+            "chat_title": getattr(message.chat, "title", None),
             "message_thread_id": getattr(message, "message_thread_id", None),
             "is_forum": bool(getattr(message.chat, "is_forum", False)),
             "reply_to_message_id": getattr(reply_to, "message_id", None) if reply_to else None,
@@ -967,7 +1626,54 @@ class TelegramChannel(BaseChannel):
             meta["is_guest"] = True
         if business_connection_id := getattr(message, "business_connection_id", None):
             meta["business_connection_id"] = business_connection_id
+        if fwd := TelegramChannel._extract_forward_info(message):
+            meta.update(fwd)
         return meta
+
+    @staticmethod
+    def _extract_forward_info(message) -> dict | None:
+        """Parse Message.forward_origin into a small metadata dict + label."""
+        origin = getattr(message, "forward_origin", None)
+        if origin is None and not getattr(message, "is_automatic_forward", False):
+            return None
+        info: dict[str, Any] = {"is_forward": True}
+        label = "unknown"
+        otype = getattr(origin, "type", None) or type(origin).__name__
+        info["forward_type"] = str(otype)
+        sender_user = getattr(origin, "sender_user", None)
+        if sender_user is not None:
+            name = (
+                getattr(sender_user, "full_name", None)
+                or getattr(sender_user, "first_name", None)
+                or getattr(sender_user, "username", None)
+                or str(getattr(sender_user, "id", "user"))
+            )
+            info["forward_from_user_id"] = getattr(sender_user, "id", None)
+            info["forward_from_username"] = getattr(sender_user, "username", None)
+            info["forward_from_name"] = name
+            uname = getattr(sender_user, "username", None)
+            label = f"{name} (@{uname})" if uname else str(name)
+        elif getattr(origin, "sender_user_name", None):
+            info["forward_from_name"] = origin.sender_user_name
+            label = str(origin.sender_user_name)
+        else:
+            chat = getattr(origin, "sender_chat", None) or getattr(origin, "chat", None)
+            if chat is not None:
+                title = (
+                    getattr(chat, "title", None)
+                    or getattr(chat, "full_name", None)
+                    or getattr(chat, "username", None)
+                    or str(getattr(chat, "id", "chat"))
+                )
+                info["forward_from_chat_id"] = getattr(chat, "id", None)
+                info["forward_from_chat_title"] = title
+                sig = getattr(origin, "author_signature", None)
+                info["forward_author_signature"] = sig
+                label = f"{title}" + (f" / {sig}" if sig else "")
+            elif getattr(message, "is_automatic_forward", False):
+                label = "linked channel"
+        info["forward_label"] = label
+        return info
 
     @staticmethod
     def _extract_reply_context(message) -> str | None:
@@ -1120,12 +1826,30 @@ class TelegramChannel(BaseChannel):
             return
         message = update.message
         user = update.effective_user
+        sender_id = self._sender_id(user)
+        is_group = message.chat.type in ("group", "supergroup")
+        has_business = bool(getattr(message, "business_connection_id", None))
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=has_business,
+            sender_id=sender_id,
+            username=user.username,
+        ):
+            return
+        cmd = (message.text or "").strip().split()[0].lower().split("@", 1)[0]
+        if is_group and cmd in ("/new", "/stop", "/restart") and not self._is_allowlisted(
+            sender_id, user.username
+        ):
+            await message.reply_text("These commands are owner-only.")
+            return
         self._remember_thread_context(message)
+        metadata = self._build_message_metadata(message, user)
+        metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
         await self._handle_message(
-            sender_id=self._sender_id(user),
+            sender_id=sender_id,
             chat_id=str(message.chat_id),
             content=message.text or "",
-            metadata=self._build_message_metadata(message, user),
+            metadata=metadata,
             session_key=self._derive_topic_session_key(message),
         )
 
@@ -1139,13 +1863,22 @@ class TelegramChannel(BaseChannel):
             logger.debug("Telegram: ignoring bot-to-bot message from {}", user.id)
             return
         is_guest = update.guest_message is not None
-        chat_id = message.chat_id
+        chat_id = str(message.chat_id)
         sender_id = self._sender_id(user)
-        # Guest Mode still requires allow_from — never open the bot to arbitrary users.
-        if not self.is_allowed(sender_id):
+        is_group = message.chat.type in ("group", "supergroup")
+        has_business = bool(getattr(message, "business_connection_id", None))
+        # Guest Mode always requires allowFrom. Private bot DMs: allowFrom only.
+        # Groups need openGroups; Chat Automation peers need businessEnabled.
+        if not self._ingress_allowed(
+            is_group=is_group,
+            has_business=has_business,
+            sender_id=sender_id,
+            username=user.username,
+            is_guest=is_guest,
+        ):
             logger.debug(
                 "Telegram: ignoring {} from unauthorised sender {}",
-                "guest message" if is_guest else "message",
+                "guest message" if is_guest else ("DM" if not is_group and not has_business else "message"),
                 sender_id,
             )
             return
@@ -1181,11 +1914,11 @@ class TelegramChannel(BaseChannel):
                 content_parts.insert(0, tag)
         content = "\n".join(content_parts) if content_parts else "[empty message]"
         str_chat_id = str(chat_id)
-        is_group = message.chat.type in ("group", "supergroup")
         sender_name = user.first_name or user.username or sender_id
         if is_group and not is_guest:
             content = f"{sender_name}: {content}"
         metadata = self._build_message_metadata(message, user, guest=is_guest)
+        metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
         if is_guest:
             session_key = f"telegram:guest:{metadata.get('guest_query_id') or chat_id}"
         else:
@@ -1193,6 +1926,61 @@ class TelegramChannel(BaseChannel):
         should_respond = True if is_guest else await self._is_group_message_for_bot(message)
         if is_group and not should_respond and not is_guest:
             metadata["no_reply"] = True
+        # Secretary mode: archive Chat Automation traffic; do not auto-answer peers.
+        if metadata.get("business_connection_id") and not getattr(
+            self.config, "business_auto_reply", False
+        ):
+            # Owner↔bot DM also arrives as a normal Message update. Drop the
+            # Chat Automation echo — demoting it caused duplicate agent turns.
+            if self._bot_user_id is not None and int(chat_id) == int(self._bot_user_id):
+                logger.info(
+                    "Telegram: drop business echo of owner↔bot chat {}",
+                    chat_id,
+                )
+                return
+            metadata["no_reply"] = True
+            if not await self._message_has_bot_mention(message) and await self._is_secretary_summon(
+                message
+            ):
+                metadata.pop("no_reply")
+                metadata["secretary_summon"] = True
+                logger.info(
+                    "Telegram secretary summon from {} chat={}: {}...",
+                    sender_id,
+                    chat_id,
+                    content[:50],
+                )
+            else:
+                logger.info(
+                    "Telegram business archive from {} chat={}: {}...",
+                    sender_id,
+                    chat_id,
+                    content[:50],
+                )
+        if metadata.get("no_reply") and self.config.history_max_age_hours > 0:
+            date = getattr(message, "date", None)
+            if date is not None:
+                date = date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date
+                age_hours = (
+                    datetime.now(timezone.utc) - date.astimezone(timezone.utc)
+                ).total_seconds() / 3600
+                if age_hours > self.config.history_max_age_hours:
+                    logger.debug(
+                        "Telegram: skipping stale no_reply message ({:.1f}h)",
+                        age_hours,
+                    )
+                    return
+        # User edited their message: if we already replied, edit that reply in place.
+        if not metadata.get("no_reply") and getattr(message, "edit_date", None) is not None:
+            prior = self._lookup_inbound_reply(int(message.chat_id), getattr(message, "message_id", None))
+            if prior is not None:
+                metadata["edit_message_id"] = prior
+                logger.info(
+                    "Telegram: edit prior reply {} for inbound {} chat={}",
+                    prior,
+                    message.message_id,
+                    chat_id,
+                )
         logger.debug(
             "Telegram message from {} guest={}: {}...",
             sender_id,
@@ -1213,7 +2001,7 @@ class TelegramChannel(BaseChannel):
                     "metadata": metadata,
                     "session_key": session_key,
                 }
-                if not metadata.get("no_reply"):
+                if not metadata.get("no_reply") and not metadata.get("secretary_summon"):
                     self._start_typing(str_chat_id)
             buf = self._media_group_buffers[key]
             if content and content != "[empty message]":
@@ -1222,7 +2010,7 @@ class TelegramChannel(BaseChannel):
             if key not in self._media_group_tasks:
                 self._media_group_tasks[key] = asyncio.create_task(self._flush_media_group(key))
             return
-        if not metadata.get("no_reply") and not is_guest:
+        if not metadata.get("no_reply") and not is_guest and not metadata.get("secretary_summon"):
             self._start_typing(str_chat_id)
         await self._handle_message(
             sender_id=sender_id,

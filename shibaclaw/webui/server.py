@@ -23,6 +23,7 @@ from .api import (
     api_auth_login,
     api_auth_setup,
     api_auth_status,
+    api_auth_telegram,
     api_auth_verify,
     api_auth_change_password,
     api_automation_job_delete,
@@ -165,6 +166,7 @@ def create_app(
         Route("/api/auth/status", api_auth_status, methods=["GET"]),
         Route("/api/auth/setup", api_auth_setup, methods=["POST"]),
         Route("/api/auth/login", api_auth_login, methods=["POST"]),
+        Route("/api/auth/telegram", api_auth_telegram, methods=["POST"]),
         Route("/api/auth/change-password", api_auth_change_password, methods=["POST"]),
         Route("/api/status", api_status),
         Route("/api/settings", api_settings_get, methods=["GET"]),
@@ -399,7 +401,12 @@ async def run_server(port: int = 3000, host: str = "127.0.0.1", config=None, pro
         ws_ping_timeout=120.0,
     )
     server = uvicorn.Server(server_config)
-    await server.serve()
+    try:
+        await server.serve()
+    finally:
+        for task in _startup_tasks:
+            task.cancel()
+        await asyncio.gather(*_startup_tasks, return_exceptions=True)
 
 
 class ServerManager:
@@ -536,4 +543,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"🐕 Starting ShibaClaw WebUI on http://{args.host}:{args.port}")
-    asyncio.run(run_server(port=args.port, host=args.host))
+    try:
+        asyncio.run(run_server(port=args.port, host=args.host))
+    except KeyboardInterrupt:
+        pass

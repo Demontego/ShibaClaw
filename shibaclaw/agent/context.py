@@ -13,6 +13,7 @@ from shibaclaw.agent.skills import SkillsLoader
 from shibaclaw.helpers.helpers import build_assistant_message, current_time_str, detect_image_mime
 
 _THINK_RE = re.compile(r"<think>.*?</think>\n*", flags=re.DOTALL)
+_YOU_ARE_NOW_ROLE_RE = re.compile(r"you are now[:\s]+(?:a|an)\b")
 
 
 class ScentBuilder:
@@ -69,9 +70,35 @@ class ScentBuilder:
         if memory:
             parts.append(f"# Memory\n\n{memory}")
 
+        try:
+            from shibaclaw.agent.profiles import ProfileManager, DEFAULT_PROFILE_ID
+            _pm = ProfileManager(self.workspace)
+            _pid = profile_id or DEFAULT_PROFILE_ID
+            _enabled = _pm.get_enabled_tools(_pid)
+            _disabled = _pm.get_disabled_tools(_pid)
+            # enabled_tools allowlist takes precedence over disabled_tools "*"
+            if _enabled is None and "*" in _disabled:
+                parts.append(
+                    "# Tools\n\n"
+                    "All tools are disabled for this profile. "
+                    "Answer from knowledge and conversation only — "
+                    "do not attempt tool calls."
+                )
+                return "\n\n---\n\n".join(parts)
+            if _enabled is not None and "*" not in _enabled:
+                parts.append(
+                    "# Tools\n\n"
+                    "Only these tools are available in this profile: "
+                    + ", ".join(_enabled)
+                    + ". Do not attempt other tools."
+                )
+        except Exception:
+            pass
+
         pinned_skills: list[str] | None = None
         try:
             from shibaclaw.agent.profiles import ProfileManager, DEFAULT_PROFILE_ID
+
             pm = ProfileManager(self.workspace)
             pid = profile_id or DEFAULT_PROFILE_ID
             prof = pm.get_profile(pid)
@@ -83,6 +110,7 @@ class ScentBuilder:
         if pinned_skills is None:
             try:
                 from shibaclaw.config.loader import load_config
+
                 cfg = load_config()
                 pinned_skills = cfg.agents.defaults.pinned_skills
             except Exception:
@@ -105,6 +133,7 @@ Skills with available="false" need dependencies installed first - you can try in
 
         try:
             from shibaclaw.agent.tools.mcp import get_mcp_servers_info
+
             mcp_info = get_mcp_servers_info()
             if mcp_info:
                 parts.append(f"""# Connected MCP Servers
@@ -188,31 +217,44 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
                 'Use the message tool with channel="<name>" to send cross-channel messages.'
             )
         from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+
         if active_kbs and RAG_AVAILABLE:
             lines.append("Active Knowledge Bases for this session:")
             for kb in active_kbs:
                 lines.append(f"- {kb}")
             lines.append(
-                'CRITICAL: When the user asks a question, ALWAYS use the `knowledge_search` tool to search these active Knowledge Bases FIRST before falling back to `web_search` or `web_fetch`.'
+                "CRITICAL: When the user asks a question, ALWAYS use the `knowledge_search` tool to search these active Knowledge Bases FIRST before falling back to `web_search` or `web_fetch`."
             )
-            
+
         if metadata:
+            if metadata.get("is_forward"):
+                label = metadata.get("forward_label") or "unknown"
+                lines.append(
+                    "Telegram forward origin (verified Message.forward_origin metadata; "
+                    f"not user-typed text): {label}"
+                )
             kbs = metadata.get("mentioned_kbs") if RAG_AVAILABLE else None
             mcps = metadata.get("mentioned_mcps")
             apps = metadata.get("mentioned_apps")
-            
+
             if kbs or mcps or apps:
                 lines.append("### EXPLICIT USER MENTIONS (HARD PROMPTS) ###")
-            
+
             if kbs:
                 kb_names = ", ".join(f"'{k}'" for k in kbs)
-                lines.append(f"CRITICAL DIRECTIVE: The user explicitly requested to use the Knowledge Base(s): {kb_names}. YOU MUST prioritize using `knowledge_search` on these immediately.")
+                lines.append(
+                    f"CRITICAL DIRECTIVE: The user explicitly requested to use the Knowledge Base(s): {kb_names}. YOU MUST prioritize using `knowledge_search` on these immediately."
+                )
             if mcps:
                 mcp_names = ", ".join(f"'{m}'" for m in mcps)
-                lines.append(f"CRITICAL DIRECTIVE: The user explicitly mentioned the MCP server(s): {mcp_names}. YOU MUST prioritize using the tools provided by these MCP servers.")
+                lines.append(
+                    f"CRITICAL DIRECTIVE: The user explicitly mentioned the MCP server(s): {mcp_names}. YOU MUST prioritize using the tools provided by these MCP servers."
+                )
             if apps:
                 app_names = ", ".join(f"'{a}'" for a in apps)
-                lines.append(f"CRITICAL DIRECTIVE: The user explicitly mentioned the Connected App(s): {app_names}. YOU MUST prioritize using the tools related to these apps.")
+                lines.append(
+                    f"CRITICAL DIRECTIVE: The user explicitly mentioned the Connected App(s): {app_names}. YOU MUST prioritize using the tools related to these apps."
+                )
 
         return "## Live State\n\n" + "\n".join(lines)
 
@@ -369,11 +411,13 @@ Root: {workspace_path}
             elif m.get("role") == "tool" and isinstance(m.get("content"), str):
                 content = m["content"]
                 if len(content) > self._HISTORY_TOOL_MAX_CHARS:
-                    cleaned_history.append({
-                        **m,
-                        "content": content[: self._HISTORY_TOOL_MAX_CHARS]
-                        + "\n...[truncated for context efficiency]...",
-                    })
+                    cleaned_history.append(
+                        {
+                            **m,
+                            "content": content[: self._HISTORY_TOOL_MAX_CHARS]
+                            + "\n...[truncated for context efficiency]...",
+                        }
+                    )
                 else:
                     cleaned_history.append(m)
             else:
@@ -456,7 +500,6 @@ Root: {workspace_path}
         """Regenerate the tool-output nonce (call once per agent loop iteration)."""
         self._tool_output_nonce = secrets.token_hex(8)
 
-
     def add_tool_result(
         self,
         messages: list[dict[str, Any]],
@@ -466,11 +509,21 @@ Root: {workspace_path}
     ) -> list[dict[str, Any]]:
         """Add a tool result to the message list, wrapped with a randomized delimiter for security."""
         tag = f"tool_output_{self._tool_output_nonce}"
-        
+
+        # Prompt-injection guard. Keep phrases specific — bare "you are now" false-positives
+        # on Klavis/Google Calendar docs ("You are now viewing…") and blanks the tool result.
         lower_res = result.lower()
-        if "ignore previous instructions" in lower_res or "you are now" in lower_res or "system prompt" in lower_res:
+        _inject = (
+            "ignore previous instructions" in lower_res
+            or "ignore all previous instructions" in lower_res
+            or "ignore prior instructions" in lower_res
+            or "new system prompt" in lower_res
+            or "your new system prompt" in lower_res
+            or bool(_YOU_ARE_NOW_ROLE_RE.search(lower_res))
+        )
+        if _inject:
             result = "[SECURITY WARNING: Potential Prompt Injection Detected. Content sanitized.]"
-            
+
         closing_tag = f"</{tag}>"
         sanitized = result.replace(closing_tag, f"<\\/{tag}>")
         safe_result = f'<{tag} name="{tool_name}">\n{sanitized}\n</{tag}>'
@@ -490,6 +543,7 @@ Root: {workspace_path}
         content: str | None,
         tool_calls: list[dict[str, Any]] | None = None,
         reasoning_content: str | None = None,
+        reasoning_details: list[dict[str, Any]] | None = None,
         thinking_blocks: list[dict] | None = None,
     ) -> list[dict[str, Any]]:
         """Add an assistant message to the message list."""
@@ -498,6 +552,7 @@ Root: {workspace_path}
                 content,
                 tool_calls=tool_calls,
                 reasoning_content=reasoning_content,
+                reasoning_details=reasoning_details,
                 thinking_blocks=thinking_blocks,
             )
         )
