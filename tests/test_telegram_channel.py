@@ -78,6 +78,30 @@ def test_telegram_channel_threads_eviction():
     assert ("chat_abc", 1009) in channel._message_threads
 
 
+def test_derive_topic_session_key_private_dm_topics():
+    """Bot API 9.3+ private DM topics must isolate sessions like group forums."""
+    private = MagicMock()
+    private.chat.type = "private"
+    private.chat_id = 10001
+    private.message_thread_id = 6780867
+    assert (
+        TelegramChannel._derive_topic_session_key(private)
+        == "telegram:10001:topic:6780867"
+    )
+
+    unscoped = MagicMock()
+    unscoped.chat.type = "private"
+    unscoped.chat_id = 10001
+    unscoped.message_thread_id = None
+    assert TelegramChannel._derive_topic_session_key(unscoped) is None
+
+    group = MagicMock()
+    group.chat.type = "supergroup"
+    group.chat_id = -100123
+    group.message_thread_id = 42
+    assert TelegramChannel._derive_topic_session_key(group) == "telegram:-100123:topic:42"
+
+
 @pytest.mark.asyncio
 async def test_telegram_channel_network_error_re_raises():
     from telegram.error import NetworkError

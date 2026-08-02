@@ -1599,9 +1599,14 @@ class TelegramChannel(BaseChannel):
 
     @staticmethod
     def _derive_topic_session_key(message) -> str | None:
-        """Derive topic-scoped session key for non-private Telegram chats."""
+        """Derive topic-scoped session key for forum topics (groups and private DMs).
+
+        Bot API 9.3+ supports topics in private chats with bots. When
+        ``message_thread_id`` is present, isolate history/profile from the
+        unscoped ``telegram:{chat_id}`` session — same as group forums.
+        """
         message_thread_id = getattr(message, "message_thread_id", None)
-        if message.chat.type == "private" or message_thread_id is None:
+        if message_thread_id is None:
             return None
         return f"telegram:{message.chat_id}:topic:{message_thread_id}"
 
