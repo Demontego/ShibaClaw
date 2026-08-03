@@ -53,6 +53,23 @@ def _session_chat_id(session_key: str) -> str | None:
     return parts[1] if parts[1].lstrip("-").isdigit() else None
 
 
+def _session_topic_id(session_key: str) -> str | None:
+    """Extract forum/DM topic id from ``telegram:{chat}:topic:{id}`` keys."""
+    parts = (session_key or "").split(":")
+    if len(parts) >= 4 and parts[0] == "telegram" and parts[2] == "topic":
+        return parts[3]
+    return None
+
+
+def _with_topic_suffix(session_key: str, label: str | None) -> str | None:
+    if not label:
+        return label
+    topic_id = _session_topic_id(session_key)
+    if topic_id:
+        return f"{label} · topic {topic_id}"
+    return label
+
+
 def _people_name(people_dir: Path | None, peer_id: str | None) -> str | None:
     if not people_dir or not peer_id or not people_dir.is_dir():
         return None
@@ -149,7 +166,7 @@ def suggest_label(
     if groupish and not is_guest:
         title = _group_title(msgs, meta)
         if title:
-            return title
+            return _with_topic_suffix(session_key, title)
         if chat_id and chat_id.startswith("-"):
             return None
 
@@ -165,7 +182,7 @@ def suggest_label(
                 name = (m.get("first_name") or m.get("username") or "").strip() or None
                 if name:
                     break
-        return name
+        return _with_topic_suffix(session_key, name)
 
     peer_id = chat_id
     name = None
@@ -179,11 +196,11 @@ def suggest_label(
     if _is_business(msgs, meta):
         if not name:
             return None
-        return f"{owner_label} + {name}"
+        return _with_topic_suffix(session_key, f"{owner_label} + {name}")
 
     if peer_id and peer_id in owners:
-        return owner_label
-    return name
+        return _with_topic_suffix(session_key, owner_label)
+    return _with_topic_suffix(session_key, name)
 
 
 def maybe_autolabel_session(

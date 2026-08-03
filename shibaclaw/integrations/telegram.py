@@ -691,7 +691,8 @@ class TelegramChannel(BaseChannel):
         except Exception as e:
             logger.warning("Failed to register bot commands: {}", e)
         await self._maybe_set_mini_app_menu_button()
-        allowed_updates = ["message", "edited_message"]
+        # callback_query required for inline keyboards (e.g. profile pickers).
+        allowed_updates = ["message", "edited_message", "callback_query"]
         if self.config.guest_mode:
             allowed_updates.append("guest_message")
         if self.config.business_enabled:
@@ -1599,9 +1600,14 @@ class TelegramChannel(BaseChannel):
 
     @staticmethod
     def _derive_topic_session_key(message) -> str | None:
-        """Derive topic-scoped session key for non-private Telegram chats."""
+        """Derive topic-scoped session key for forum topics (groups and private DMs).
+
+        Bot API 9.3+ supports topics in private chats with bots. When
+        ``message_thread_id`` is present, isolate history/profile from the
+        unscoped ``telegram:{chat_id}`` session — same as group forums.
+        """
         message_thread_id = getattr(message, "message_thread_id", None)
-        if message.chat.type == "private" or message_thread_id is None:
+        if message_thread_id is None:
             return None
         return f"telegram:{message.chat_id}:topic:{message_thread_id}"
 

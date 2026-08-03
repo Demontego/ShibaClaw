@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+- **Private DM forum topics get isolated sessions** — Bot API 9.3+ topics in private chats with the bot no longer share one `telegram:{chat_id}` session. When `message_thread_id` is present, history and per-session profile follow `telegram:{chat_id}:topic:{thread_id}` (same as group forums). WebUI autolabels append `· topic {id}` so owner DM topics stay distinguishable.
+- **Telegram polling omitted `callback_query`** — `allowed_updates` only requested `message` / `edited_message`, so inline keyboard callbacks never reached the bot. Include `callback_query` so button handlers (e.g. profile pickers) work.
+
 ## [0.9.13] - 2026-08-01
 
 ### Added
