@@ -12,15 +12,17 @@ function showLogin(errorMsg = "", isSetup = false) {
 
     // Update UI text based on mode
     document.getElementById("login-subtitle").textContent = isSetup
-        ? "Create an admin account to secure your keys"
-        : "Enter your credentials to continue";
-    document.getElementById("btn-login-text").textContent = isSetup ? "Setup Account" : "Connect";
+        ? (typeof t === "function" ? t("login.setup_subtitle") : "Create an admin account to secure your keys")
+        : (typeof t === "function" ? t("login.subtitle") : "Enter your credentials to continue");
+    document.getElementById("btn-login-text").textContent = isSetup
+        ? (typeof t === "function" ? t("login.setup_connect") : "Setup Account")
+        : (typeof t === "function" ? t("login.connect") : "Connect");
     document.getElementById("btn-login-icon").textContent = isSetup ? "person_add" : "login";
 
     const hint = document.getElementById("login-hint");
     if (isSetup) {
         hint.style.display = "block";
-        hint.innerHTML = "Your API keys will be migrated to an encrypted vault.";
+        hint.innerHTML = typeof t === "function" ? t("login.setup_hint") : "Your API keys will be migrated to an encrypted vault.";
     } else {
         hint.style.display = "none";
     }
@@ -83,7 +85,7 @@ async function attemptLogin(username, password, mode) {
             startApp();
             return true;
         } else {
-            showLogin(data.error || "Authentication failed.", mode === "setup");
+            showLogin(data.error || (typeof t === "function" ? t("login.auth_failed") : "Authentication failed."), mode === "setup");
             return false;
         }
     } catch (e) {

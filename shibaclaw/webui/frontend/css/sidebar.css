@@ -517,8 +517,73 @@
     border-color: rgba(248, 113, 113, 0.2);
 }
 
+.lang-switcher {
+    position: relative;
+    display: inline-flex;
+}
+
+.btn-lang {
+    color: var(--text-secondary);
+}
+
+.btn-lang:hover,
+.btn-lang[aria-expanded="true"] {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
+    border-color: var(--border-highlight);
+}
+
+.lang-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 168px;
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 6px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-md);
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lang-menu[hidden] {
+    display: none;
+}
+
+.lang-option {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    text-align: left;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.3;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.lang-option:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
+.lang-option.is-active {
+    color: var(--shiba-gold);
+    background: var(--shiba-gold-dim);
+}
+
 .btn-github:focus-visible,
-.btn-logout:focus-visible {
+.btn-logout:focus-visible,
+.btn-lang:focus-visible {
     outline: none;
     background: var(--bg-surface-hover);
     border-color: var(--border-highlight);

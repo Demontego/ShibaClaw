@@ -116,7 +116,7 @@ function initSocket() {
 
     realtime.on("disconnect", () => {
         statusDot.className = "status-dot disconnected";
-        statusText.textContent = "Disconnected";
+        statusText.textContent = (typeof t === "function" ? t("status.disconnected") : "Disconnected");
         hideTypingBubble();
         hideThinking();
         _clearAllStreamRenders();
@@ -516,36 +516,40 @@ function updateUIFromHealthState() {
     }
 }
 
+window.checkGatewayHealth = checkGatewayHealth;
+window.updateUIFromHealthState = updateUIFromHealthState;
+
 function setStatusIndicator(mode) {
+    const tr = (key, fallback) => (typeof t === "function" ? t(key) : fallback);
     switch (mode) {
         case "ready":
             statusDot.className = "status-dot connected";
-            statusText.textContent = "Shiba ready";
+            statusText.textContent = tr("status.ready", "Shiba ready");
             break;
         case "starting":
             statusDot.className = "status-dot starting";
-            statusText.textContent = "Starting...";
+            statusText.textContent = tr("status.starting", "Starting...");
             break;
         case "working":
             statusDot.className = "status-dot working";
-            statusText.textContent = "Executing...";
+            statusText.textContent = tr("status.executing", "Executing...");
             break;
         case "gateway-down":
             statusDot.className = "status-dot gateway-down";
-            statusText.textContent = "Gateway Down";
+            statusText.textContent = tr("status.gateway_down", "Gateway Down");
             break;
         case "model-offline":
             statusDot.className = "status-dot model-offline";
-            statusText.textContent = "Model Offline";
+            statusText.textContent = tr("status.model_offline", "Model Offline");
             break;
         case "not-configured":
             statusDot.className = "status-dot disconnected";
-            statusText.textContent = "Not Configured";
+            statusText.textContent = tr("status.not_configured", "Not Configured");
             break;
         case "disconnected":
         default:
             statusDot.className = "status-dot disconnected";
-            statusText.textContent = "Disconnected";
+            statusText.textContent = tr("status.disconnected", "Disconnected");
             break;
     }
 }
@@ -575,7 +579,7 @@ window.restartGateway = async function () {
     }
 
     btn.classList.add("restarting");
-    statusText.textContent = "Restarting...";
+    statusText.textContent = (typeof t === "function" ? t("status.restarting") : "Restarting...");
     statusDot.className = "status-dot restarting";
 
     try {

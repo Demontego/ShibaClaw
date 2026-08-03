@@ -27,7 +27,7 @@ async function loadAutomationPanel() {
     const badgeMini = document.getElementById('automation-badge-mini');
 
     if (!listEl) return;
-    listEl.innerHTML = '<div class="automation-loading">Loading jobs...</div>';
+    listEl.innerHTML = `<div class="automation-loading">${escapeHtml(typeof t === "function" ? t("auto.loading") : "Loading jobs...")}</div>`;
 
     try {
         const [statusRes, jobsRes, taskMdRes] = await Promise.all([
@@ -97,11 +97,13 @@ async function loadAutomationPanel() {
 
         if (statusData.reachable === false) {
             if (statusRow) statusRow.className = 'automation-status-row status-offline';
-            if (statusText) statusText.textContent = 'Gateway unreachable';
+            if (statusText) statusText.textContent = typeof t === "function" ? t("auto.gateway_down") : "Gateway unreachable";
         } else {
             const running = _autoJobs.filter(j => j.enabled).length;
             if (statusRow) statusRow.className = 'automation-status-row status-online';
-            if (statusText) statusText.textContent = `${running} active job${running !== 1 ? 's' : ''} · ${_autoJobs.length} total`;
+            if (statusText) statusText.textContent = typeof t === "function"
+                ? t("auto.status_line", { n: running, t: _autoJobs.length })
+                : `${running} active job${running !== 1 ? 's' : ''} · ${_autoJobs.length} total`;
         }
 
         if (badgeMini) {
@@ -144,12 +146,12 @@ async function loadAutomationPanel() {
 
         if (filteredJobs.length === 0) {
             const emptyMsg = _currentAutoTab === 'active'
-                ? 'No active automation jobs.'
-                : 'No completed automation jobs.';
+                ? (typeof t === "function" ? t("auto.empty") : "No automation jobs yet. Click New Job to create one.")
+                : (typeof t === "function" ? t("auto.empty_done") : "No completed automation jobs.");
             listEl.innerHTML = `
                 <div class="automation-empty-state">
                     <span class="material-icons-round">${_currentAutoTab === 'active' ? 'event_repeat' : 'check_circle'}</span>
-                    <p>${emptyMsg}<br>${_currentAutoTab === 'active' ? 'Click <strong>New Job</strong> to create one.' : ''}</p>
+                    <p>${escapeHtml(emptyMsg)}</p>
                 </div>`;
             return;
         }
@@ -191,17 +193,17 @@ async function loadAutomationPanel() {
                     <div class="auto-job-meta">${escapeHtml(meta)}${lastErr ? ` · <span class="auto-err">${lastErr}</span>` : ''}</div>
                 </div>
                 <div class="auto-job-actions">
-                    ${job.isVirtual ? '' : `<label class="toggle auto-toggle" title="${job.enabled ? 'Disable' : 'Enable'}">
+                    ${job.isVirtual ? '' : `<label class="toggle auto-toggle" title="${job.enabled ? (typeof t === "function" ? t("auto.disable") : "Disable") : (typeof t === "function" ? t("auto.enable") : "Enable")}">
                         <input type="checkbox" class="auto-enable-cb" data-id="${escapeHtml(job.id)}" ${job.enabled ? 'checked' : ''}>
                         <span class="toggle-slider"></span>
                     </label>`}
-                    <button class="btn-icon auto-btn-trigger" title="Run now" data-id="${escapeHtml(job.id)}">
+                    <button class="btn-icon auto-btn-trigger" title="${escapeHtml(typeof t === "function" ? t("auto.run_now") : "Run now")}" data-id="${escapeHtml(job.id)}">
                         <span class="material-icons-round">play_arrow</span>
                     </button>
                     <button class="btn-icon auto-btn-edit" title="${job.isVirtual ? 'Upgrade to independent job' : 'Edit'}" data-id="${escapeHtml(job.id)}">
                         <span class="material-icons-round">${job.isVirtual ? 'upgrade' : 'edit'}</span>
                     </button>
-                    ${!isSystemHeartbeat ? `<button class="btn-icon auto-btn-delete danger" title="Delete" data-id="${escapeHtml(job.id)}">
+                    ${!isSystemHeartbeat ? `<button class="btn-icon auto-btn-delete danger" title="${escapeHtml(typeof t === "function" ? t("common.delete") : "Delete")}" data-id="${escapeHtml(job.id)}">
                         <span class="material-icons-round">delete</span>
                     </button>` : ''}
                 </div>`;
@@ -252,7 +254,10 @@ async function loadAutomationPanel() {
             const delBtn = row.querySelector('.auto-btn-delete');
             if (delBtn) {
                 delBtn.addEventListener('click', async () => {
-                    const ok = await shibaDialog('confirm', 'Delete job', `Delete "${job.name || job.id}"?`, { confirmText: 'Delete', danger: true });
+                    const ok = await shibaDialog('confirm',
+                        typeof t === "function" ? t("auto.delete_title") : "Delete job",
+                        typeof t === "function" ? t("auto.delete_body", { name: job.name || job.id }) : `Delete "${job.name || job.id}"?`,
+                        { confirmText: typeof t === "function" ? t("common.delete") : "Delete", danger: true });
                     if (!ok) return;
                     try {
                         if (!job.isVirtual) {
@@ -267,8 +272,8 @@ async function loadAutomationPanel() {
             listEl.appendChild(row);
         }
     } catch (e) {
-        if (statusText) statusText.textContent = 'Error loading jobs';
-        if (listEl) listEl.innerHTML = `<div class="automation-empty-state"><span class="material-icons-round" style="color:var(--accent-red)">error</span><p>Failed to load automation jobs.</p></div>`;
+        if (statusText) statusText.textContent = typeof t === "function" ? t("common.error") : "Error loading jobs";
+        if (listEl) listEl.innerHTML = `<div class="automation-empty-state"><span class="material-icons-round" style="color:var(--accent-red)">error</span><p>${escapeHtml(typeof t === "function" ? t("auto.load_error") : "Failed to load automation jobs.")}</p></div>`;
     }
 }
 
@@ -322,11 +327,11 @@ window.openJobForm = async function (jobId) {
     }
 
     if (jobId) {
-        title.textContent = 'Edit Job';
+        title.textContent = typeof t === "function" ? t("auto.form_title_edit") : "Edit Job";
         const job = _autoJobs.find(j => j.id === jobId);
         if (job) _autoFillForm(job);
     } else {
-        title.textContent = 'New Job';
+        title.textContent = typeof t === "function" ? t("auto.form_title_new") : "New Job";
     }
 
     onSchedKindChange();
@@ -405,7 +410,10 @@ window.clearCompletedJobs = async function () {
 
     if (completedJobs.length === 0) return;
 
-    const ok = await shibaDialog('confirm', 'Clear Completed', `Delete ${completedJobs.length} completed or disabled jobs?`, { confirmText: 'Clear All', danger: true });
+    const ok = await shibaDialog('confirm',
+        typeof t === "function" ? t("auto.clear_title") : "Clear Completed",
+        typeof t === "function" ? t("auto.clear_body", { n: completedJobs.length }) : `Delete ${completedJobs.length} completed or disabled jobs?`,
+        { confirmText: typeof t === "function" ? t("auto.clear_all") : "Clear All", danger: true });
     if (!ok) return;
 
     try {
@@ -440,7 +448,7 @@ window.onDeliverChange = function () {
 
 window.saveJobForm = async function () {
     const saveBtn = document.getElementById('ajf-save-btn');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = typeof t === "function" ? t("auto.saving") : "Saving..."; }
 
     try {
         const name = (document.getElementById('ajf-name').value || '').trim() || 'Job';
@@ -589,3 +597,5 @@ if (document.readyState === 'loading') {
 } else {
     initAutomation();
 }
+
+window.loadAutomationPanel = loadAutomationPanel;

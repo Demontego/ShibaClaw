@@ -58,7 +58,7 @@ async function ensureAvailableModels(listEl = null) {
         return _fetchingModelsPromise;
     }
     if (listEl) {
-        listEl.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">Loading models...</div>';
+        listEl.innerHTML = `<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${escapeHtml(typeof t === "function" ? t("chat.loading_models") : "Loading models...")}</div>`;
     }
     _fetchingModelsPromise = fetchModels().then(models => {
         _availableModels = models || [];
@@ -125,7 +125,7 @@ function renderModelList(list, models, currentModelId, onSelect, extraItems = []
     list.innerHTML = "";
     const allItems = [...extraItems, ...models];
     if (!allItems.length) {
-        list.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">No models found</div>';
+        list.innerHTML = `<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${escapeHtml(typeof t === "function" ? t("chat.no_models") : "No models found")}</div>`;
         return;
     }
     allItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
@@ -196,8 +196,8 @@ function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) 
 
     const supports = checkModelSupportsReasoning(currentModel);
     if (!supports) {
-        display.textContent = "Effort: N/A";
-        btn.title = "Reasoning effort not supported for current model";
+        display.textContent = typeof t === "function" ? t("chat.effort_na") : "Effort: N/A";
+        btn.title = typeof t === "function" ? t("chat.effort_unsupported") : "Reasoning effort not supported for current model";
         btn.classList.add("disabled");
         btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";
@@ -208,15 +208,15 @@ function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) 
     btn.classList.remove("disabled");
     btn.style.opacity = "";
     btn.style.cursor = "";
-    btn.title = "Change reasoning effort for active session";
+    btn.title = typeof t === "function" ? t("chat.reasoning_title") : "Change reasoning effort for active session";
 
     const effortStr = _activeSessionReasoningEffort ? String(_activeSessionReasoningEffort).toLowerCase() : "";
-    let label = "Default";
-    if (effortStr === "low") label = "Low";
-    else if (effortStr === "medium") label = "Medium";
-    else if (effortStr === "high") label = "High";
+    let label = typeof t === "function" ? t("chat.effort_default") : "Default";
+    if (effortStr === "low") label = typeof t === "function" ? t("chat.effort_low") : "Low";
+    else if (effortStr === "medium") label = typeof t === "function" ? t("chat.effort_medium") : "Medium";
+    else if (effortStr === "high") label = typeof t === "function" ? t("chat.effort_high") : "High";
 
-    display.textContent = "Effort: " + label;
+    display.textContent = (typeof t === "function" ? t("chat.effort_prefix") : "Effort: ") + label;
 
     if (list) {
         renderReasoningDropdownList(list, effortStr);
@@ -226,10 +226,10 @@ function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) 
 function renderReasoningDropdownList(container, currentEffort) {
     container.innerHTML = "";
     const options = [
-        { value: "", label: "Default", desc: "Use provider default effort" },
-        { value: "low", label: "Low", desc: "Faster, lower reasoning depth" },
-        { value: "medium", label: "Medium", desc: "Balanced reasoning effort" },
-        { value: "high", label: "High", desc: "Deep reasoning, higher accuracy" }
+        { value: "", label: typeof t === "function" ? t("chat.effort_default") : "Default", desc: typeof t === "function" ? t("chat.effort_default_desc") : "Use provider default effort" },
+        { value: "low", label: typeof t === "function" ? t("chat.effort_low") : "Low", desc: typeof t === "function" ? t("chat.effort_low_desc") : "Faster, lower reasoning depth" },
+        { value: "medium", label: typeof t === "function" ? t("chat.effort_medium") : "Medium", desc: typeof t === "function" ? t("chat.effort_medium_desc") : "Balanced speed and depth" },
+        { value: "high", label: typeof t === "function" ? t("chat.effort_high") : "High", desc: typeof t === "function" ? t("chat.effort_high_desc") : "Deep reasoning, slower" }
     ];
 
     options.forEach(opt => {
@@ -329,7 +329,7 @@ async function updateModelSelectorDisplay(modelId) {
     if (btn) {
         const providerText = match && (match.provider_label || match.provider) ? ` (${match.provider_label || match.provider})` : "";
         const rawIdText = match && match.raw_id && match.raw_id !== fullName ? ` • ${match.raw_id}` : "";
-        btn.title = `Active Model: ${fullName}${providerText}${rawIdText}`;
+        btn.title = typeof t === "function" ? t("chat.active_model", { name: `${fullName}${providerText}${rawIdText}` }) : `Active Model: ${fullName}${providerText}${rawIdText}`;
     }
 
     updateReasoningSelectorDisplay(_activeSessionReasoningEffort, resolvedModelId);
@@ -516,3 +516,5 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 500);
 });
 
+
+window.updateReasoningSelectorDisplay = updateReasoningSelectorDisplay;

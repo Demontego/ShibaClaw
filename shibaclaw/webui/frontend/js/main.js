@@ -133,7 +133,10 @@ function initListeners() {
         const clockEl = $("clock");
         if (!clockEl) return;
         const now = new Date();
-        clockEl.textContent = now.toLocaleTimeString([], {
+        const loc = (window.i18n && typeof window.i18n.clockLocale === "function")
+            ? window.i18n.clockLocale()
+            : undefined;
+        clockEl.textContent = now.toLocaleTimeString(loc, {
             hour: "2-digit",
             minute: "2-digit",
         });
@@ -156,11 +159,17 @@ function initListeners() {
     }
 
     startClock();
+    document.addEventListener("shibaclaw:localechange", updateClock);
 }
 
 
 // ── Initialize ────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+    if (window.i18n) {
+        window.i18n.applyI18n();
+        window.i18n.initLangSwitcher();
+    }
+
     // Extract token from URL if present (desktop launcher)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get("token");

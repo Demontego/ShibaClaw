@@ -36,7 +36,7 @@ window.openSettingsView = async function () {
         }
     } catch (e) {
         if (loader) {
-            loader.innerHTML = `<span class="material-icons-round" style="color:var(--accent-red)">error</span> Failed to load settings`;
+            loader.innerHTML = `<span class="material-icons-round" style="color:var(--accent-red)">error</span> ${escapeHtml(typeof t === "function" ? t("settings.load_failed") : "Failed to load settings")}`;
         }
     }
 };
@@ -53,7 +53,7 @@ window.backToSettingsDashboard = function () {
     document.getElementById("settings-mobile-dashboard").style.display = "block";
     document.getElementById("settings-body").style.display = "none";
     const subtitleEl = document.getElementById("settings-current-tab-title");
-    if (subtitleEl) subtitleEl.textContent = "Settings Dashboard";
+    if (subtitleEl) subtitleEl.textContent = typeof t === "function" ? t("settings.dashboard") : "Settings Dashboard";
 };
 
 window.openOnboardFromSettings = function () {
@@ -338,10 +338,10 @@ async function loadOAuthPanel() {
                 </div>
                 <div style="display:flex;gap:8px;padding:0.5rem 0">
                     <button class="btn-primary btn-sm" id="btn-oauth-login-${p.name}">
-                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> Login
+                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.login") : "Login")}
                     </button>
                     <button class="btn-secondary btn-sm" id="btn-oauth-disconnect-${p.name}" style="display:none; color: #ef4444; border-color: rgba(239, 68, 68, 0.3)">
-                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect
+                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}
                     </button>
                 </div>
                 <div class="oauth-logs" id="oauth-logs-${p.name}" style="display:none;height:260px;overflow-y:scroll;overflow-x:hidden;background:var(--bg-primary);border-radius:6px;padding:12px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);margin-top:4px;border:1px solid var(--border-color);white-space:pre-wrap;line-height:1.6"></div>
@@ -354,7 +354,7 @@ async function loadOAuthPanel() {
             const logsEl = document.getElementById("oauth-logs-" + p.name);
             btn.disabled = true; btn.innerHTML = '<span class="material-icons-round spin" style="font-size:14px;vertical-align:middle">progress_activity</span> Contacting...';
             logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : (p.name === "google_gemini_cli" ? "Preparing Google login...\n" : "Requesting device code...\n");
-            const loginBtnHtml = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> Login';
+            const loginBtnHtml = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.login") : "Login")}`;
             try {
                 const resp = await authFetch("/api/oauth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: p.name }) });
                 const jd = await resp.json();
@@ -558,19 +558,19 @@ async function loadOAuthPanel() {
                 const jd = await resp.json();
                 if (jd.ok) {
                     logsEl.style.display = "block";
-                    logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">Disconnected successfully.</div>`;
+                    logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnected") : "Disconnected successfully.")}</div>`;
                     _refreshOAuthStatus();
                 } else {
                     logsEl.style.display = "block";
                     logsEl.textContent = "Error disconnecting: " + (jd.error || "Unknown");
                     btn.disabled = false;
-                    btn.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                    btn.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
                 }
             } catch (e) {
                 logsEl.style.display = "block";
                 logsEl.textContent = "Error: " + e;
                 btn.disabled = false;
-                btn.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                btn.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
             }
         });
     }
@@ -597,7 +597,7 @@ async function _refreshOAuthStatus() {
                     btnLogin.style.display = "none";
                     btnDisconnect.style.display = "inline-flex";
                     btnDisconnect.disabled = false;
-                    btnDisconnect.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                    btnDisconnect.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
                 } else {
                     btnLogin.style.display = "inline-flex";
                     btnDisconnect.style.display = "none";
@@ -870,7 +870,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
 
     const statsEl = $("provider-stats");
     if (statsEl) {
-        statsEl.innerHTML = `<span class="stat-configured">${configuredCount} Configured</span><span class="stat-dot"></span><span>${provEntries.length} Total</span>`;
+        const statsText = typeof t === "function"
+            ? t("settings.provider.stats", { n: configuredCount, t: provEntries.length })
+            : `${configuredCount} Configured · ${provEntries.length} Total`;
+        statsEl.textContent = statsText;
     }
 
     const searchInput = document.getElementById("provider-search");
@@ -1455,7 +1458,10 @@ window.saveSettings = async function () {
         fetchStatus();
 
         if (data.restarted) {
-            shibaDialog("alert", "Restart Required", "Gateway is restarting to apply network changes.", { confirmText: "OK" });
+            shibaDialog("alert",
+                typeof t === "function" ? t("settings.restart_required") : "Restart Required",
+                typeof t === "function" ? t("settings.restart_body") : "Gateway is restarting to apply network changes.",
+                { confirmText: typeof t === "function" ? t("common.ok") : "OK" });
         } else {
             // Hot-reloaded successfully without restarting
             let container = document.getElementById("toast-container");
@@ -1466,7 +1472,7 @@ window.saveSettings = async function () {
             }
             const toast = document.createElement("div");
             toast.className = "toast toast-success";
-            toast.innerHTML = `<span class="toast-icon material-icons-round">check_circle</span> Settings saved & hot-reloaded successfully!`;
+            toast.innerHTML = `<span class="toast-icon material-icons-round">check_circle</span> ${escapeHtml(typeof t === "function" ? t("settings.saved") : "Settings saved & hot-reloaded successfully!")}`;
             container.appendChild(toast);
             setTimeout(() => { toast.classList.add("visible"); }, 100);
             setTimeout(() => {
@@ -1476,6 +1482,8 @@ window.saveSettings = async function () {
             }, 3000);
         }
     } catch (e) {
-        shibaDialog("alert", "Error", "Error saving settings: " + e, { confirmText: "Close", danger: true });
+        shibaDialog("alert", typeof t === "function" ? t("common.error") : "Error",
+            typeof t === "function" ? t("settings.save_error", { err: e }) : "Error saving settings: " + e,
+            { confirmText: typeof t === "function" ? t("common.close") : "Close", danger: true });
     }
 };

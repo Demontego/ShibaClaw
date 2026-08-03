@@ -6,6 +6,10 @@ function _setFsLoading(container) {
     wrapper.style.textAlign = "center";
     wrapper.style.color = "var(--text-muted)";
     wrapper.appendChild(createMaterialIcon("progress_activity", "material-icons-round spin"));
+    const label = document.createElement("div");
+    label.style.marginTop = "8px";
+    label.textContent = typeof t === "function" ? t("files.loading") : "Loading files...";
+    wrapper.appendChild(label);
     container.appendChild(wrapper);
 }
 
@@ -378,7 +382,7 @@ window.openFileEditor = async function(filePath, fileName) {
     if (!isText) {
         content.innerHTML = `<div style="padding:3rem;text-align:center;color:var(--text-muted)">
             <span class="material-icons-round" style="font-size:48px;display:block;margin-bottom:8px">insert_drive_file</span>
-            <p>Binary file — preview not available</p>
+            <p>${escapeHtml(typeof t === "function" ? t("files.binary") : "Binary file — preview not available")}</p>
         </div>`;
         return;
     }
@@ -396,17 +400,17 @@ window.openFileEditor = async function(filePath, fileName) {
             <div class="file-editor-toolbar">
                 <span class="file-editor-name" id="file-editor-name"></span>
                 <span id="save-status" class="file-editor-status"></span>
-                <button class="btn-edit-mode" id="btn-refresh-file" title="Reload file from disk">
+                <button class="btn-edit-mode" id="btn-refresh-file" title="${escapeHtml(typeof t === "function" ? t("files.reload") : "Reload file from disk")}">
                     <span class="material-icons-round" style="font-size:15px">refresh</span>
                 </button>
-                <button class="btn-edit-mode" id="btn-download-file" title="Download file">
+                <button class="btn-edit-mode" id="btn-download-file" title="${escapeHtml(typeof t === "function" ? t("files.download") : "Download file")}">
                     <span class="material-icons-round" style="font-size:15px">download</span>
                 </button>
-                <button class="btn-edit-mode" id="btn-edit-mode" title="Enter edit mode">
-                    <span class="material-icons-round" style="font-size:15px">edit</span> Edit
+                <button class="btn-edit-mode" id="btn-edit-mode" title="${escapeHtml(typeof t === "function" ? t("files.edit") : "Enter edit mode")}">
+                    <span class="material-icons-round" style="font-size:15px">edit</span> ${escapeHtml(typeof t === "function" ? t("files.edit") : "Edit")}
                 </button>
                 <button class="btn-primary btn-sm" id="btn-save-file" style="display:none">
-                    <span class="material-icons-round" style="font-size:14px">save</span> Save
+                    <span class="material-icons-round" style="font-size:14px">save</span> ${escapeHtml(typeof t === "function" ? t("common.save") : "Save")}
                 </button>
             </div>
             <textarea class="file-editor-area" id="file-editor-textarea" spellcheck="false" readonly></textarea>
@@ -431,7 +435,7 @@ window.openFileEditor = async function(filePath, fileName) {
             btnRefresh.disabled = true;
             ta.setAttribute("readonly", "");
             btnEdit.classList.remove("active");
-            btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">edit</span> Edit`;
+            btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">edit</span> ${escapeHtml(typeof t === "function" ? t("files.edit") : "Edit")}`;
             btnSave.style.display = "none";
             const ss = document.getElementById("save-status");
             if (ss) ss.textContent = "";
@@ -447,13 +451,13 @@ window.openFileEditor = async function(filePath, fileName) {
             if (isEditing) {
                 ta.setAttribute("readonly", "");
                 btnEdit.classList.remove("active");
-                btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">edit</span> Edit`;
+                btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">edit</span> ${escapeHtml(typeof t === "function" ? t("files.edit") : "Edit")}`;
                 btnSave.style.display = "none";
             } else {
                 ta.removeAttribute("readonly");
                 ta.focus();
                 btnEdit.classList.add("active");
-                btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">visibility</span> View`;
+                btnEdit.innerHTML = `<span class="material-icons-round" style="font-size:15px">visibility</span> ${escapeHtml(typeof t === "function" ? t("files.view") : "View")}`;
                 btnSave.style.display = "";
             }
         };
@@ -469,7 +473,7 @@ window.saveFile = async function(filePath) {
     if (!textarea || !status) return;
     const btn = $("btn-save-file");
     if (btn) btn.disabled = true;
-    status.textContent = "Saving\u2026";
+    status.textContent = typeof t === "function" ? t("files.saving") : "Saving\u2026";
     status.style.color = "";
 
     const body = { path: filePath, content: textarea.value };
@@ -486,7 +490,7 @@ window.saveFile = async function(filePath) {
         }
         if (data.error) throw new Error(data.error);
         status.style.color = "";
-        status.textContent = `Saved! (${data.bytes ?? "?"} bytes \u2192 ${data.path ?? filePath})`;
+        status.textContent = (typeof t === "function" ? t("files.saved") : "Saved!") + ` (${data.bytes ?? "?"} bytes \u2192 ${data.path ?? filePath})`;
         setTimeout(() => { status.textContent = ""; }, 4000);
     } catch (e) {
         console.error("[file-save] error", e);

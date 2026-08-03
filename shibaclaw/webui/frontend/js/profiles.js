@@ -99,18 +99,18 @@ async function renderProfileDropdown() {
                     <div class="profile-option-name">${escapeHtml(p.label)}</div>
                     ${p.description ? `<div class="profile-option-desc">${escapeHtml(p.description)}</div>` : ""}
                 </div>
-                ${p.builtin ? '<span class="profile-option-badge">built-in</span>' : ""}
+                ${p.builtin ? `<span class="profile-option-badge">${escapeHtml(typeof t === "function" ? t("profiles.builtin") : "built-in")}</span>` : ""}
             </div>`;
     }
     html += '<div class="profile-divider"></div>';
     html += `
         <div class="profile-action" id="profile-action-create">
             <span class="material-icons-round">add_circle_outline</span>
-            Create custom profile
+            ${escapeHtml(typeof t === "function" ? t("profiles.create") : "Create custom profile")}
         </div>
         <div class="profile-action" id="profile-action-edit">
             <span class="material-icons-round">tune</span>
-            Configure current profile
+            ${escapeHtml(typeof t === "function" ? t("profiles.configure") : "Configure current profile")}
         </div>`;
 
     profileDropdown.innerHTML = html;
@@ -161,22 +161,22 @@ async function openProfileModal(profileId = null) {
     overlay.innerHTML = `
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
             <div class="modal-header">
-                <h2 id="profile-modal-title">${profileId ? "Configure profile" : "Create profile"}</h2>
+                <h2 id="profile-modal-title">${escapeHtml(profileId ? (typeof t === "function" ? t("profiles.configure_title") : "Configure profile") : (typeof t === "function" ? t("profiles.create_title") : "Create profile"))}</h2>
                 <button class="modal-close" type="button" aria-label="Close">×</button>
             </div>
             <form class="modal-body">
-                <div class="form-group"><label for="profile-modal-id">ID</label><input class="form-input" id="profile-modal-id" required ${profileId ? "readonly" : ""}></div>
-                <div class="form-group"><label for="profile-modal-label">Label</label><input class="form-input" id="profile-modal-label" required></div>
-                <div class="form-group"><label for="profile-modal-description">Description</label><input class="form-input" id="profile-modal-description"></div>
-                <div class="form-group"><label for="profile-modal-soul">SOUL.md</label><textarea class="form-input" id="profile-modal-soul" rows="6"></textarea></div>
+                <div class="form-group"><label for="profile-modal-id">${escapeHtml(typeof t === "function" ? t("profiles.id") : "ID")}</label><input class="form-input" id="profile-modal-id" required ${profileId ? "readonly" : ""}></div>
+                <div class="form-group"><label for="profile-modal-label">${escapeHtml(typeof t === "function" ? t("profiles.label") : "Label")}</label><input class="form-input" id="profile-modal-label" required></div>
+                <div class="form-group"><label for="profile-modal-description">${escapeHtml(typeof t === "function" ? t("profiles.description") : "Description")}</label><input class="form-input" id="profile-modal-description"></div>
+                <div class="form-group"><label for="profile-modal-soul">${escapeHtml(typeof t === "function" ? t("profiles.soul") : "SOUL.md")}</label><textarea class="form-input" id="profile-modal-soul" rows="6"></textarea></div>
                 <div class="form-group"><label for="profile-modal-disabled-tools">Disabled tools (comma-separated)</label><input class="form-input" id="profile-modal-disabled-tools" placeholder="exec, write_file"></div>
                 <div class="form-group"><label for="profile-modal-enabled-tools">Enabled tools (comma-separated)</label><input class="form-input" id="profile-modal-enabled-tools" placeholder="web_search, web_fetch"></div>
                 <div class="form-group"><label for="profile-modal-temperature">Temperature</label><input class="form-input" id="profile-modal-temperature" type="number" min="0" max="2" step="0.1"></div>
                 <div class="form-group"><label for="profile-modal-knowledge-bases">Knowledge bases (comma-separated IDs)</label><input class="form-input" id="profile-modal-knowledge-bases" placeholder="docs, product-notes"></div>
                 <div id="profile-modal-error" role="alert"></div>
                 <div class="modal-footer">
-                    <button class="btn-secondary" type="button">Cancel</button>
-                    <button class="btn-primary" type="submit">Save</button>
+                    <button class="btn-secondary" type="button">${escapeHtml(typeof t === "function" ? t("common.cancel") : "Cancel")}</button>
+                    <button class="btn-primary" type="submit">${escapeHtml(typeof t === "function" ? t("common.save") : "Save")}</button>
                 </div>
             </form>
         </div>`;
@@ -225,7 +225,7 @@ async function openProfileModal(profileId = null) {
         );
         if (!response.ok) {
             const body = await response.json().catch(() => ({}));
-            overlay.querySelector("#profile-modal-error").textContent = body.error || "Unable to save profile.";
+            overlay.querySelector("#profile-modal-error").textContent = body.error || (typeof t === "function" ? t("profiles.save_fail") : "Unable to save profile.");
             return;
         }
         await fetchProfiles();
