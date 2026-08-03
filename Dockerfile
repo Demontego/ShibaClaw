@@ -22,14 +22,14 @@ RUN pip install uv
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=README.md,target=README.md \
-    uv sync --no-install-project --no-dev --extra telegram
+    uv sync --no-install-project --no-dev
 
 # Copia il resto del codice e installa il progetto
 COPY . .
 RUN cd shibaclaw/webui && npm install && node build.mjs
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --extra telegram
+    uv sync --no-dev
 
 # STAGE 2: Final Image
 FROM python:3.12-slim-bookworm

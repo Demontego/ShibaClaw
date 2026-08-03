@@ -1,19 +1,30 @@
 """Knowledge Search tool."""
 
+from __future__ import annotations
+
+from pathlib import Path
 from typing import Any
 
-from shibaclaw.agent.tools.base import Tool
 from shibaclaw.agent.knowledge_manager import KnowledgeManager
-from shibaclaw.webui.agent_manager import agent_manager
+from shibaclaw.agent.tools.base import Tool
+
 
 class KnowledgeSearchTool(Tool):
+    def __init__(self, workspace: Path):
+        self._workspace = workspace
+
     @property
     def name(self) -> str:
         return "knowledge_search"
 
     @property
     def description(self) -> str:
-        return "CRITICAL: You MUST use this tool FIRST if the user's question can be answered by the Active Knowledge Bases in your system prompt. Search for information inside user-created Knowledge Bases (Collezioni) via semantic similarity before using web_search."
+        return (
+            "CRITICAL: You MUST use this tool FIRST if the user's question can be answered by "
+            "the Active Knowledge Bases in your system prompt. Search for information inside "
+            "user-created Knowledge Bases (Collezioni) via semantic similarity before using "
+            "web_search."
+        )
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -23,12 +34,15 @@ class KnowledgeSearchTool(Tool):
                 "collection_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "The IDs of the Knowledge Bases to search in. Look at your system prompt to see which ones are available.",
+                    "description": (
+                        "The IDs of the Knowledge Bases to search in. Look at your system "
+                        "prompt to see which ones are available."
+                    ),
                 },
                 "query": {
                     "type": "string",
                     "description": "The question or concept to search for.",
-                }
+                },
             },
             "required": ["collection_ids", "query"],
         }
@@ -36,22 +50,17 @@ class KnowledgeSearchTool(Tool):
     async def execute(self, **kwargs: Any) -> str:
         query = kwargs.get("query")
         collection_ids = kwargs.get("collection_ids")
-        
+
         if not query or not collection_ids:
             return "Error: query and collection_ids are required."
-            
+
         try:
-            if not agent_manager.config:
-                agent_manager.load_latest_config()
-                
-            km = KnowledgeManager(agent_manager.config.workspace_path)
-            
             import asyncio
-            
-            # Resolve names to IDs if the agent passed names instead of IDs
+
+            km = KnowledgeManager(self._workspace)
             all_cols = await asyncio.to_thread(km.list_collections)
             name_to_id = {c.get("name", "").lower(): c["id"] for c in all_cols}
-            
+
             resolved_ids = []
             for cid in collection_ids:
                 if any(c["id"] == cid for c in all_cols):
@@ -60,18 +69,21 @@ class KnowledgeSearchTool(Tool):
                     resolved_ids.append(name_to_id[cid.lower()])
                 else:
                     resolved_ids.append(cid)
-                    
+
             docs = await asyncio.to_thread(km.search, resolved_ids, query, k=5)
-            
+
             if not docs:
                 return "No relevant information found in the specified Knowledge Bases."
-                
+
             out = ["### Knowledge Search Results ###"]
             for i, doc in enumerate(docs):
-                out.append(f"--- Document {i+1} (Source: {doc.metadata.get('source', 'Unknown')}, Score: {doc.metadata.get('score', 0):.3f}) ---")
+                out.append(
+                    f"--- Document {i+1} (Source: {doc.metadata.get('source', 'Unknown')}, "
+                    f"Score: {doc.metadata.get('score', 0):.3f}) ---"
+                )
                 out.append(doc.page_content)
-                
+
             return "\n".join(out)
-            
+
         except Exception as e:
             return f"Error executing knowledge search: {e}"

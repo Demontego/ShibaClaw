@@ -185,11 +185,13 @@ class BusinessSearchTool(Tool):
             return "Empty query — use mode=recent or mode=list instead."
         try:
             workspace = self._workspace()
-            sync.sync_secretary_markdown(workspace)
+            stats = await asyncio.to_thread(sync.sync_secretary_markdown, workspace)
             if error := sync.ensure_qmd_collection(workspace):
                 return f"Secretary qmd unavailable: {error}"
-            if error := await asyncio.to_thread(sync.qmd_reindex):
-                return f"Secretary qmd unavailable: {error}"
+            # Skip expensive qmd update when markdown projection did not change.
+            if stats.get("written", 0) or stats.get("removed", 0):
+                if error := await asyncio.to_thread(sync.qmd_reindex):
+                    return f"Secretary qmd unavailable: {error}"
             error, results = sync.qmd_search(query, top_k=top_k)
             if error:
                 return f"Secretary qmd search failed: {error}"

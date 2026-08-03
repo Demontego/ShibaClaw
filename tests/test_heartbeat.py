@@ -417,30 +417,6 @@ class TestCronOverdueJobFiring:
 
 
 class TestHeartbeatService:
-    @pytest.mark.asyncio
-    async def test_start_runs_first_tick_immediately(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    @pytest.mark.asyncio
-    async def test_decide_disables_transient_retry_logging(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    def test_status_returns_telemetry(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    def test_status_reflects_telemetry_after_updates(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    def test_status_includes_session_targets_profile(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    def test_frontmatter_overrides_runtime_defaults(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-    def test_frontmatter_does_not_override_enabled_or_interval(self, tmp_path):
-        pytest.skip("Porting to AutomationService")
-
-
     def test_defaults_for_new_fields(self, tmp_path):
         # service creation not required for this test; defaults are handled
         # by AutomationPayload and do not need a running AutomationService.
@@ -513,20 +489,6 @@ class TestHeartbeatService:
 
         assert result is True
         assert provider.calls == []
-
-
-    class TestHeartbeatSessionStability:
-        @pytest.mark.asyncio
-        async def test_execute_uses_stable_session_key(self, tmp_path):
-            pytest.skip("Skipping stability test as HeartbeatService was unified into AutomationService")
-
-        @pytest.mark.asyncio
-        async def test_execute_passes_profile_id(self, tmp_path):
-            pytest.skip("Skipping stability test as HeartbeatService was unified into AutomationService")
-
-        @pytest.mark.asyncio
-        async def test_tick_uses_frontmatter_overrides(self, tmp_path):
-            pytest.skip("Skipping stability test as HeartbeatService was unified into AutomationService")
 
 
 class TestHeartbeatMultiChannel:

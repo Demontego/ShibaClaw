@@ -14,7 +14,7 @@ def get_app_root() -> Path:
 
     This is the canonical base for all user-level data that must not move
     when ``--config`` points to a custom location: auth tokens, update cache,
-    bridge install, and CLI history all live here.
+    update cache, and CLI history all live here.
     """
     return ensure_dir(Path.home() / ".shibaclaw")
 
@@ -66,11 +66,6 @@ def get_media_dir(channel: str | None = None) -> Path:
     return ensure_dir(base / channel) if channel else base
 
 
-def get_cron_dir() -> Path:
-    """Return the cron storage directory (legacy alias for get_automation_dir)."""
-    return get_runtime_subdir("cron")
-
-
 def get_automation_dir() -> Path:
     """Return the automation storage directory.
 
@@ -95,11 +90,6 @@ def get_workspace_path(workspace: str | None = None) -> Path:
 def get_cli_history_path() -> Path:
     """Return the shared CLI history file path."""
     return Path.home() / ".shibaclaw" / "history" / "cli_history"
-
-
-def get_bridge_install_dir() -> Path:
-    """Return the shared WhatsApp bridge installation directory."""
-    return Path.home() / ".shibaclaw" / "bridge"
 
 
 def get_legacy_sessions_dir() -> Path:

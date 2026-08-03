@@ -21,9 +21,6 @@
 
     <!-- Styles -->
     <link rel="stylesheet" href="/index.css?v=2">
-    <link rel="stylesheet" href="/css/mcp_manager.css?v=1">
-    <link rel="stylesheet" href="/css/connected_apps.css?v=1">
-    <link rel="stylesheet" href="/css/subagent-feedback.css?v=1">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/js/realtime.js"></script>
@@ -896,16 +893,6 @@
                         </button>
                     </div>
 
-                    <!--
-                            Legacy heartbeat fields — kept hidden so saveSettings() still collects them
-                            and avoids stripping existing config values. Managed via the Automation panel.
-                        -->
-                    <input type="hidden" id="s-hb-enabled" value="true">
-                    <input type="hidden" id="s-hb-interval" value="30">
-                    <input type="hidden" id="s-hb-model" value="">
-                    <input type="hidden" id="s-hb-profile" value="">
-                    <select id="s-hb-target-channel" style="display:none"></select>
-                    <input type="hidden" id="s-hb-target-id" value="">
                 </div>
 
                 <!-- Tab: Channels (split layout) -->

@@ -30,20 +30,6 @@ const SETTINGS_MODEL_PICKERS = [
         emptyChoiceProvider: "Inherits",
         allowEmpty: true,
     },
-    {
-        valueId: "s-hb-model",
-        buttonId: "s-hb-model-button",
-        displayId: "s-hb-model-display",
-        providerId: "s-hb-model-provider",
-        menuId: "s-hb-model-menu",
-        searchId: "s-hb-model-search",
-        listId: "s-hb-model-list",
-        emptyLabel: "Same as default model",
-        emptyProvider: "Inherits",
-        emptyChoiceLabel: "Same as default model",
-        emptyChoiceProvider: "Inherits",
-        allowEmpty: true,
-    },
 ];
 let _settingsModelPickersInitialized = false;
 

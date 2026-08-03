@@ -99,14 +99,25 @@ def _validate_schedule(schedule: AutomationSchedule) -> None:
             raise ValueError(f"unknown timezone '{schedule.tz}'") from None
 
 
-def _parse_schedule_kind(raw_kind: Any, job_name: str) -> str:
+def _parse_schedule_kind(
+    raw_kind: Any, job_name: str, schedule: dict | None = None
+) -> str:
+    """Parse schedule kind; optionally infer from schedule fields when kind missing."""
     if raw_kind in {"at", "every", "cron"}:
         return raw_kind
-    logger.warning(
-        "AutomationService: job '{}' has invalid or missing schedule kind '{}'; defaulting to 'cron'",
-        job_name,
-        raw_kind,
-    )
+    s = schedule or {}
+    if s.get("expr"):
+        return "cron"
+    if s.get("everyMs") or s.get("every_ms"):
+        return "every"
+    if s.get("atMs") or s.get("at_ms"):
+        return "at"
+    if raw_kind is not None:
+        logger.warning(
+            "AutomationService: job '{}' has invalid or missing schedule kind '{}'; defaulting to 'cron'",
+            job_name,
+            raw_kind,
+        )
     return "cron"
 
 
@@ -284,8 +295,8 @@ class AutomationService:
                 p = d.get("payload", {})
                 st = d.get("state", {})
                 now = _now_ms()
-                kind = AutomationService._parse_schedule_kind(
-                    s.get("kind"), s, d.get("name", "Migrated job")
+                kind = _parse_schedule_kind(
+                    s.get("kind"), d.get("name", "Migrated job"), s
                 )
                 job = AutomationJob(
                     id=d.get("id", str(uuid.uuid4())[:8]),
@@ -410,34 +421,11 @@ class AutomationService:
         }
 
     @staticmethod
-    def _parse_schedule_kind(raw_kind: Any, s: dict, job_name: str) -> str:
-        """Parse or infer a schedule kind from serialized data; warn on invalid kinds.
-        - `raw_kind`: value read from the serialized `kind` field (may be None)
-        - `s`: the raw schedule dict (used to infer kind from fields)
-        - `job_name`: used for logging context
-        """
-        if raw_kind in ("at", "every", "cron"):
-            return raw_kind
-        if s.get("expr"):
-            return "cron"
-        if s.get("everyMs") or s.get("every_ms"):
-            return "every"
-        if s.get("atMs") or s.get("at_ms"):
-            return "at"
-        if raw_kind is not None:
-            logger.warning(
-                "AutomationService: job '{}' has invalid or missing schedule kind '{}'; defaulting to 'cron'",
-                job_name,
-                raw_kind,
-            )
-        return "cron"
-
-    @staticmethod
     def _job_from_dict(d: dict) -> AutomationJob:
         s = d.get("schedule", {})
         p = d.get("payload", {})
         st = d.get("state", {})
-        kind = AutomationService._parse_schedule_kind(s.get("kind"), s, d.get("name", ""))
+        kind = _parse_schedule_kind(s.get("kind"), d.get("name", ""), s)
         return AutomationJob(
             id=d["id"],
             name=d.get("name", ""),

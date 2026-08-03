@@ -59,14 +59,10 @@ def _load_key_from_config() -> str:
         pass
 
     try:
-        from shibaclaw.webui.agent_manager import agent_manager
-        cfg = agent_manager.config
-        if not cfg:
-            agent_manager.load_latest_config()
-            cfg = agent_manager.config
-        if not cfg:
-            return ""
-        apps_cfg = cfg.connected_apps
+        from shibaclaw.config.loader import load_config
+
+        cfg = load_config()
+        apps_cfg = getattr(cfg, "connected_apps", None)
         if not apps_cfg:
             return ""
         backend = (

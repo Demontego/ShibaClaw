@@ -45,4 +45,6 @@ async def test_shibabrain_task_cancelling():
     except asyncio.CancelledError:
         pass
 
-    assert True
+    assert task.done()
+    # Outer cancellation should not hang; inbound consumer was entered.
+    brain.bus.consume_inbound.assert_called()

@@ -66,6 +66,13 @@ async def gateway_command(
     from shibaclaw.integrations.manager import ChannelManager
 
     from .commands import _load_runtime_config, _make_provider
+    from .gateway_protocol import (
+        TokenCoalescer,
+        http_json_response,
+        serialize_automation_job,
+        ws_err,
+        ws_ok,
+    )
 
     setup_shiba_logging(level="DEBUG" if verbose else "INFO")
 
@@ -478,44 +485,12 @@ async def gateway_command(
         nonlocal _state
 
         def _ok(data: dict | None = None):
-            return json.dumps(
-                {"type": "response", "id": request_id, "ok": True, "payload": data or {}}
-            )
+            return ws_ok(request_id, data)
 
         def _err(error: str):
-            return json.dumps({"type": "response", "id": request_id, "ok": False, "error": error})
+            return ws_err(request_id, error)
 
-        def _ser_job(j) -> dict:
-            return {
-                "id": j.id,
-                "name": j.name,
-                "enabled": j.enabled,
-                "kind": j.payload.kind,
-                "schedule": {
-                    "kind": j.schedule.kind,
-                    "atMs": j.schedule.at_ms,
-                    "everyMs": j.schedule.every_ms,
-                    "expr": j.schedule.expr,
-                    "tz": j.schedule.tz,
-                },
-                "payload": {
-                    "kind": j.payload.kind,
-                    "message": j.payload.message,
-                    "heartbeatFile": j.payload.heartbeat_file,
-                    "deliver": j.payload.deliver,
-                    "channel": j.payload.channel,
-                    "to": j.payload.to,
-                    "targets": j.payload.targets,
-                },
-                "state": {
-                    "nextRunAtMs": j.state.next_run_at_ms,
-                    "lastRunAtMs": j.state.last_run_at_ms,
-                    "lastStatus": j.state.last_status,
-                    "lastError": j.state.last_error,
-                    "runCount": j.state.run_count,
-                },
-                "deleteAfterRun": j.delete_after_run,
-            }
+        _ser_job = serialize_automation_job
 
         try:
             if action == "status":
@@ -550,33 +525,48 @@ async def gateway_command(
                         except websockets.exceptions.ConnectionClosed:
                             pass
 
+                    async def _send_token_chunk(chunk: str):
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "type": "event",
+                                    "name": "chat.response_token",
+                                    "request_id": request_id,
+                                    "payload": {"c": chunk},
+                                }
+                            )
+                        )
+
+                    coalescer = TokenCoalescer(_send_token_chunk)
+
                     async def _on_ws_response_token(token_text):
                         try:
-                            await ws.send(
-                                json.dumps(
-                                    {
-                                        "type": "event",
-                                        "name": "chat.response_token",
-                                        "request_id": request_id,
-                                        "payload": {"c": token_text},
-                                    }
-                                )
-                            )
+                            await coalescer.add(token_text)
                         except websockets.exceptions.ConnectionClosed:
                             pass
 
                     try:
-                        out = await agent.process_direct(
-                            content=payload.get("content", ""),
-                            session_key=payload.get("session_key", "webui:direct"),
-                            channel=payload.get("channel", "webui"),
-                            chat_id=payload.get("chat_id", "direct"),
-                            on_progress=_on_ws_progress,
-                            on_response_token=_on_ws_response_token,
-                            media=payload.get("media"),
-                            metadata=payload.get("metadata"),
-                            profile_id=payload.get("profile_id"),
-                        )
+                        try:
+                            out = await agent.process_direct(
+                                content=payload.get("content", ""),
+                                session_key=payload.get("session_key", "webui:direct"),
+                                channel=payload.get("channel", "webui"),
+                                chat_id=payload.get("chat_id", "direct"),
+                                on_progress=_on_ws_progress,
+                                on_response_token=_on_ws_response_token,
+                                media=payload.get("media"),
+                                metadata=payload.get("metadata"),
+                                profile_id=payload.get("profile_id"),
+                            )
+                        finally:
+                            await coalescer.close()
+                        if coalescer.token_count:
+                            logger.debug(
+                                "WS token coalesce: {} tokens -> {} sends (dropped={})",
+                                coalescer.token_count,
+                                coalescer.send_count,
+                                coalescer.dropped,
+                            )
                         await ws.send(
                             json.dumps(
                                 {
@@ -732,42 +722,6 @@ async def gateway_command(
                 else:
                     await ws.send(_err("job not found"))
 
-            # --- Backward-compat aliases (deprecated, keep for WebUI compat) ---
-            elif action == "cron.list":
-                scheduled = [
-                    j
-                    for j in automation.list_jobs(include_disabled=True)
-                    if j.payload.kind == "scheduled"
-                ]
-                await ws.send(_ok({"jobs": [_ser_job(j) for j in scheduled]}))
-
-            elif action == "cron.trigger":
-                job_id = payload.get("job_id", "")
-                ran = await automation.run_job(job_id, force=True)
-                await ws.send(_ok({"triggered": ran}))
-
-            elif action == "heartbeat.status":
-                hb_jobs = [j for j in automation.list_jobs() if j.payload.kind == "heartbeat"]
-                hb = hb_jobs[0] if hb_jobs else None
-                await ws.send(
-                    _ok(
-                        {
-                            "enabled": hb is not None and hb.enabled,
-                            "running": automation.status()["running"],
-                            "last_run_ms": hb.state.last_run_at_ms if hb else None,
-                            "last_status": hb.state.last_status if hb else None,
-                        }
-                    )
-                )
-
-            elif action == "heartbeat.trigger":
-                hb_jobs = [j for j in automation.list_jobs() if j.payload.kind == "heartbeat"]
-                if not hb_jobs:
-                    await ws.send(_err("no heartbeat job configured"))
-                else:
-                    ran = await automation.run_job(hb_jobs[0].id, force=True)
-                    await ws.send(_ok({"triggered": ran}))
-
             elif action == "archive":
                 snapshot = payload.get("snapshot", [])
                 archived = False
@@ -857,18 +811,7 @@ async def gateway_command(
                     return f"Authorization: Bearer {expected_token}".encode() in data
 
                 def _json_response(body: dict, status: int = 200) -> bytes:
-                    phrase = (
-                        "OK"
-                        if status == 200
-                        else ("Unauthorized" if status == 401 else "Not Found")
-                    )
-                    payload = json.dumps(body, ensure_ascii=False).encode()
-                    return (
-                        f"HTTP/1.0 {status} {phrase}\r\n"
-                        f"Content-Type: application/json\r\n"
-                        f"Content-Length: {len(payload)}\r\n"
-                        f"\r\n"
-                    ).encode() + payload
+                    return http_json_response(body, status)
 
                 def _parse_body() -> dict:
                     idx = data.find(b"\r\n\r\n")
@@ -879,37 +822,7 @@ async def gateway_command(
                     except (json.JSONDecodeError, ValueError):
                         return {}
 
-                def _serialize_job(j) -> dict:
-                    return {
-                        "id": j.id,
-                        "name": j.name,
-                        "enabled": j.enabled,
-                        "kind": j.payload.kind,
-                        "schedule": {
-                            "kind": j.schedule.kind,
-                            "atMs": j.schedule.at_ms,
-                            "everyMs": j.schedule.every_ms,
-                            "expr": j.schedule.expr,
-                            "tz": j.schedule.tz,
-                        },
-                        "payload": {
-                            "kind": j.payload.kind,
-                            "message": j.payload.message,
-                            "heartbeatFile": j.payload.heartbeat_file,
-                            "deliver": j.payload.deliver,
-                            "channel": j.payload.channel,
-                            "to": j.payload.to,
-                            "targets": j.payload.targets,
-                        },
-                        "state": {
-                            "nextRunAtMs": j.state.next_run_at_ms,
-                            "lastRunAtMs": j.state.last_run_at_ms,
-                            "lastStatus": j.state.last_status,
-                            "lastError": j.state.last_error,
-                            "runCount": j.state.run_count,
-                        },
-                        "deleteAfterRun": j.delete_after_run,
-                    }
+                _serialize_job = serialize_automation_job
 
                 if "POST" in request_line and "/restart" in request_line:
                     if not _check_auth():
@@ -1035,25 +948,7 @@ async def gateway_command(
                         ran = await automation.run_job(job_id, force=True)
                         writer.write(_json_response({"triggered": ran}))
 
-                # --- Backward-compat HTTP aliases ---
-                elif "GET" in request_line and "/heartbeat/status" in request_line:
-                    hb_jobs = [j for j in automation.list_jobs() if j.payload.kind == "heartbeat"]
-                    hb = hb_jobs[0] if hb_jobs else None
-                    writer.write(
-                        _json_response(
-                            {
-                                "enabled": hb is not None and hb.enabled,
-                                "running": automation.status()["running"],
-                                "last_run_ms": hb.state.last_run_at_ms if hb else None,
-                                "last_status": hb.state.last_status if hb else None,
-                            }
-                        )
-                    )
-
-                elif "POST" in request_line and (
-                    "/heartbeat/trigger" in request_line
-                    or "/api/automation/trigger-heartbeats" in request_line
-                ):
+                elif "POST" in request_line and "/api/automation/trigger-heartbeats" in request_line:
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
@@ -1067,24 +962,6 @@ async def gateway_command(
                             writer.write(
                                 _json_response({"triggered": False, "error": "no heartbeat job"})
                             )
-
-                elif "GET" in request_line and "/api/cron/list" in request_line:
-                    scheduled = [
-                        j
-                        for j in automation.list_jobs(include_disabled=True)
-                        if j.payload.kind == "scheduled"
-                    ]
-                    writer.write(_json_response({"jobs": [_serialize_job(j) for j in scheduled]}))
-
-                elif "POST" in request_line and "/api/cron/trigger/" in request_line:
-                    if not _check_auth():
-                        writer.write(_json_response({"error": "unauthorized"}, 401))
-                    else:
-                        job_id = (
-                            request_line.split("/api/cron/trigger/")[1].split(" ")[0].split("?")[0]
-                        )
-                        ran = await automation.run_job(job_id, force=True)
-                        writer.write(_json_response({"triggered": ran}))
 
                 elif "POST" in request_line and "/api/chat" in request_line:
                     if not _check_auth():
