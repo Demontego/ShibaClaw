@@ -16,6 +16,7 @@ from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
 from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.config.paths import get_media_dir
 from shibaclaw.config.schema import ExecToolConfig
 from shibaclaw.helpers.helpers import build_assistant_message
 from shibaclaw.thinkers.base import Thinker
@@ -188,6 +189,8 @@ class SubagentManager:
             tools = SkillVault()
             allowed_dir = self.workspace if self.restrict_to_workspace else None
             extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
+            if allowed_dir:
+                extra_read = [*(extra_read or []), get_media_dir()]
             tools.register(
                 ReadFileTool(
                     workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read

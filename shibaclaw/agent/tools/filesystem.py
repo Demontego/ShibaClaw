@@ -1,6 +1,9 @@
 """File system tools: read, write, edit, list."""
 
+import asyncio
 import difflib
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -109,7 +112,31 @@ class ReadFileTool(_FsTool):
             if not fp.is_file():
                 return f"Error: Not a file: {path}"
 
-            all_lines = fp.read_text(encoding="utf-8").splitlines()
+            try:
+                all_lines = fp.read_text(encoding="utf-8").splitlines()
+            except UnicodeDecodeError:
+                size = fp.stat().st_size
+                if fp.suffix.lower() != ".pdf":
+                    return f"Binary file ({size:,} bytes) at {fp}. Cannot read as UTF-8 text."
+                if not shutil.which("pdftotext"):
+                    return (
+                        f"Binary PDF ({size:,} bytes) at {fp}. "
+                        "Install poppler-utils (pdftotext) to extract text."
+                    )
+                try:
+                    result = await asyncio.to_thread(
+                        subprocess.run,
+                        ["pdftotext", "-layout", "-enc", "UTF-8", str(fp), "-"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        check=False,
+                    )
+                except Exception as e:
+                    return f"Binary PDF ({size:,} bytes) at {fp}. Extract failed: {e}"
+                if result.returncode != 0 or not result.stdout.strip():
+                    return f"Binary PDF ({size:,} bytes) at {fp}. pdftotext produced no text."
+                all_lines = result.stdout.splitlines()
             total = len(all_lines)
 
             if offset < 1:

@@ -21,6 +21,7 @@
 
     <!-- Styles -->
     <link rel="stylesheet" href="/index.css?v=2">
+    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=1">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/js/realtime.js"></script>
@@ -93,30 +94,38 @@
 
             <div class="sidebar-actions">
                 <button class="btn-action btn-new-chat" id="btn-new-session">
-                    <span class="material-icons-round">add_circle</span>
+                    <span class="material-icons-round">add</span>
                     <span data-i18n="nav.new_session">New Session</span>
                 </button>
             </div>
 
-
-            <div class="sidebar-section">
+            <div class="sidebar-section tools-section">
                 <div class="section-title" data-i18n="nav.tools">TOOLS</div>
-                <button class="btn-command" onclick="openModal('fs-modal')">
-                    <span class="material-icons-round">folder_open</span> <span data-i18n="nav.files">Files</span>
-                </button>
-                <button class="btn-command" onclick="openModal('automation-modal')">
-                    <span class="material-icons-round">event_repeat</span> <span data-i18n="nav.automation">Automation</span>
-                    <span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
-                </button>
-                <button class="btn-command" onclick="openModal('knowledge-modal')">
-                    <span class="material-icons-round">library_books</span> <span data-i18n="nav.knowledge">Knowledge Base</span>
-                </button>
-                <button class="btn-command" onclick="openModal('connected-apps-modal')">
-                    <span class="material-icons-round">apps</span> <span data-i18n="nav.apps">Apps</span>
-                </button>
-                <button class="btn-command" onclick="openModal('settings-modal')">
-                    <span class="material-icons-round">settings</span> <span data-i18n="nav.settings">Settings</span>
-                </button>
+                <nav class="sidebar-tools" aria-label="Tools">
+                    <button class="btn-command" onclick="openModal('fs-modal')" data-i18n-title="nav.files"
+                        data-i18n-aria="nav.files" title="Files" aria-label="Files">
+                        <span class="material-icons-round">folder_open</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('automation-modal')"
+                        data-i18n-title="nav.automation" data-i18n-aria="nav.automation" title="Automation"
+                        aria-label="Automation">
+                        <span class="material-icons-round">event_repeat</span>
+                        <span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('knowledge-modal')"
+                        data-i18n-title="nav.knowledge" data-i18n-aria="nav.knowledge" title="Knowledge Base"
+                        aria-label="Knowledge Base">
+                        <span class="material-icons-round">library_books</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('connected-apps-modal')" data-i18n-title="nav.apps"
+                        data-i18n-aria="nav.apps" title="Apps" aria-label="Apps">
+                        <span class="material-icons-round">apps</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('settings-modal')" data-i18n-title="nav.settings"
+                        data-i18n-aria="nav.settings" title="Settings" aria-label="Settings">
+                        <span class="material-icons-round">settings</span>
+                    </button>
+                </nav>
             </div>
 
             <!-- History Section -->
@@ -1530,6 +1539,7 @@
     <script src="/js/mcp_manager.js?v=1"></script>
     <script src="/js/connected_apps.js?v=1"></script>
     <script src="/js/mentions.js?v=1"></script>
+    <script src="/static/js/chat_history_window.js?v=1"></script>
 </body>
 
 </html>

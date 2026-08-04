@@ -1,5 +1,8 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 from shibaclaw.integrations.telegram import (
     TelegramChannel,
     TelegramConfig,
@@ -350,6 +353,58 @@ def test_telegram_config_ai_defaults():
     assert cfg.managed_bots_enabled is False
     assert cfg.rich_messages is False
     assert cfg.open_groups is False
+    assert cfg.local_api_url == ""
+    assert cfg.max_media_bytes == 500 * 1024 * 1024
+
+
+def test_local_bot_api_path_maps_container_volume(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    host_file = tmp_path / ".shibaclaw/telegram-bot-api/data/user/file.pdf"
+    host_file.parent.mkdir(parents=True)
+    host_file.write_bytes(b"%PDF")
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        resolved = channel._resolve_local_bot_api_path("/var/lib/telegram-bot-api/user/file.pdf")
+
+    assert resolved == host_file
+
+
+def test_video_note_uses_mp4_extension():
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+
+    assert channel._get_extension("video", "video/mp4") == ".mp4"
+
+
+@pytest.mark.asyncio
+async def test_cloud_bot_api_rejects_media_above_20_mib():
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    get_file = AsyncMock()
+    channel._app = SimpleNamespace(bot=SimpleNamespace(get_file=get_file))
+    document = SimpleNamespace(
+        file_id="file-id",
+        file_unique_id="file-unique-id",
+        file_name="large.pdf",
+        file_size=21 * 1024 * 1024,
+        mime_type="application/pdf",
+    )
+    message = SimpleNamespace(
+        photo=None,
+        voice=None,
+        audio=None,
+        document=document,
+        video=None,
+        video_note=None,
+        animation=None,
+    )
+
+    media, content = await channel._download_message_media(message, add_failure_content=True)
+
+    assert media == []
+    assert "Telegram cloud Bot API limit 20 MiB" in content[0]
+    get_file.assert_not_awaited()
 
 
 @pytest.mark.asyncio

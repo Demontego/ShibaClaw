@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
+from shibaclaw.config.paths import get_media_dir
 from shibaclaw.webui.agent_manager import agent_manager
 
 _LOCAL_HOSTS = frozenset(("0.0.0.0", "::", "", "127.0.0.1", "localhost"))
@@ -106,9 +107,12 @@ def _resolve_workspace_path(path_str: str | None) -> Path | None:
         return workspace
     raw = Path(path_str)
     resolved = (workspace / raw).resolve() if not raw.is_absolute() else raw.resolve()
-    if not resolved.is_relative_to(workspace):
-        return None
-    return resolved
+    if resolved.is_relative_to(workspace):
+        return resolved
+    media_root = get_media_dir().resolve()
+    if resolved.is_relative_to(media_root) and resolved.is_file():
+        return resolved
+    return None
 
 
 # Global caches for context

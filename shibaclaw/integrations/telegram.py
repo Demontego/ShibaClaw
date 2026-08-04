@@ -1,10 +1,13 @@
 """Telegram channel implementation using python-telegram-bot."""
 
 from __future__ import annotations
+
 import asyncio
 import itertools
 import logging
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from loguru import logger
@@ -142,6 +145,10 @@ class TelegramConfig(Base):
     open_groups: bool = False
     # Public HTTPS URL for Telegram Mini App (Menu Button / BotFather).
     mini_app_url: str = ""
+    # Local Bot API base, e.g. http://127.0.0.1:8081 (empty uses api.telegram.org).
+    local_api_url: str = ""
+    # Soft inbound media cap; Local Bot API supports files beyond the cloud 20 MiB limit.
+    max_media_bytes: int = 524288000
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -252,11 +259,12 @@ class TelegramChannel(BaseChannel):
 
     def _build_app(self, proxy: str | None = None) -> None:
         """Build the Telegram Application with separate HTTP pools."""
+        local_api_url = self.config.local_api_url.strip().rstrip("/")
         api_request = HTTPXRequest(
             connection_pool_size=self.config.connection_pool_size,
             pool_timeout=self.config.pool_timeout,
             connect_timeout=30.0,
-            read_timeout=30.0,
+            read_timeout=600.0 if local_api_url else 30.0,
             proxy=proxy,
         )
         poll_request = HTTPXRequest(
@@ -272,6 +280,13 @@ class TelegramChannel(BaseChannel):
             .request(api_request)
             .get_updates_request(poll_request)
         )
+        if local_api_url:
+            builder = (
+                builder.base_url(f"{local_api_url}/bot")
+                .base_file_url(f"{local_api_url}/file/bot")
+                .local_mode(True)
+            )
+            logger.info("Telegram using Local Bot API at {}", local_api_url)
         self._app = builder.build()
 
     async def start_for_sending(self) -> None:
@@ -304,7 +319,14 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(CommandHandler("restart", self._forward_command))
         self._app.add_handler(CommandHandler("help", self._on_help))
         _content_filter = (
-            filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO | filters.Document.ALL
+            filters.TEXT
+            | filters.PHOTO
+            | filters.VOICE
+            | filters.AUDIO
+            | filters.Document.ALL
+            | filters.VIDEO
+            | filters.VIDEO_NOTE
+            | filters.ANIMATION
         ) & ~filters.COMMAND
         self._app.add_handler(MessageHandler(_content_filter, self._on_message))
         self._app.add_handler(
@@ -1345,6 +1367,21 @@ class TelegramChannel(BaseChannel):
             text = text[:TELEGRAM_REPLY_CONTEXT_MAX_LEN] + "..."
         return f"[Reply to: {text}]" if text else None
 
+    def _resolve_local_bot_api_path(self, file_path: str) -> Path | None:
+        """Map a Local Bot API container path to its host-mounted data directory."""
+        path = Path(file_path)
+        if path.is_file():
+            return path
+
+        container_root = Path("/var/lib/telegram-bot-api")
+        try:
+            relative_path = path.relative_to(container_root)
+        except ValueError:
+            return None
+
+        host_path = Path.home() / ".shibaclaw/telegram-bot-api/data" / relative_path
+        return host_path if host_path.is_file() else None
+
     async def _download_message_media(
         self, msg, *, add_failure_content: bool = False
     ) -> tuple[list[str], list[str]]:
@@ -1374,17 +1411,80 @@ class TelegramChannel(BaseChannel):
             media_type = "animation"
         if not media_file or not self._app:
             return [], []
+
+        file_size = int(getattr(media_file, "file_size", 0) or 0)
+        original_name = getattr(media_file, "file_name", None)
+        local_api = bool(self.config.local_api_url.strip())
+        cloud_limit = 20 * 1024 * 1024
+        configured_limit = max(0, self.config.max_media_bytes)
+        max_download_bytes = configured_limit or (500 * 1024 * 1024 if local_api else cloud_limit)
+        if not local_api:
+            max_download_bytes = min(max_download_bytes, cloud_limit)
+
+        size_mib = file_size / (1024 * 1024) if file_size else 0
+        size_label = f" ({size_mib:.1f} MiB)" if size_mib else ""
+        limit_mib = max_download_bytes / (1024 * 1024)
+        limit_kind = "configured Local Bot API" if local_api else "Telegram cloud Bot API"
+        limit_hint = (
+            "raise channels.telegram.maxMediaBytes"
+            if local_api
+            else "configure channels.telegram.localApiUrl or send a smaller file"
+        )
+        too_large_content = (
+            f"[{media_type}: too large{size_label} — {limit_kind} limit "
+            f"{limit_mib:g} MiB; {limit_hint}]"
+        )
+        if max_download_bytes and file_size > max_download_bytes:
+            logger.warning(
+                "Skipping Telegram media above download limit (size={} limit={} name={})",
+                file_size,
+                max_download_bytes,
+                original_name,
+            )
+            return ([], [too_large_content]) if add_failure_content else ([], [])
+
         try:
-            file = await self._app.bot.get_file(media_file.file_id)
+            request_timeout = 600 if local_api else 300
+            file = await self._app.bot.get_file(
+                media_file.file_id,
+                read_timeout=request_timeout,
+                write_timeout=request_timeout,
+                connect_timeout=60,
+            )
             ext = self._get_extension(
                 media_type,
                 getattr(media_file, "mime_type", None),
-                getattr(media_file, "file_name", None),
+                original_name,
             )
             media_dir = get_media_dir("telegram")
             unique_id = getattr(media_file, "file_unique_id", media_file.file_id)
-            file_path = media_dir / f"{unique_id}{ext}"
-            await file.download_to_drive(str(file_path))
+            filename = f"{unique_id}{ext}"
+            if original_name:
+                original_basename = Path(original_name).name
+                safe_name = "".join(
+                    char if char.isalnum() or char in "-_." else "_" for char in original_basename
+                )[:120]
+                if safe_name:
+                    if not Path(safe_name).suffix and ext:
+                        safe_name += ext
+                    filename = f"{unique_id}_{safe_name}"
+            file_path = media_dir / filename
+
+            copied = False
+            remote_path = getattr(file, "file_path", None)
+            if local_api and remote_path:
+                host_path = self._resolve_local_bot_api_path(remote_path)
+                if host_path is not None:
+                    if host_path.resolve() != file_path.resolve():
+                        await asyncio.to_thread(shutil.copy2, host_path, file_path)
+                    copied = True
+            if not copied:
+                await file.download_to_drive(
+                    str(file_path),
+                    read_timeout=request_timeout,
+                    write_timeout=request_timeout,
+                )
+
             path_str = str(file_path)
             if media_type in ("voice", "audio"):
                 transcription = await self.transcribe_audio(file_path)
@@ -1392,12 +1492,26 @@ class TelegramChannel(BaseChannel):
                     logger.info("Transcribed {}: {}...", media_type, transcription[:50])
                     return [path_str], [f"[transcription: {transcription}]"]
                 return [path_str], [f"[{media_type}: {path_str}]"]
+            if media_type == "file" and original_name:
+                return [path_str], [f"[file: {original_name} → {path_str}]"]
             return [path_str], [f"[{media_type}: {path_str}]"]
         except Exception as e:
-            logger.warning("Failed to download message media: {}", e)
-            if add_failure_content:
-                return [], [f"[{media_type}: download failed]"]
-            return [], []
+            error = str(e)
+            error_lower = error.lower()
+            too_large = file_size > max_download_bytes or any(
+                marker in error_lower for marker in ("too big", "file_too_big")
+            )
+            logger.warning(
+                "Failed to download Telegram media (size={} name={}): {}",
+                file_size,
+                original_name,
+                e,
+            )
+            if not add_failure_content:
+                return [], []
+            if too_large:
+                return [], [too_large_content]
+            return [], [f"[{media_type}: download failed: {error[:120]}]"]
 
     async def _ensure_bot_identity(self) -> tuple[int | None, str | None]:
         """Load bot identity once and reuse it for mention/reply checks."""
@@ -1767,10 +1881,19 @@ class TelegramChannel(BaseChannel):
                 "audio/ogg": ".ogg",
                 "audio/mpeg": ".mp3",
                 "audio/mp4": ".m4a",
+                "video/mp4": ".mp4",
+                "video/webm": ".webm",
             }
             if mime_type in ext_map:
                 return ext_map[mime_type]
-        type_map = {"image": ".jpg", "voice": ".ogg", "audio": ".mp3", "file": ""}
+        type_map = {
+            "image": ".jpg",
+            "voice": ".ogg",
+            "audio": ".mp3",
+            "video": ".mp4",
+            "animation": ".mp4",
+            "file": "",
+        }
         if ext := type_map.get(media_type, ""):
             return ext
         if filename:

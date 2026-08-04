@@ -13,3 +13,14 @@ def test_filesystem_tools_block_secretary_archive_and_children(tmp_path: Path, p
 
     with pytest.raises(PermissionError, match="Secretary archive"):
         ReadFileTool(workspace=tmp_path)._resolve(path)
+
+
+@pytest.mark.asyncio
+async def test_read_file_reports_binary_content(tmp_path: Path):
+    binary = tmp_path / "sample.bin"
+    binary.write_bytes(b"\xff\x00\x01")
+
+    result = await ReadFileTool(workspace=tmp_path).execute("sample.bin")
+
+    assert "Binary file (3 bytes)" in result
+    assert "Cannot read as UTF-8 text" in result
