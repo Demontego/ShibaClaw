@@ -1,16 +1,27 @@
 // ── Channel icons & labels for grouping ─────────────────────
 const CHANNEL_META = {
-    webui: { icon: "language", label: "Web UI" },
-    telegram: { icon: "send", label: "Telegram" },
-    discord: { icon: "forum", label: "Discord" },
-    slack: { icon: "tag", label: "Slack" },
-    api: { icon: "api", label: "API" },
-    cli: { icon: "terminal", label: "CLI" },
-    automation: { icon: "autorenew", label: "Automation" },
-    heartbeat: { icon: "autorenew", label: "Recurring" },
-    cron: { icon: "schedule_send", label: "One-time" },
-    _default: { icon: "chat_bubble", label: "Other" }
+    webui: { icon: "language" },
+    telegram: { icon: "send" },
+    discord: { icon: "forum" },
+    slack: { icon: "tag" },
+    api: { icon: "api" },
+    cli: { icon: "terminal" },
+    automation: { icon: "autorenew" },
+    heartbeat: { icon: "autorenew" },
+    cron: { icon: "schedule_send" },
+    _default: { icon: "chat_bubble" }
 };
+const _CHANNEL_LABEL_FB = {
+    webui: "Web UI", telegram: "Telegram", discord: "Discord", slack: "Slack",
+    api: "API", cli: "CLI", automation: "Automation", heartbeat: "Recurring",
+    cron: "One-time", other: "Other"
+};
+function _channelLabel(ch) {
+    const key = ch === "_default" ? "sessions.channel.other" : `sessions.channel.${ch}`;
+    return (typeof t === "function" ? t(key) : _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch])
+        || _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch]
+        || ch.charAt(0).toUpperCase() + ch.slice(1);
+}
 const CHANNEL_ORDER = ["telegram", "webui", "automation", "heartbeat", "cron", "cli", "api", "discord", "slack"];
 
 let _sessionSearchQuery = "";
@@ -36,7 +47,8 @@ function _extractChannel(key) {
 }
 
 function _channelInfo(ch) {
-    return CHANNEL_META[ch] || { icon: CHANNEL_META._default.icon, label: ch.charAt(0).toUpperCase() + ch.slice(1) };
+    const meta = CHANNEL_META[ch] || CHANNEL_META._default;
+    return { icon: meta.icon, label: _channelLabel(ch === "_default" ? "other" : ch) };
 }
 
 function _sessionKeyTail(key) {
@@ -212,13 +224,13 @@ function _buildSessionEl(sess) {
             </button>
             <div class="session-dropdown" data-session-key="${safeKey}">
                 <div class="dropdown-item rename-action">
-                    <span class="material-icons-round">edit</span> Rename
+                    <span class="material-icons-round">edit</span> ${escapeHtml(typeof t === "function" ? t("sessions.rename") : "Rename")}
                 </div>
                 <div class="dropdown-item archive-action">
-                    <span class="material-icons-round">archive</span> Archive
+                    <span class="material-icons-round">archive</span> ${escapeHtml(typeof t === "function" ? t("sessions.archive") : "Archive")}
                 </div>
                 <div class="dropdown-item danger delete-action">
-                    <span class="material-icons-round">delete</span> Delete
+                    <span class="material-icons-round">delete</span> ${escapeHtml(typeof t === "function" ? t("sessions.delete") : "Delete")}
                 </div>
             </div>
         </div>
@@ -297,11 +309,11 @@ function _renderSessionsList() {
     list.innerHTML = "";
 
     if (!_sessionsCache.length) {
-        list.innerHTML = `<div class="history-empty">No past sessions</div>`;
+        list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.empty") : "No past sessions")}</div>`;
         return;
     }
     if (!sessions.length) {
-        list.innerHTML = `<div class="history-empty">No matches</div>`;
+        list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.no_matches") : "No matches")}</div>`;
         return;
     }
 
@@ -350,9 +362,11 @@ async function loadHistory() {
         _sessionsCache = data.sessions || [];
         _renderSessionsList();
     } catch (e) {
-        if (list) list.innerHTML = `<div class="history-empty">Error loading history</div>`;
+        if (list) list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.load_error") : "Error loading history")}</div>`;
     }
 }
+window.loadHistory = loadHistory;
+window._renderSessionsList = _renderSessionsList;
 
 
 window.toggleSessionMenu = function (event, btn, key) {
@@ -388,7 +402,10 @@ window.toggleSessionMenu = function (event, btn, key) {
 };
 
 window.renameSessionPrompt = async function (key, currentName) {
-    const newName = await shibaDialog("prompt", "Rename Session", "Enter new name for session:", { defaultValue: currentName, confirmText: "Rename" });
+    const newName = await shibaDialog("prompt",
+        typeof t === "function" ? t("sessions.rename_title") : "Rename Session",
+        typeof t === "function" ? t("sessions.rename_prompt") : "Enter new name for session:",
+        { defaultValue: currentName, confirmText: typeof t === "function" ? t("sessions.rename") : "Rename" });
     if (newName && newName !== currentName) {
         renameSession(key, newName);
     }
@@ -509,7 +526,10 @@ function removeSessionFromUI(key) {
 }
 
 window.deleteSession = async function (key) {
-    const ok = await shibaDialog("confirm", "Delete Session", "This session will be permanently deleted.", { confirmText: "Delete", danger: true });
+    const ok = await shibaDialog("confirm",
+        typeof t === "function" ? t("sessions.delete_title") : "Delete Session",
+        typeof t === "function" ? t("sessions.delete_body") : "This session will be permanently deleted.",
+        { confirmText: typeof t === "function" ? t("sessions.delete") : "Delete", danger: true });
     if (!ok) return;
 
     removeSessionFromUI(key);
@@ -521,7 +541,10 @@ window.deleteSession = async function (key) {
 };
 
 window.archiveSession = async function (key) {
-    const ok = await shibaDialog("confirm", "Archive Session", "This session will run the same consolidation flow as /new and then be removed.", { confirmText: "Archive" });
+    const ok = await shibaDialog("confirm",
+        typeof t === "function" ? t("sessions.archive_title") : "Archive Session",
+        typeof t === "function" ? t("sessions.archive_body") : "This session will run the same consolidation flow as /new and then be removed.",
+        { confirmText: typeof t === "function" ? t("sessions.archive") : "Archive" });
     if (!ok) return;
 
     removeSessionFromUI(key);

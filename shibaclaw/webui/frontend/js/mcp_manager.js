@@ -21,14 +21,14 @@
     async function _fetchAndRender() {
         const container = document.getElementById("mcp-manager-container");
         if (!container) return;
-        container.innerHTML = `<div class="mcp-loading"><span class="material-icons-round spin">progress_activity</span> Loading…</div>`;
+        container.innerHTML = `<div class="mcp-loading"><span class="material-icons-round spin">progress_activity</span> ${escapeHtml(typeof t === "function" ? t("mcp.loading") : "Loading…")}</div>`;
         try {
             const res = await authFetch("/api/mcp/servers");
             const data = await res.json();
             _servers = data.servers || [];
             _renderList(container);
         } catch (e) {
-            container.innerHTML = `<div class="mcp-error"><span class="material-icons-round">error_outline</span> Failed to load MCP servers.</div>`;
+            container.innerHTML = `<div class="mcp-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(typeof t === "function" ? t("mcp.load_failed") : "Failed to load MCP servers.")}</div>`;
         }
     }
 
@@ -38,15 +38,15 @@
 
         container.innerHTML = `
             <div class="mcp-toolbar">
-                <span class="mcp-server-count">${_servers.length} server${_servers.length !== 1 ? "s" : ""} configured</span>
+                <span class="mcp-server-count">${escapeHtml(typeof t === "function" ? t("mcp.count", { n: _servers.length }) : `${_servers.length} server${_servers.length !== 1 ? "s" : ""} configured`)}</span>
                 <button class="btn-primary btn-sm" id="mcp-add-btn">
-                    <span class="material-icons-round" style="font-size:15px;vertical-align:middle">add</span> Add Server
+                    <span class="material-icons-round" style="font-size:15px;vertical-align:middle">add</span> ${escapeHtml(typeof t === "function" ? t("mcp.add") : "Add Server")}
                 </button>
             </div>
             <div class="mcp-list" id="mcp-list">
                 ${hasServers
                     ? _servers.map(_buildServerRow).join("")
-                    : `<div class="mcp-empty"><span class="material-icons-round">hub</span><p>No MCP servers configured yet.</p><p class="mcp-empty-hint">Click <b>Add Server</b> to connect your first MCP server.</p></div>`
+                    : `<div class="mcp-empty"><span class="material-icons-round">hub</span><p>${escapeHtml(typeof t === "function" ? t("mcp.empty") : "No MCP servers configured yet.")}</p><p class="mcp-empty-hint">${escapeHtml(typeof t === "function" ? t("mcp.add") : "Add Server")}</p></div>`
                 }
             </div>
             <div class="mcp-editor-overlay" id="mcp-editor-overlay" style="display:none">
@@ -89,8 +89,8 @@
             <div class="mcp-row-status" id="mcp-status-${sid}"></div>
             <div class="mcp-row-actions">
                 <button class="btn-icon mcp-row-test" title="Test connection"><span class="material-icons-round">bolt</span></button>
-                <button class="btn-icon mcp-row-edit" title="Edit"><span class="material-icons-round">edit</span></button>
-                <button class="btn-icon mcp-row-delete danger" title="Delete"><span class="material-icons-round">delete</span></button>
+                <button class="btn-icon mcp-row-edit" title="${escapeHtml(typeof t === "function" ? t("common.edit") : "Edit")}"><span class="material-icons-round">edit</span></button>
+                <button class="btn-icon mcp-row-delete danger" title="${escapeHtml(typeof t === "function" ? t("common.delete") : "Delete")}"><span class="material-icons-round">delete</span></button>
             </div>
         </div>`;
     }
@@ -105,7 +105,9 @@
         if (!overlay || !card) return;
 
         const isNew = !name;
-        const title = isNew ? "Add MCP Server" : `Edit – ${escapeHtml(name)}`;
+        const title = isNew
+            ? escapeHtml(typeof t === "function" ? t("mcp.add_title") : "Add MCP Server")
+            : escapeHtml(typeof t === "function" ? t("mcp.edit_title", { name }) : `Edit – ${name}`);
         const isEdit = !!name;
         const type = s.type || (s.url ? "sse" : "stdio");
 
@@ -359,9 +361,9 @@
     async function _confirmDelete(name) {
         const ok = await shibaDialog(
             "confirm",
-            "Delete MCP Server",
-            `Remove "${name}" from the config? This cannot be undone.`,
-            { confirmText: "Delete", danger: true }
+            typeof t === "function" ? t("mcp.delete_title") : "Delete MCP Server",
+            typeof t === "function" ? t("mcp.delete_body", { name }) : `Delete server "${name}"?`,
+            { confirmText: typeof t === "function" ? t("common.delete") : "Delete", danger: true }
         );
         if (!ok) return;
         try {

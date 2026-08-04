@@ -432,7 +432,7 @@ function addTimestamp(group, dateStr) {
     copyBtn.className = "btn-copy-msg";
     copyBtn.type = "button";
     copyBtn.setAttribute('aria-label', 'Copy message');
-    copyBtn.title = "Copy message";
+    copyBtn.title = typeof t === "function" ? t("chat.copy_message") : "Copy message";
     copyBtn.innerHTML = '<span class="material-icons-round" style="font-size:14px">content_copy</span>';
     copyBtn.addEventListener('click', (e) => { e.stopPropagation(); window.copyMessage(copyBtn); });
     meta.appendChild(copyBtn);
@@ -638,13 +638,16 @@ function updateSendButton() {
     if (iconSpan) {
         if (state.processing) {
             iconSpan.textContent = "navigation";
-            btnSend.title = "Steer the agent";
+            btnSend.title = typeof t === "function" ? t("chat.steer") : "Steer the agent";
         } else {
             iconSpan.textContent = "send";
-            btnSend.title = hasText ? "Send message" : "Type a message to send";
+            btnSend.title = hasText
+                ? (typeof t === "function" ? t("chat.send") : "Send message")
+                : (typeof t === "function" ? t("chat.type_to_send") : "Type a message to send");
         }
     }
 }
+window.updateSendButton = updateSendButton;
 
 function autoResizeInput() {
     chatInput.style.height = "auto";
@@ -667,7 +670,7 @@ function sendMessage() {
     }
 
     if (state.gatewayKnown && !state.gatewayUp) {
-        addAgentMessage("error", "⚠️ Gateway offline or unreachable. Restart the desktop app or the gateway.");
+        addAgentMessage("error", typeof t === "function" ? t("chat.gateway_offline") : "⚠️ Gateway offline or unreachable. Restart the desktop app or the gateway.");
         if (!state.processing) {
             state.processing = false;
             updateSendButton();

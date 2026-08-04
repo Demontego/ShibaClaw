@@ -30,12 +30,12 @@ const notificationCenter = (() => {
     }
 
     function _relativeTime(timestamp) {
-        if (!timestamp) return "Just now";
+        if (!timestamp) return typeof t === "function" ? t("common.just_now") : "just now";
         const diff = Math.max(0, Math.floor(Date.now() / 1000) - timestamp);
-        if (diff < 10) return "Just now";
-        if (diff < 60) return `${diff}s ago`;
-        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        if (diff < 10) return typeof t === "function" ? t("common.just_now") : "just now";
+        if (diff < 60) return typeof t === "function" ? t("notif.time_s", { n: diff }) : `${diff}s ago`;
+        if (diff < 3600) return typeof t === "function" ? t("notif.time_m", { n: Math.floor(diff / 60) }) : `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return typeof t === "function" ? t("notif.time_h", { n: Math.floor(diff / 3600) }) : `${Math.floor(diff / 3600)}h ago`;
         return new Date(timestamp * 1000).toLocaleDateString();
     }
 
@@ -119,7 +119,7 @@ const notificationCenter = (() => {
             const actionBtn = document.createElement("button");
             actionBtn.type = "button";
             actionBtn.className = "notification-item-btn";
-            actionBtn.textContent = action.label || "Open";
+            actionBtn.textContent = action.label || (typeof t === "function" ? t("notif.open") : "Open");
             actionBtn.addEventListener("click", async (event) => {
                 event.stopPropagation();
                 await _markRead(item.id, true);
@@ -131,7 +131,7 @@ const notificationCenter = (() => {
         const dismissBtn = document.createElement("button");
         dismissBtn.type = "button";
         dismissBtn.className = "notification-item-btn is-secondary";
-        dismissBtn.textContent = "Dismiss";
+        dismissBtn.textContent = typeof t === "function" ? t("notif.dismiss") : "Dismiss";
         dismissBtn.addEventListener("click", async (event) => {
             event.stopPropagation();
             await _deleteNotification(item.id);
@@ -156,14 +156,14 @@ const notificationCenter = (() => {
         dom.badge.hidden = counts.unread === 0;
         dom.badge.textContent = counts.unread > 99 ? "99+" : String(counts.unread || 0);
         dom.subtitle.textContent = counts.total === 0
-            ? "No notifications yet"
+            ? (typeof t === "function" ? t("notif.empty") : "No notifications yet")
             : counts.unread > 0
-                ? `${counts.unread} unread of ${counts.total}`
-                : `${counts.total} notifications`;
+                ? (typeof t === "function" ? t("notif.unread_of", { u: counts.unread, t: counts.total }) : `${counts.unread} unread of ${counts.total}`)
+                : (typeof t === "function" ? t("notif.count", { n: counts.total }) : `${counts.total} notifications`);
 
         dom.list.innerHTML = "";
         if (items.length === 0) {
-            _renderEmpty("No notifications yet.");
+            _renderEmpty(typeof t === "function" ? t("notif.empty") : "No notifications yet.");
             return;
         }
 
@@ -330,10 +330,10 @@ const notificationCenter = (() => {
                 body: JSON.stringify({
                     source: "agent_response",
                     kind: "agent_response",
-                    title: "Agent response ready",
+                    title: typeof t === "function" ? t("notif.agent_ready") : "Agent response ready",
                     message,
                     session_key: sessionKey,
-                    action: { kind: "session", label: "Open session", target: sessionKey },
+                    action: { kind: "session", label: typeof t === "function" ? t("notif.open_session") : "Open session", target: sessionKey },
                     metadata: { category: "agent_response" },
                     dedupe_key: `agent-response:${sessionKey}:${data.id || message}`,
                 }),

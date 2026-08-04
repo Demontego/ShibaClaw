@@ -10,10 +10,10 @@ window.escapeHtml = escapeHtml;
 function timeAgo(ms) {
     if (!ms) return "";
     const sec = Math.floor((Date.now() - ms) / 1000);
-    if (sec < 60) return "just now";
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
-    return `${Math.floor(sec / 86400)}d ago`;
+    if (sec < 60) return typeof t === "function" ? t("common.just_now") : "just now";
+    if (sec < 3600) return typeof t === "function" ? t("common.time_m", { n: Math.floor(sec / 60) }) : `${Math.floor(sec / 60)}m ago`;
+    if (sec < 86400) return typeof t === "function" ? t("common.time_h", { n: Math.floor(sec / 3600) }) : `${Math.floor(sec / 3600)}h ago`;
+    return typeof t === "function" ? t("common.time_d", { n: Math.floor(sec / 86400) }) : `${Math.floor(sec / 86400)}d ago`;
 }
 
 function formatSchedule(s) {
@@ -21,18 +21,18 @@ function formatSchedule(s) {
     if (s.kind === "cron") {
         const expr = s.expr || s.expression || "";
         const tz = s.tz ? ` (${s.tz})` : "";
-        return `cron: ${expr}${tz}`;
+        return typeof t === "function" ? t("auto.sched.cron", { expr: `${expr}${tz}` }) : `cron: ${expr}${tz}`;
     }
     if (s.kind === "every") {
         const ms = s.everyMs || s.every_ms || 0;
-        if (ms % 3600000 === 0) return `every ${ms / 3600000}h`;
-        if (ms % 60000 === 0) return `every ${ms / 60000}m`;
+        if (ms % 3600000 === 0) return typeof t === "function" ? t("auto.sched.every_h", { n: ms / 3600000 }) : `every ${ms / 3600000}h`;
+        if (ms % 60000 === 0) return typeof t === "function" ? t("auto.sched.every_m", { n: ms / 60000 }) : `every ${ms / 60000}m`;
         if (ms % 1000 === 0) return `every ${ms / 1000}s`;
         return `every ${ms}ms`;
     }
     if (s.kind === "at") {
         const atMs = s.atMs || s.at_ms || 0;
-        return atMs ? new Date(atMs).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "once";
+        return atMs ? new Date(atMs).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : (typeof t === "function" ? t("auto.sched.once") : "once");
     }
     return s.kind || "?";
 }

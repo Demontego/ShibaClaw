@@ -77,7 +77,7 @@ class MicrophoneInput {
             return true;
         } catch (error) {
             console.error('Microphone initialization error:', error);
-            alert('Failed to access microphone. Please check permissions.');
+            alert(typeof t === "function" ? t("speech.mic_failed") : "Failed to access microphone. Please check permissions.");
             return false;
         }
     }
@@ -192,7 +192,7 @@ class MicrophoneInput {
         const input = document.getElementById("chat-input");
         if (input) {
             this._origPlaceholder = input.placeholder;
-            input.placeholder = "\uD83C\uDFA4 Transcribing...";
+            input.placeholder = typeof t === "function" ? t("speech.transcribing") : "\uD83C\uDFA4 Transcribing...";
             input.classList.add("transcribing");
         }
     }
@@ -200,7 +200,7 @@ class MicrophoneInput {
     hideTranscribing() {
         const input = document.getElementById("chat-input");
         if (input) {
-            input.placeholder = this._origPlaceholder || "Send a message to ShibaClaw...";
+            input.placeholder = this._origPlaceholder || (typeof t === "function" ? t("chat.placeholder") : "Send a message to ShibaClaw...");
             input.classList.remove("transcribing");
         }
     }
@@ -219,13 +219,13 @@ class MicrophoneInput {
                 const response = await realtime.request("transcribe", { audio: base64 }, 30000);
                 if (response.error) {
                     console.error("Transcription error:", response.error);
-                    alert("Transcription failed: " + response.error);
+                    alert(typeof t === "function" ? t("speech.transcription_failed", { err: response.error }) : "Transcription failed: " + response.error);
                 } else if (response.text) {
                     const txt = response.text.trim();
                     if (txt) {
                         if (response.audio_url) {
                             state.stagedFiles.push({
-                                name: "Voice Message",
+                                name: typeof t === "function" ? t("speech.voice_message") : "Voice Message",
                                 url: response.audio_url,
                                 type: "audio/wav"
                             });

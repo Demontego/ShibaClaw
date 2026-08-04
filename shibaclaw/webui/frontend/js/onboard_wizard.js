@@ -98,8 +98,18 @@ function _obShowStep(n) {
         }
     }
     document.getElementById("ob-btn-back").style.display = n > 1 ? "" : "none";
-    document.getElementById("ob-btn-next").style.display = n < 4 ? "" : "none";
-    document.getElementById("ob-btn-finish").style.display = n === 4 ? "" : "none";
+    const btnNext = document.getElementById("ob-btn-next");
+    const btnFinish = document.getElementById("ob-btn-finish");
+    if (btnNext) {
+        btnNext.style.display = n < 4 ? "" : "none";
+        btnNext.textContent = typeof t === "function" ? t("onboard.next") : "Next";
+    }
+    if (btnFinish) {
+        btnFinish.style.display = n === 4 ? "" : "none";
+        btnFinish.textContent = typeof t === "function" ? t("onboard.finish") : "Finish Setup";
+    }
+    const btnBack = document.getElementById("ob-btn-back");
+    if (btnBack) btnBack.textContent = typeof t === "function" ? t("onboard.back") : "Back";
 
     if (n === 2) _obSetupStep2();
     if (n === 3) _obSetupStep3();
@@ -370,7 +380,7 @@ window.obSubmit = async function () {
     } catch (e) {
         btn.style.width = "";
         btn.disabled = false;
-        btn.innerHTML = '<span class="material-icons-round" style="font-size:16px;vertical-align:middle">check</span> Finish Setup';
+        btn.innerHTML = '<span class="material-icons-round" style="font-size:16px;vertical-align:middle">check</span> ' + (typeof t === "function" ? t("onboard.finish") : "Finish Setup");
         await shibaDialog("alert", "Error", "Setup failed: " + e, { danger: true });
     }
 };

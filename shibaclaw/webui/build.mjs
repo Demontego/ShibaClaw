@@ -5,6 +5,8 @@ import path from 'path';
 // Scripts to bundle (in order)
 const jsFiles = [
     'frontend/js/state.js',
+    'frontend/js/i18n_catalogs.js',
+    'frontend/js/i18n.js',
     'frontend/js/auth.js',
     'frontend/js/knowledge.js',
     'frontend/js/utils.js',

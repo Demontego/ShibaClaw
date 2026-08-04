@@ -24,7 +24,7 @@ async function loadKnowledgeBases() {
             container.innerHTML = `
             <div style="text-align:center; padding: 40px 20px; color: var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:12px;">
                 <span class="material-icons-round spin" style="font-size:40px; color: var(--primary);">sync</span>
-                <span style="font-size:14px;">Loading collections...</span>
+                <span style="font-size:14px;">${escapeHtml(typeof t === "function" ? t("kb.loading") : "Loading collections...")}</span>
             </div>`;
         }
         
@@ -73,8 +73,8 @@ function renderKBManagerList() {
         container.innerHTML = html + `
         <div style="text-align:center; padding: 40px 20px; color: var(--text-muted); display:flex; flex-direction:column; align-items:center; gap:12px; background: rgba(255,255,255,0.02); border-radius:12px; border: 1px dashed var(--border-light);">
             <span class="material-icons-round" style="font-size:48px; opacity: 0.5;">topic</span>
-            <span style="font-size:15px;">No collections created yet.</span>
-            <span style="font-size:13px; opacity:0.8;">Create a collection below to start dragging and dropping files.</span>
+            <span style="font-size:15px;">${escapeHtml(typeof t === "function" ? t("kb.empty") : "No collections created yet.")}</span>
+            <span style="font-size:13px; opacity:0.8;">${escapeHtml(typeof t === "function" ? t("kb.empty_hint") : "Create a collection below to start dragging and dropping files.")}</span>
         </div>`;
         return;
     }
@@ -294,7 +294,7 @@ function renderKBSelectorDropdown() {
         </div>`;
         const display = document.getElementById('active-kb-display');
         if (display) {
-            display.innerText = `KBs (Disabled)`;
+            display.innerText = typeof t === "function" ? t("chat.kbs_disabled") : "KBs (Disabled)";
         }
         return;
     }
@@ -311,7 +311,7 @@ function renderKBSelectorDropdown() {
     
     const display = document.getElementById('active-kb-display');
     if (display) {
-        display.innerText = `KBs (${activeSessionKBs.length})`;
+        display.innerText = typeof t === "function" ? t("chat.kbs_count", { n: activeSessionKBs.length }) : `KBs (${activeSessionKBs.length})`;
     }
 }
 
@@ -361,3 +361,4 @@ window.setActiveKBs = function(kbs) {
     activeSessionKBs = Array.isArray(kbs) ? kbs : [];
     renderKBSelectorDropdown();
 }
+window.renderKBSelectorDropdown = renderKBSelectorDropdown;
