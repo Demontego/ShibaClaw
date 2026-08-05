@@ -878,7 +878,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
 
     const searchInput = document.getElementById("provider-search");
     if (searchInput) {
-        searchInput.addEventListener("input", () => {
+        searchInput.addEventListener("input", debounce(() => {
             const q = searchInput.value.toLowerCase().trim();
             for (const [name, tile] of provTiles) {
                 const matches = !q || name.toLowerCase().includes(q) || tile.dataset.displayName.includes(q);
@@ -893,7 +893,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
                     expandedProv = null;
                 }
             }
-        });
+        }, 250));
     }
 
     const tw = cfg.tools?.web || {};
