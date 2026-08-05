@@ -450,7 +450,7 @@ function setupSettingsModelPickers() {
         });
 
         menu.addEventListener("click", (e) => e.stopPropagation());
-        search.addEventListener("input", () => renderSettingsModelPickerOptions(config));
+        search.addEventListener("input", debounce(() => renderSettingsModelPickerOptions(config), 250));
     });
 
     document.addEventListener("click", () => closeSettingsModelMenus());
@@ -484,10 +484,10 @@ function setupModelSelector() {
         }
     });
 
-    search.addEventListener("input", () => {
+    search.addEventListener("input", debounce(() => {
         const filtered = filterModelsByQuery(search.value);
         renderModels(filtered);
-    });
+    }, 250));
 
     function renderModels(models) {
         const currentModelId = state.activeModelId || "";
