@@ -1,0 +1,359 @@
+/* ── Modern sidebar (Claude Code–inspired density) ─────────── */
+/* Loaded after bundle.css — keeps Shiba gold, quieter chrome. */
+
+:root {
+    --sidebar-width: 260px;
+}
+
+.sidebar {
+    background: #0a0a0a;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Header: compact brand row */
+.sidebar-header {
+    padding: 12px 12px 8px;
+    border-bottom: none;
+    gap: 8px;
+}
+
+.logo {
+    gap: 8px;
+    min-width: 0;
+}
+
+.logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+}
+
+.logo-text h1 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.header-sub-row {
+    margin-top: 2px;
+    gap: 4px;
+}
+
+.version,
+.status-micro {
+    font-size: 10px;
+    padding: 1px 5px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+}
+
+.version:hover {
+    color: var(--shiba-gold);
+    background: transparent;
+    border: none;
+}
+
+.status-micro .status-text {
+    font-size: 10px;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-restart {
+    padding: 0;
+    opacity: 0.55;
+}
+
+.btn-restart .material-icons-round {
+    font-size: 14px;
+}
+
+/* New session: quiet ghost button */
+.sidebar-actions {
+    padding: 4px 10px 8px;
+}
+
+.btn-action.btn-new-chat {
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    font-weight: 500;
+    justify-content: flex-start;
+}
+
+.btn-action.btn-new-chat:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: transparent;
+    color: var(--text-primary);
+}
+
+.btn-action.btn-new-chat:active {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.btn-action.btn-new-chat .material-icons-round {
+    font-size: 16px;
+    color: var(--shiba-gold);
+}
+
+/* Tools → compact icon rail */
+.sidebar-section.tools-section {
+    padding: 0 10px 8px;
+}
+
+.sidebar-section.tools-section .section-title {
+    display: none;
+}
+
+.sidebar-tools {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-tools .btn-command {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+    line-height: 0;
+    position: relative;
+}
+
+.sidebar-tools .btn-command .material-icons-round {
+    font-size: 18px;
+    margin: 0;
+}
+
+.sidebar-tools .btn-command:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.sidebar-tools .btn-command:active {
+    background: rgba(255, 255, 255, 0.09);
+}
+
+.sidebar-tools .automation-badge-mini {
+    position: absolute;
+    top: 4px;
+    right: calc(50% - 14px);
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    font-size: 9px;
+    line-height: 14px;
+    border-radius: 999px;
+}
+
+/* Sessions: primary focus */
+.sidebar-section.history-section {
+    padding: 0 8px 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.history-section-head {
+    background: #0a0a0a;
+    padding: 10px 4px 8px;
+}
+
+.history-section .section-title {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-left: 6px;
+}
+
+.session-search {
+    padding: 6px 8px 6px 28px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+}
+
+.session-search:focus {
+    border-color: rgba(232, 163, 23, 0.35);
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.session-search-icon {
+    left: 7px;
+    font-size: 14px;
+}
+
+.history-list {
+    gap: 1px;
+    padding-bottom: 6px;
+}
+
+/* Channel groups */
+.channel-group-header {
+    padding: 6px 8px;
+    margin: 6px 0 1px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
+}
+
+.channel-group-header .group-count {
+    background: transparent;
+    padding: 0;
+    margin-left: 6px;
+    opacity: 0.7;
+}
+
+.channel-group-items {
+    gap: 1px;
+}
+
+/* Session rows */
+.history-item {
+    padding: 7px 8px;
+    margin-bottom: 0;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    gap: 6px;
+}
+
+.history-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: transparent;
+}
+
+.history-item.active {
+    background: rgba(232, 163, 23, 0.1);
+    border-color: transparent;
+    box-shadow: inset 2px 0 0 var(--shiba-gold);
+    color: var(--text-primary);
+}
+
+.history-item.active .session-name {
+    color: var(--text-primary);
+    font-weight: 550;
+}
+
+.session-name {
+    font-size: 12.5px;
+    font-weight: 450;
+}
+
+.session-subline {
+    margin-top: 2px;
+    gap: 4px;
+}
+
+.session-subline .ob-badge,
+.session-channel-tag {
+    display: none; /* channel already grouped — less noise */
+}
+
+.session-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.85;
+}
+
+.btn-session-menu {
+    opacity: 0;
+    width: 24px;
+    height: 24px;
+}
+
+.history-item:hover .btn-session-menu,
+.history-item.active .btn-session-menu {
+    opacity: 0.7;
+}
+
+/* Workspace summary → quiet footer chips */
+.workspace-summary-section {
+    padding: 6px 12px 4px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 2px;
+    display: flex;
+    flex-direction: column;
+}
+
+.workspace-summary-section .summary-row {
+    padding: 2px 0;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    gap: 6px;
+}
+
+.workspace-summary-section .summary-row strong {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.workspace-summary-section .status-dot {
+    width: 5px;
+    height: 5px;
+}
+
+/* Footer */
+.sidebar-footer {
+    padding: 6px 10px 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 4px;
+}
+
+.footer-actions {
+    gap: 2px;
+}
+
+.footer-actions .btn-command {
+    padding: 6px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+}
+
+.footer-actions .btn-command:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+}
+
+.footer-info {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+/* Fallback if tools section not yet marked */
+.sidebar > .sidebar-section:not(.history-section):not(.workspace-summary-section) .btn-command {
+    padding: 7px 8px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+}
+
+.sidebar > .sidebar-section:not(.history-section):not(.workspace-summary-section) .btn-command:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}

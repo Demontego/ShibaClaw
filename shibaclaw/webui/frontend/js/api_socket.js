@@ -219,6 +219,16 @@ function initSocket() {
             addAgentMessage(data.id, data.content, data.attachments || []);
         }
 
+        if (typeof window._historyWindowAppendLive === "function") {
+            try {
+                window._historyWindowAppendLive("agent", {
+                    role: "assistant",
+                    content: data.content || "",
+                    attachments: data.attachments || [],
+                });
+            } catch (e) { /* ignore */ }
+        }
+
         // Play text-to-speech if enabled and no audio file is attached
         const hasAudioAttachment = data.attachments && data.attachments.some(file => typeof file.type === "string" && file.type.startsWith("audio/"));
         if (window.speechTTS && window.speechTTS.enabled && data.content && !hasAudioAttachment) {
