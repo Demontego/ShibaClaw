@@ -367,7 +367,33 @@ def test_local_bot_api_path_maps_container_volume(tmp_path: Path):
     with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
         resolved = channel._resolve_local_bot_api_path("/var/lib/telegram-bot-api/user/file.pdf")
 
-    assert resolved == host_file
+    assert resolved == host_file.resolve()
+
+
+def test_local_bot_api_path_rejects_host_paths_outside_data_dir(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    outside = tmp_path / "secrets.env"
+    outside.write_text("TOKEN=secret", encoding="utf-8")
+    data_root = tmp_path / ".shibaclaw/telegram-bot-api/data"
+    data_root.mkdir(parents=True)
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        assert channel._resolve_local_bot_api_path(str(outside)) is None
+        assert channel._resolve_local_bot_api_path("/etc/passwd") is None
+
+
+def test_local_bot_api_path_allows_resolved_host_data_file(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    host_file = tmp_path / ".shibaclaw/telegram-bot-api/data/user/file.pdf"
+    host_file.parent.mkdir(parents=True)
+    host_file.write_bytes(b"%PDF")
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        resolved = channel._resolve_local_bot_api_path(str(host_file))
+
+    assert resolved == host_file.resolve()
 
 
 def test_video_note_uses_mp4_extension():

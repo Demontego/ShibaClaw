@@ -1368,19 +1368,37 @@ class TelegramChannel(BaseChannel):
         return f"[Reply to: {text}]" if text else None
 
     def _resolve_local_bot_api_path(self, file_path: str) -> Path | None:
-        """Map a Local Bot API container path to its host-mounted data directory."""
-        path = Path(file_path)
-        if path.is_file():
-            return path
+        """Map a Local Bot API path to a host file inside the bot data directory.
 
-        container_root = Path("/var/lib/telegram-bot-api")
-        try:
-            relative_path = path.relative_to(container_root)
-        except ValueError:
+        Only paths that resolve inside ``~/.shibaclaw/telegram-bot-api/data`` are
+        accepted — never arbitrary host files from a Local Bot API response.
+        """
+        if not file_path or not str(file_path).strip():
             return None
 
-        host_path = Path.home() / ".shibaclaw/telegram-bot-api/data" / relative_path
-        return host_path if host_path.is_file() else None
+        data_root = (Path.home() / ".shibaclaw/telegram-bot-api/data").resolve()
+        container_root = Path("/var/lib/telegram-bot-api")
+        path = Path(file_path)
+
+        candidates: list[Path] = []
+        try:
+            candidates.append(data_root / path.relative_to(container_root))
+        except ValueError:
+            pass
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            candidates.append(data_root / path)
+
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve()
+                resolved.relative_to(data_root)
+            except (OSError, ValueError):
+                continue
+            if resolved.is_file():
+                return resolved
+        return None
 
     async def _download_message_media(
         self, msg, *, add_failure_content: bool = False

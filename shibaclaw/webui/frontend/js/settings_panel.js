@@ -1033,7 +1033,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         watch_limit: { section: "network", tooltip: "Maximum number of events returned per watch/poll cycle." },
         retry_delay_ms: { section: "network", tooltip: "Base delay between retry attempts on transient failures (ms)." },
         max_retry_attempts: { section: "network", tooltip: "Maximum retries on failure. 0 = unlimited retries." },
-        max_media_bytes: { section: "network", tooltip: "Maximum file attachment size in bytes (default: 20 MB)." },
+        max_media_bytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        maxMediaBytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        local_api_url: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
+        localApiUrl: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
         sync_stop_grace_seconds: { section: "network", tooltip: "Seconds to wait for Matrix sync to stop cleanly on shutdown." }
     };
 

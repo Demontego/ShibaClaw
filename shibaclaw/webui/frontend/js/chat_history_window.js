@@ -71,6 +71,50 @@
         );
     }
 
+    function _nextLiveTurnId(kind) {
+        if (!store || !store.parsedMessages.length) return 1;
+        const last = store.parsedMessages[store.parsedMessages.length - 1];
+        if (kind === "user") return (last.turnId || 0) + 1;
+        return last.turnId || 1;
+    }
+
+    function appendLiveParsed(type, data) {
+        if (!store || store.sessionId !== state.sessionId) return;
+        if (
+            typeof _isCurrentSessionLoad === "function" &&
+            !_isCurrentSessionLoad(store.loadSeq, store.sessionId)
+        ) {
+            return;
+        }
+        store.parsedMessages.push({
+            type,
+            data,
+            turnId: _nextLiveTurnId(type),
+        });
+    }
+
+    // Expose for api_socket agent_response (covers streaming + non-streaming).
+    window._historyWindowAppendLive = appendLiveParsed;
+
+    // Local WebUI sends go through addUserMessage, not a dedicated WS event.
+    if (typeof addUserMessage === "function") {
+        const _origAddUserMessage = addUserMessage;
+        addUserMessage = function (content, attachments = []) {
+            const result = _origAddUserMessage(content, attachments);
+            try {
+                appendLiveParsed("user", {
+                    role: "user",
+                    content: content || "",
+                    attachments: attachments || [],
+                });
+            } catch (e) {
+                /* keep chat render path resilient */
+            }
+            return result;
+        };
+        window.addUserMessage = addUserMessage;
+    }
+
     function groupsForRange(from, to) {
         const msgs = store.parsedMessages.slice(from, to);
         if (!msgs.length) return [];

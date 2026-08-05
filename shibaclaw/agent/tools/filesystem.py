@@ -129,12 +129,14 @@ class ReadFileTool(_FsTool):
                         ["pdftotext", "-layout", "-enc", "UTF-8", str(fp), "-"],
                         capture_output=True,
                         text=True,
+                        encoding="utf-8",
+                        errors="replace",
                         timeout=120,
                         check=False,
                     )
                 except Exception as e:
                     return f"Binary PDF ({size:,} bytes) at {fp}. Extract failed: {e}"
-                if result.returncode != 0 or not result.stdout.strip():
+                if result.returncode != 0 or not (result.stdout or "").strip():
                     return f"Binary PDF ({size:,} bytes) at {fp}. pdftotext produced no text."
                 all_lines = result.stdout.splitlines()
             total = len(all_lines)
