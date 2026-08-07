@@ -347,7 +347,14 @@ class AutomationService:
                 tmp_path.write_text(
                     json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
                 )
-                os.replace(str(tmp_path), str(self._store_path))
+                for attempt in range(3):
+                    try:
+                        os.replace(str(tmp_path), str(self._store_path))
+                        break
+                    except PermissionError:
+                        if attempt == 2:
+                            raise
+                        time.sleep(0.05)
                 self._last_mtime = self._store_path.stat().st_mtime
         except Exception as exc:
             logger.warning("AutomationService: failed to save store: {}", exc)

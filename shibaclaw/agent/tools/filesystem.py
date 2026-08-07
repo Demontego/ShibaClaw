@@ -113,7 +113,7 @@ class ReadFileTool(_FsTool):
                 return f"Error: Not a file: {path}"
 
             try:
-                all_lines = fp.read_text(encoding="utf-8").splitlines()
+                all_lines = (await asyncio.to_thread(fp.read_text, encoding="utf-8")).splitlines()
             except UnicodeDecodeError:
                 size = fp.stat().st_size
                 if fp.suffix.lower() != ".pdf":
@@ -294,7 +294,7 @@ class EditFileTool(_FsTool):
             match, count = _find_match(content, old_text.replace("\r\n", "\n"))
 
             if match is None:
-                return self._not_found_msg(old_text, content, path)
+                return await asyncio.to_thread(self._not_found_msg, old_text, content, path)
             if count > 1 and not replace_all:
                 return (
                     f"Warning: old_text appears {count} times. "
@@ -324,7 +324,8 @@ class EditFileTool(_FsTool):
         window = len(old_lines)
 
         best_ratio, best_start = 0.0, 0
-        for i in range(max(1, len(lines) - window + 1)):
+        max_scan = min(len(lines) - window + 1, 1000)
+        for i in range(max(1, max_scan)):
             ratio = difflib.SequenceMatcher(None, old_lines, lines[i : i + window]).ratio()
             if ratio > best_ratio:
                 best_ratio, best_start = ratio, i

@@ -44,6 +44,7 @@ class ScentBuilder:
         # Bounded image cache to avoid memory leaks: path -> (mtime_ns, mime, b64)
         self._image_cache: dict[str, tuple[float, str, str]] = {}
         self._IMAGE_CACHE_MAX = 32
+        self._IMAGE_CACHE_MAX_BYTES = 50 * 1024 * 1024
 
     def build_static_prompt(
         self,
@@ -482,7 +483,12 @@ Root: {workspace_path}
             try:
                 b64 = base64.b64encode(raw).decode("utf-8")
                 self._image_cache[path_key] = (mtime, mime, b64)
-                while len(self._image_cache) > self._IMAGE_CACHE_MAX:
+                while (
+                    len(self._image_cache) > self._IMAGE_CACHE_MAX
+                    or sum(len(item[2]) for item in self._image_cache.values()) > self._IMAGE_CACHE_MAX_BYTES
+                ):
+                    if not self._image_cache:
+                        break
                     self._image_cache.pop(next(iter(self._image_cache)))
                 images.append(
                     {
