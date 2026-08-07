@@ -27,8 +27,8 @@
     <script src="/js/realtime.js"></script>
     <script src="/js/subagent_ui.js"></script>
     <script src="/vendor/marked.min.js"></script>
-    <script src="/vendor/purify.min.js"></script>
-
+    <!-- Tally Embed SDK -->
+    <script async src="https://tally.so/widgets/embed.js"></script>
 
     <!-- Highlight.js for syntax highlighting -->
     <link rel="stylesheet" href="/vendor/github-dark.min.css">
@@ -1431,6 +1431,23 @@
                 <span class="material-icons-round" style="font-size:14px">star_border</span> <span data-i18n="ghstar.star">Star</span>
             </a>
             <button class="gh-star-close" id="gh-star-dismiss" data-i18n="ghstar.later">Maybe later</button>
+        </div>
+    </div>
+
+    <!-- Tally Feedback Popup -->
+    <div id="feedback-popup">
+        <div class="gh-star-icon" style="color: var(--color-primary, #6366f1);">
+            <span class="material-icons-round">rate_review</span>
+        </div>
+        <div class="gh-star-content">
+            <div class="gh-star-title" data-i18n="feedback.title">Do you like ShibaClaw?</div>
+            <div class="gh-star-text" data-i18n="feedback.body">Let us know how we can make ShibaClaw better for you!</div>
+        </div>
+        <div class="gh-star-actions">
+            <button class="gh-star-btn" id="feedback-link" data-tally-open="WO6dqP" data-tally-emoji-text="👋" data-tally-emoji-animation="wave">
+                <span class="material-icons-round" style="font-size:14px">sentiment_satisfied_alt</span> <span data-i18n="feedback.btn">Feedback</span>
+            </button>
+            <button class="gh-star-close" id="feedback-dismiss" data-i18n="feedback.later">Maybe later</button>
         </div>
     </div>
 

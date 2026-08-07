@@ -1020,7 +1020,8 @@
 /* ═══════════════════════════════════════════════════════════════
    GitHub Star Popup
    ═══════════════════════════════════════════════════════════════ */
-#gh-star-popup {
+#gh-star-popup,
+#feedback-popup {
     position: fixed;
     bottom: 24px;
     left: 24px;
@@ -1040,7 +1041,8 @@
     max-width: 350px;
 }
 
-#gh-star-popup.show {
+#gh-star-popup.show,
+#feedback-popup.show {
     transform: translateY(0);
     opacity: 1;
     pointer-events: auto;
@@ -1121,7 +1123,8 @@
 }
 
 @media (max-width: 768px) {
-    #gh-star-popup {
+    #gh-star-popup,
+    #feedback-popup {
         bottom: 80px;
         left: 12px;
         right: 12px;

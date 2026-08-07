@@ -257,9 +257,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Can't reach server — start anyway (will show errors naturally)
         startApp();
     }
-    
-    // Defer GitHub popup initialization
+    // Defer GitHub and Feedback popup initialization
     initGithubPopup();
+    initFeedbackPopup();
 });
 
 // ── GitHub Star Popup ─────────────────────────────────────────
@@ -288,5 +288,40 @@ function initGithubPopup() {
         }
     }, 45000); // 45 seconds delay
 }
+
+// ── Tally Feedback Popup ──────────────────────────────────────
+function initFeedbackPopup() {
+    if (localStorage.getItem('shibaclaw_feedback_dismissed') === 'true') {
+        return;
+    }
+
+    // Show popup after 90 seconds (staggered after GH star popup)
+    setTimeout(() => {
+        const popup = document.getElementById('feedback-popup');
+        const dismissBtn = document.getElementById('feedback-dismiss');
+        const feedbackLink = document.getElementById('feedback-link');
+
+        if (popup && dismissBtn) {
+            popup.classList.add('show');
+
+            let autoHideTimer = null;
+
+            const dismissPopup = () => {
+                if (autoHideTimer) clearTimeout(autoHideTimer);
+                popup.classList.remove('show');
+                localStorage.setItem('shibaclaw_feedback_dismissed', 'true');
+            };
+
+            // Auto-dismiss after 20 seconds if ignored so it never annoys the user
+            autoHideTimer = setTimeout(dismissPopup, 20000);
+
+            dismissBtn.addEventListener('click', dismissPopup);
+            if (feedbackLink) {
+                feedbackLink.addEventListener('click', dismissPopup);
+            }
+        }
+    }, 90000); // 90 seconds delay
+}
+
 
 
