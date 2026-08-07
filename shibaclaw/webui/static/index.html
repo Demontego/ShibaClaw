@@ -20,13 +20,13 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1785962068102">
-    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=1785962068102">
+    <link rel="stylesheet" href="/static/bundle.css?v=1786083508485">
+    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=1786083508485">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
-    <script src="/static/vendor/purify.min.js"></script>
-
+    <!-- Tally Embed SDK -->
+    <script async src="https://tally.so/widgets/embed.js"></script>
 
     <!-- Highlight.js for syntax highlighting -->
     <link rel="stylesheet" href="/static/vendor/github-dark.min.css">
@@ -1414,21 +1414,20 @@
         </div>
     </div>
 
-    <!-- GitHub Star Popup -->
-    <div id="gh-star-popup">
-        <div class="gh-star-icon">
-            <span class="material-icons-round">star</span>
+    <!-- Tally Feedback Popup -->
+    <div id="feedback-popup">
+        <div class="gh-star-icon" style="color: var(--color-primary, #6366f1);">
+            <span class="material-icons-round">rate_review</span>
         </div>
         <div class="gh-star-content">
-            <div class="gh-star-title" data-i18n="ghstar.title">Support ShibaClaw</div>
-            <div class="gh-star-text" data-i18n="ghstar.body">If you like ShibaClaw, please consider giving us a star on GitHub to help us grow!
-            </div>
+            <div class="gh-star-title" data-i18n="feedback.title">Do you like ShibaClaw?</div>
+            <div class="gh-star-text" data-i18n="feedback.body">Let us know how we can make ShibaClaw better for you!</div>
         </div>
         <div class="gh-star-actions">
-            <a href="https://github.com/RikyZ90/ShibaClaw" target="_blank" class="gh-star-btn" id="gh-star-link">
-                <span class="material-icons-round" style="font-size:14px">star_border</span> <span data-i18n="ghstar.star">Star</span>
-            </a>
-            <button class="gh-star-close" id="gh-star-dismiss" data-i18n="ghstar.later">Maybe later</button>
+            <button class="gh-star-btn" id="feedback-link" data-tally-open="WO6dqP" data-tally-emoji-text="👋" data-tally-emoji-animation="wave">
+                <span class="material-icons-round" style="font-size:14px">sentiment_satisfied_alt</span> <span data-i18n="feedback.btn">Feedback</span>
+            </button>
+            <button class="gh-star-close" id="feedback-dismiss" data-i18n="feedback.later">Maybe later</button>
         </div>
     </div>
 
@@ -1512,8 +1511,8 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1785962068102"></script>
-    <script src="/static/js/chat_history_window.js?v=1785962068102"></script>
+    <script src="/static/bundle.js?v=1786083508485"></script>
+    <script src="/static/js/chat_history_window.js?v=1786083508485"></script>
 </body>
 
 </html>

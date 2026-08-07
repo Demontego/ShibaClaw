@@ -222,4 +222,7 @@ function startApp() {
     if (typeof loadAutomationPanel === "function") {
         state.autoTimer = setInterval(loadAutomationPanel, 30000);
     }
+
+    // Initialize Tally Feedback Popup
+    if (typeof initFeedbackPopup === "function") initFeedbackPopup();
 }

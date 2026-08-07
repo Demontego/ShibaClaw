@@ -405,17 +405,23 @@ window.toggleSessionMenu = function (event, btn, key) {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 
     if (!isActive && dropdown) {
         dropdown.classList.add("active");
         btn.classList.add("active");
+
+        const historyItem = btn.closest(".history-item");
+        if (historyItem) {
+            historyItem.classList.add("has-active-dropdown");
+        }
 
         const container = dropdown.closest('.history-section');
         if (container) {
             const containerRect = container.getBoundingClientRect();
             const rect = dropdown.getBoundingClientRect();
 
-            if (rect.bottom > containerRect.bottom) {
+            if (rect.bottom > containerRect.bottom - 10 || rect.bottom > window.innerHeight - 10) {
                 dropdown.style.top = "auto";
                 dropdown.style.bottom = "100%";
                 dropdown.style.marginBottom = "4px";
@@ -586,6 +592,7 @@ document.addEventListener("click", () => {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 });
 
 async function loadSession(sessionId) {
