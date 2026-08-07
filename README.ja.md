@@ -40,15 +40,18 @@
 > リリースノートは [CHANGELOG.md](./CHANGELOG.md) にあります。
 
 <details open>
-<summary>📢 <b>最新情報 — v0.9.13</b>（クリックで展開）</summary>
+<summary>📢 <b>最新情報 — v0.9.20</b>（クリックで展開）</summary>
 
-**最新リリース（2026-08-01）：**
+**最新リリース（2026-08-07）：**
 
-- **ExecTool のコマンドインジェクション脆弱性の修正** — シェル実行における重大なコマンドインジェクション脆弱性（CWE-78）を、`shlex` による引数解析と直接プロセス実行（`create_subprocess_exec`）に置き換えて解決しました。
-- **依存関係のセキュリティ脆弱性の修正** — `protobufjs`（v7.6.5）および `sharp`（v0.35.3）のオーバーライドを更新し、bridge npm 依存関係の脆弱性を解決しました。
-- **エージェントループとステアリングの安定化** — `/update` コマンドのクラッシュを解消し、アクティブタスク中のメッセージステアリングにおけるセッションルーティングとイベント発行を修正しました。
-- **WebUI トークン見積もり** — メッセージリスト渡す際の API エンドポイント `estimate_prompt_tokens` の引数型処理を修正しました。
-- **Cloud RAG 依存関係** — Cloud RAG の依存範囲とデフォルト埋め込みモデル構成を修正しました。
+- **WebUI サイドバーの再設計と Telegram UI の改善** — Telegram と WebUI に大幅な改善を実施！Shiba Gold サイドバーの再設計、Telegram **Rich Messages** のツールチップ、`allow_from` 許可リストでの `@username` ガイドを追加。
+- **Telegram Bot API 10.1 Rich Messages** — Telegram Bot API 10.1 Rich Messages（`sendRichMessage`）のオプトインサポート。数式表現、フォーマットされた表、メディアコラージュの自動ブロック生成。
+- **Telegram 秘書自動化と Mini App 認証** — 秘書自動化、Mini App 認証、プロファイルベースのツールアクセス制御の統合。
+- **セッションドロップダウンメニューの表示切り欠きと z-index 重なり順の修正** — メニュー切り欠きの解消と優先 z-index（`z-index: 100`）および境界検知を追加。
+- **エージェントアバターの描画とフォールバックの修正** — アバターサイズ（30px × 30px）とパス解決のフォールバック（`/static/shibaclaw_logo.webp`）を修正。
+- **Gateway クライアントの例外処理** — `websockets.exceptions` の正しい参照による `AttributeError` を解消。
+- **プライベート DM フォーラムトピックのセッション分離** — プライベートチャットのトピックが個別セッション（`telegram:{chat_id}:topic:{thread_id}`）として分離。
+- **Telegram ポーリングにおける `callback_query` 更新タイプの追加** — インラインキーボードのコールバックが正常に動作するよう `allowed_updates` に追加。
 
 完全なリリース履歴は [Changelog](./CHANGELOG.md) を参照してください。
 

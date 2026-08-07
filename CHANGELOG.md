@@ -1,17 +1,22 @@
-## [0.9.14] - 2026-08-05
+## [0.9.20] - 2026-08-07
 
 ### Added
+- **Redesigned WebUI Sidebar & Telegram UI Enhancements** — Telegram and WebUI received extra love! Implemented tactile Shiba Gold design tokens, high-contrast dark charcoal surface hierarchy (`#111113`), info tooltips for Telegram **Rich Messages**, `@username` guidance in `allow_from` mouseover tooltips, compact tool action rail, and handcrafted command search bar.
 - **Telegram Bot API 10.1 Rich Messages (PR #152)** — Opt-in Telegram Bot API 10.1 Rich Messages support (`sendRichMessage` via direct `do_api_request`), featuring automatic layout block generation (`auto-build rich blocks`) for mathematical expressions, formatted tables, and media collages.
 - **Telegram Secretary Automation, Mini App Auth & Profile Access Control Integration (Commit 0b7db89)** — Consolidated Telegram secretary automation, Mini App auth, and profile-based tool access control into core metadata, manifest updates, and build assets.
+
+### Fixed
+- **Session Dropdown Menu Clipping & Z-Index Elevation** — Resolved dropdown clipping caused by `.channel-group-items` overflow containment. Added `.has-active-dropdown` z-index elevation (`z-index: 100`) and smart bottom boundary flip detection.
+- **Agent Avatar Rendering & Dynamic Fallbacks** — Fixed agent avatar sizing (30px × 30px circular badge), display properties, and dynamic `onerror` fallback resolution (`/static/shibaclaw_logo.webp` <-> `/shibaclaw_logo.webp`).
+- **Version Alignment** — Bumped version to `v0.9.20` across all package manifests, build scripts, configuration, and documentation files.
+- **Gateway Client WebSocket Exception Handling (PR #150)** — Resolved `AttributeError` by referencing the correct `websockets.exceptions` namespace in Gateway client reconnect/disconnect loop (`fix(cli): use correct websockets.exceptions namespace`).
+- **Private DM Forum Topics Session Isolation** — Bot API 9.3+ topics in private chats with the bot no longer share one `telegram:{chat_id}` session. When `message_thread_id` is present, history and per-session profile follow `telegram:{chat_id}:topic:{thread_id}` (same as group forums). WebUI autolabels append `· topic {id}` so owner DM topics stay distinguishable.
+- **Telegram Polling Missing `callback_query` Update Type** — `allowed_updates` only requested `message` / `edited_message`, so inline keyboard callbacks never reached the bot. Included `callback_query` so button handlers (e.g. profile pickers) work properly.
 
 ### Changed
 - **Runtime Simplification & Dead-Code Cleanup** — Removed unused browser tool, root WhatsApp `bridge/` duplicate, vendored socket.io copies, legacy WebUI `static/js/` tree, cron/heartbeat polling aliases, and unused direct deps (`websocket-client`, `questionary`, `chardet`, empty `telegram` / `langsmith` extras). Thin `CustomThinker`, route agent session KB updates through `PackManager` (no `webui` import), extract gateway HTTP/WS helpers + streaming token coalescing, defer system-prompt rebuild work, async session save, and skip secretary qmd reindex when digests are unchanged. Characterization tests cover agent turn, gateway actions/protocol, and secretary sync.
 - **Follow-up Deduplication & Router Extraction** — Split remnant `webui/api.py` into routers; extract `telegram_rich` + shared `oauth_util`; unify automation schedule-kind parsing; drop duplicate wheel `static/css/` (bundle-only), legacy thinking CSS, heartbeat hidden settings fields (preserve `gateway.heartbeat` on save), `get_cron_dir` alias, analysis artifact `logic_lens_scope.json`, and obsolete skipped heartbeat tests.
 
-### Fixed
-- **Gateway Client WebSocket Exception Handling (PR #150)** — Resolved `AttributeError` by referencing the correct `websockets.exceptions` namespace in Gateway client reconnect/disconnect loop (`fix(cli): use correct websockets.exceptions namespace`).
-- **Private DM Forum Topics Session Isolation** — Bot API 9.3+ topics in private chats with the bot no longer share one `telegram:{chat_id}` session. When `message_thread_id` is present, history and per-session profile follow `telegram:{chat_id}:topic:{thread_id}` (same as group forums). WebUI autolabels append `· topic {id}` so owner DM topics stay distinguishable.
-- **Telegram Polling Missing `callback_query` Update Type** — `allowed_updates` only requested `message` / `edited_message`, so inline keyboard callbacks never reached the bot. Included `callback_query` so button handlers (e.g. profile pickers) work properly.
 
 ## [0.9.13] - 2026-08-01
 

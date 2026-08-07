@@ -389,9 +389,17 @@ function createMessageGroup(type, targetContainer = chatHistory, opts = {}) {
         avatar.style.display = "none";
     } else {
         const img = document.createElement("img");
-        img.src = state.profileAvatar || DEFAULT_AVATAR;
+        const avatarSrc = state.profileAvatar || DEFAULT_AVATAR;
+        img.src = avatarSrc;
         img.alt = "Shiba";
         img.className = "agent-avatar-img";
+        img.onerror = function() {
+            if (this.src.includes("/static/")) {
+                this.src = "/shibaclaw_logo.webp";
+            } else {
+                this.src = "/static/shibaclaw_logo.webp";
+            }
+        };
         avatar.appendChild(img);
     }
     group.appendChild(avatar);
