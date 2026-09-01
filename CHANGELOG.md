@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Added
+- **OpenClaw-inspired batch 2** — Automation approve-once grants (`requireApproval` / fingerprint; invalidate on op change; `automation.approve`/`revoke`); memory ownership (`memory_forget`, Dream Diary `DREAM_DIARY.md`, provenance tags); Skill Workshop (max 3 pending proposals + approve/reject API); plugin install trust confirm; config change history (`~/.shibaclaw/config_history.jsonl`, `GET /api/config-history`); Telegram structured ask via InlineKeyboard + callback resolve; per-profile `allowed_models`; conversation fork/rewind APIs; `shibaclaw doctor [--fix]`; Telegram Mini App full chat (not admin-only); incognito sessions (RAM-only, skip memory consolidate/learn).
 - **OpenClaw-inspired interactive UX** — New tools `ask_user` (structured choices), `request_credential` (masked WebUI prompt; secret stored in vault namespace `runtime/` and never returned to the model), `update_progress` (durable progress card), and `session_search` (exact-phrase scan of session JSONL). Gateway event `chat.interactive` + action `interactive_reply`; WebUI cards + sidebar message-body search via `GET /api/sessions/search`. Per-session `permission_mode` metadata (`full` | `workspace` | `readonly`) rebinds FS/exec sandbox each turn.
 
 ### Changed

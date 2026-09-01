@@ -4,22 +4,28 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from shibaclaw.agent.interactive import DEFAULT_INTERACTIVE_TIMEOUT, get_interactive_hub
 from shibaclaw.agent.tools.base import Tool
 from shibaclaw.brain.manager import PackManager
+from shibaclaw.bus.events import OutboundMessage
 
 _SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _RUNTIME_NS = "runtime"
 
 
 class AskUserTool(Tool):
-    """Ask the user a structured question with optional buttons (WebUI)."""
+    """Ask the user a structured question with optional buttons (WebUI / Telegram)."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None,
+    ) -> None:
+        self._send_callback = send_callback
         self._session_key = ""
         self._channel = ""
+        self._chat_id = ""
 
     def set_context(
         self,
@@ -29,6 +35,7 @@ class AskUserTool(Tool):
         **_kwargs: Any,
     ) -> None:
         self._channel = channel or ""
+        self._chat_id = chat_id or ""
         self._session_key = session_key or (
             f"{channel}:{chat_id}" if channel and chat_id else ""
         )
@@ -100,18 +107,56 @@ class AskUserTool(Tool):
                 clean_options.append({"id": oid, "label": label})
 
         hub = get_interactive_hub()
-        result = await hub.request(
-            kind="ask",
-            session_key=self._session_key,
-            payload={
-                "prompt": prompt,
-                "options": clean_options,
-                "allow_free_text": bool(allow_free_text),
-                "allow_skip": bool(allow_skip),
-                "channel": self._channel,
-            },
-            timeout=DEFAULT_INTERACTIVE_TIMEOUT,
-        )
+        prev_emit = hub._emit
+        telegram_wired = False
+        if (
+            self._channel.lower() == "telegram"
+            and clean_options
+            and self._send_callback
+            and self._chat_id
+        ):
+
+            async def telegram_emit(event: dict[str, Any]) -> None:
+                rid = str(event.get("request_id") or "")
+                opts = event.get("options") or clean_options
+                kb = [
+                    {"id": str(o.get("id")), "label": str(o.get("label") or o.get("id"))}
+                    for o in opts
+                    if isinstance(o, dict) and o.get("id")
+                ]
+                await self._send_callback(
+                    OutboundMessage(
+                        channel="telegram",
+                        chat_id=self._chat_id,
+                        content=str(event.get("prompt") or prompt),
+                        metadata={
+                            "ask_request_id": rid,
+                            "inline_keyboard": kb,
+                        },
+                    )
+                )
+                if prev_emit is not None:
+                    await prev_emit(event)
+
+            hub.set_emit(telegram_emit)
+            telegram_wired = True
+
+        try:
+            result = await hub.request(
+                kind="ask",
+                session_key=self._session_key,
+                payload={
+                    "prompt": prompt,
+                    "options": clean_options,
+                    "allow_free_text": bool(allow_free_text),
+                    "allow_skip": bool(allow_skip),
+                    "channel": self._channel,
+                },
+                timeout=DEFAULT_INTERACTIVE_TIMEOUT,
+            )
+        finally:
+            if telegram_wired:
+                hub.set_emit(prev_emit)
 
         if result.get("skipped") or result.get("error") == "no_interactive_ui":
             # Fallback text for Telegram/CLI: list options; no wait.

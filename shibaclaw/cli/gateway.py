@@ -754,12 +754,30 @@ async def gateway_command(
                 else:
                     await ws.send(_err("job not found"))
 
+            elif action == "automation.approve":
+                job_id = payload.get("job_id", "")
+                job = automation.approve_job(job_id)
+                if job:
+                    await ws.send(_ok(_ser_job(job)))
+                else:
+                    await ws.send(_err("job not found"))
+
+            elif action == "automation.revoke":
+                job_id = payload.get("job_id", "")
+                job = automation.revoke_job_approval(job_id)
+                if job:
+                    await ws.send(_ok(_ser_job(job)))
+                else:
+                    await ws.send(_err("job not found"))
+
             elif action == "archive":
                 snapshot = payload.get("snapshot", [])
                 archived = False
                 if snapshot and hasattr(agent, "memory_consolidator"):
                     try:
-                        await agent.memory_consolidator.archive_snapshot(snapshot)
+                        await agent.memory_consolidator.archive_snapshot(
+                            snapshot, session_key=payload.get("session_key")
+                        )
                         archived = True
                     except Exception as _e:
                         logger.debug("Ignored error: {}", _e)
@@ -1060,7 +1078,9 @@ async def gateway_command(
                         archived = False
                         if snapshot and hasattr(agent, "memory_consolidator"):
                             try:
-                                await agent.memory_consolidator.archive_snapshot(snapshot)
+                                await agent.memory_consolidator.archive_snapshot(
+                                    snapshot, session_key=body.get("session_key")
+                                )
                                 archived = True
                             except Exception as _e:
                                 logger.debug("Ignored error: {}", _e)

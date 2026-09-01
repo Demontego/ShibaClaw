@@ -165,6 +165,47 @@ class ScentKeeper:
             async with aiofiles.open(self.history_file, "a", encoding="utf-8") as f:
                 await f.write(entry.rstrip() + "\n\n")
 
+    async def append_dream_diary(self, entry: str) -> None:
+        """Append a timestamped note to memory/DREAM_DIARY.md."""
+        diary = self.memory_dir / "DREAM_DIARY.md"
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+        block = f"## {ts}\n\n{entry.rstrip()}\n\n"
+        async with self._file_lock:
+            async with aiofiles.open(diary, "a", encoding="utf-8") as f:
+                await f.write(block)
+
+    async def forget_memory_lines(self, needle: str) -> dict:
+        """Remove lines containing *needle* from MEMORY.md and HISTORY.md.
+
+        Case-insensitive match. Never deletes the files themselves.
+        Returns per-file removed line counts.
+        """
+        needle_cf = (needle or "").casefold()
+        counts = {"MEMORY.md": 0, "HISTORY.md": 0}
+        if not needle_cf:
+            return counts
+
+        async with self._file_lock:
+            for label, path in (
+                ("MEMORY.md", self.memory_file),
+                ("HISTORY.md", self.history_file),
+            ):
+                if not path.exists():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                lines = text.splitlines(keepends=True)
+                kept: list[str] = []
+                removed = 0
+                for line in lines:
+                    if needle_cf in line.casefold():
+                        removed += 1
+                    else:
+                        kept.append(line)
+                if removed:
+                    path.write_text("".join(kept), encoding="utf-8")
+                counts[label] = removed
+        return counts
+
     def estimate_memory_tokens(self) -> int:
         """Estimate token count of the current MEMORY.md content."""
         content = self.read_long_term()
@@ -265,6 +306,7 @@ class ScentKeeper:
         messages: list[dict],
         provider: Thinker,
         model: str,
+        session_key: str | None = None,
     ) -> bool:
         if not messages:
             return True
@@ -345,6 +387,8 @@ class ScentKeeper:
                 logger.warning("Memory consolidation: history_entry is empty after normalization")
                 return await self._fail_or_raw_archive(messages)
 
+            if session_key:
+                entry = f"[session:{session_key}]\n{entry}"
             await self.append_history(entry)
             update = _ensure_text(update)
             user_update = _ensure_text(user_update)
@@ -577,8 +621,17 @@ class PackMemory:
             self._locks[session_key] = asyncio.Lock()
         return self._locks[session_key]
 
-    async def consolidate_messages(self, messages: list[dict[str, object]]) -> bool:
-        return await self.store.consolidate(messages, self.provider, self.consolidation_model)
+    async def consolidate_messages(
+        self,
+        messages: list[dict[str, object]],
+        session_key: str | None = None,
+    ) -> bool:
+        return await self.store.consolidate(
+            messages,
+            self.provider,
+            self.consolidation_model,
+            session_key=session_key,
+        )
 
     def pick_consolidation_boundary(
         self,
@@ -663,17 +716,23 @@ class PackMemory:
         self._prompt_tokens_cache[cache_key] = (est, src, now, signature)
         return est, src
 
-    async def archive_snapshot(self, messages: list[dict[str, object]]) -> bool:
+    async def archive_snapshot(
+        self,
+        messages: list[dict[str, object]],
+        session_key: str | None = None,
+    ) -> bool:
         if not messages:
             return True
         for _ in range(self.store._MAX_FAILURES_BEFORE_RAW_ARCHIVE):
-            if await self.consolidate_messages(messages):
+            if await self.consolidate_messages(messages, session_key=session_key):
                 await self.maybe_compact_memory()
                 return True
         await self.maybe_compact_memory()
         return True
 
     async def maybe_consolidate_by_tokens(self, session: Session) -> None:
+        if session.metadata.get("incognito"):
+            return
         if not session.messages or self.context_window_tokens <= 0:
             return
 
@@ -721,7 +780,7 @@ class PackMemory:
                     source,
                     len(chunk),
                 )
-                if not await self.consolidate_messages(chunk):
+                if not await self.consolidate_messages(chunk, session_key=session.key):
                     return
                 session.last_consolidated = end_idx
                 self._prompt_tokens_cache.pop(session.key, None)
@@ -732,6 +791,8 @@ class PackMemory:
                     return
 
     async def maybe_proactive_learn(self, session: Session) -> None:
+        if session.metadata.get("incognito"):
+            return
         if not self.learning_enabled or self.learning_interval <= 0:
             return
         count = len(session.messages) - session.last_learned
@@ -752,6 +813,9 @@ class PackMemory:
             if success:
                 session.last_learned += len(chunk)
                 self.sessions.save(session)
+                await self.store.append_dream_diary(
+                    f"Proactive learn for `{session.key}` ({len(chunk)} messages)."
+                )
             else:
                 logger.debug("🐕 Proactive Learning skipped/failed for {}", session.key)
         await self.maybe_compact_memory()

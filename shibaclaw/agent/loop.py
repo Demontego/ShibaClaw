@@ -28,6 +28,7 @@ from shibaclaw.agent.tools.interactive import (
     UpdateProgressTool,
 )
 from shibaclaw.agent.tools.memory_search import MemorySearchTool
+from shibaclaw.agent.tools.memory_ops import MemoryForgetTool, ProposeSkillTool
 from shibaclaw.agent.tools.message import MessageTool
 from shibaclaw.agent.tools.registry import SkillVault
 from shibaclaw.agent.tools.shell import ExecTool
@@ -421,6 +422,8 @@ class ShibaBrain:
             self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
         self.tools.register(MemorySearchTool(workspace=self.workspace))
+        self.tools.register(MemoryForgetTool(workspace=self.workspace))
+        self.tools.register(ProposeSkillTool(workspace=self.workspace))
         self.tools.register(
             MessageTool(
                 send_callback=self.bus.publish_outbound,
@@ -432,7 +435,7 @@ class ShibaBrain:
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
 
-        self.tools.register(AskUserTool())
+        self.tools.register(AskUserTool(send_callback=self.bus.publish_outbound))
         self.tools.register(RequestCredentialTool())
         self.tools.register(UpdateProgressTool())
         self.tools.register(SessionSearchTool(sessions=self.sessions))
@@ -1285,6 +1288,27 @@ class ShibaBrain:
                 session.metadata["model"] = canonical
                 await self.sessions.asave(session)
 
+        # Profile model allowlist — reject / clear disallowed session model
+        if session.metadata.get("model"):
+            try:
+                from shibaclaw.agent.profiles import ProfileManager
+
+                if not ProfileManager(self.workspace).model_allowed(
+                    profile_id, session.metadata.get("model")
+                ):
+                    blocked = session.metadata.pop("model", None)
+                    await self.sessions.asave(session)
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=(
+                            f"Model `{blocked}` is not allowed for this profile. "
+                            "Cleared session model override — using profile/default."
+                        ),
+                    )
+            except Exception as e:
+                logger.debug("model allowlist check skipped: {}", e)
+
         cmd = msg.content.strip().lower()
         if cmd == "/new":
             snapshot = session.messages[session.last_consolidated :]
@@ -1293,7 +1317,11 @@ class ShibaBrain:
             self.sessions.invalidate(session.key)
 
             if snapshot:
-                self._schedule_background(self.memory_consolidator.archive_snapshot(snapshot))
+                self._schedule_background(
+                    self.memory_consolidator.archive_snapshot(
+                        snapshot, session_key=session.key
+                    )
+                )
 
             return OutboundMessage(
                 channel=msg.channel, chat_id=msg.chat_id, content="New session started."

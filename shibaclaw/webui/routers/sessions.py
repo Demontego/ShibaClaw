@@ -54,6 +54,7 @@ async def api_sessions_get(request: Request):
             "reasoning_effort": session.metadata.get("reasoning_effort", None),
             "knowledge_bases": session.metadata.get("knowledge_bases", []),
             "permission_mode": session.metadata.get("permission_mode"),
+            "incognito": bool(session.metadata.get("incognito")),
         }
     )
 
@@ -84,7 +85,23 @@ async def api_sessions_patch(request: Request):
         except Exception:
             pass
     if "model" in data:
-        session.metadata["model"] = data["model"]
+        model = data["model"]
+        if model:
+            try:
+                from shibaclaw.agent.profiles import ProfileManager
+
+                profile_id = session.metadata.get("profile_id", "default")
+                if "profile_id" in data:
+                    profile_id = data["profile_id"]
+                wp = agent_manager.config.workspace_path
+                if not ProfileManager(wp).model_allowed(profile_id, str(model)):
+                    return JSONResponse(
+                        {"error": f"Model not allowed for profile '{profile_id}'"},
+                        status_code=400,
+                    )
+            except Exception:
+                pass
+        session.metadata["model"] = model
     if "reasoning_effort" in data:
         session.metadata["reasoning_effort"] = data["reasoning_effort"]
     if "knowledge_bases" in data:
@@ -99,6 +116,8 @@ async def api_sessions_patch(request: Request):
                 status_code=400,
             )
         session.metadata["permission_mode"] = mode or None
+    if "incognito" in data:
+        session.metadata["incognito"] = bool(data["incognito"])
     touch_keys = (
         "nickname",
         "profile_id",
@@ -106,6 +125,7 @@ async def api_sessions_patch(request: Request):
         "reasoning_effort",
         "knowledge_bases",
         "permission_mode",
+        "incognito",
     )
     if any(k in data for k in touch_keys):
         pm.save(session)
@@ -115,9 +135,72 @@ async def api_sessions_patch(request: Request):
                 "profile_id": session.metadata.get("profile_id", "default"),
                 "reasoning_effort": session.metadata.get("reasoning_effort"),
                 "permission_mode": session.metadata.get("permission_mode"),
+                "incognito": bool(session.metadata.get("incognito")),
             }
         )
     return JSONResponse({"error": "Nothing to update"}, status_code=400)
+
+
+async def api_sessions_fork(request: Request):
+    """Fork a session from a message index into a new session."""
+    if not agent_manager.config:
+        return JSONResponse({"error": "No config"}, status_code=400)
+    session_id = request.path_params["session_id"]
+    data = await request.json()
+    try:
+        from_index = int(data.get("from_index"))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "from_index must be an int"}, status_code=400)
+    pm = agent_manager.pm
+    if not pm:
+        return JSONResponse({"error": "Agent manager not ready"}, status_code=500)
+    forked = pm.fork_session(session_id, from_index)
+    if not forked:
+        return JSONResponse({"error": "Fork failed"}, status_code=500)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "session_id": forked.key,
+            "nickname": forked.metadata.get("nickname"),
+            "message_count": len(forked.messages),
+        }
+    )
+
+
+async def api_sessions_rewind(request: Request):
+    """Rewind a session to a message index (truncate after)."""
+    if not agent_manager.config:
+        return JSONResponse({"error": "No config"}, status_code=400)
+    session_id = request.path_params["session_id"]
+    data = await request.json()
+    try:
+        to_index = int(data.get("to_index"))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "to_index must be an int"}, status_code=400)
+    pm = agent_manager.pm
+    if not pm:
+        return JSONResponse({"error": "Agent manager not ready"}, status_code=500)
+    session = pm.rewind_session(session_id, to_index)
+    if not session:
+        return JSONResponse({"error": "Rewind failed"}, status_code=500)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "session_id": session.key,
+            "message_count": len(session.messages),
+        }
+    )
+
+
+async def api_config_history(request: Request):
+    """List recent config change history snapshots."""
+    try:
+        limit = int(request.query_params.get("limit") or 50)
+    except ValueError:
+        limit = 50
+    from shibaclaw.config.history import list_config_history
+
+    return JSONResponse({"history": list_config_history(limit=limit)})
 
 
 

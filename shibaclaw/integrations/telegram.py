@@ -11,6 +11,8 @@ from loguru import logger
 from pydantic import Field, field_validator
 from telegram import (
     BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     InlineQueryResultArticle,
     InputTextMessageContent,
     MenuButtonWebApp,
@@ -22,6 +24,7 @@ from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     BusinessConnectionHandler,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ManagedBotUpdatedHandler,
@@ -331,6 +334,7 @@ class TelegramChannel(BaseChannel):
             self._app.add_handler(BusinessConnectionHandler(self._on_business_connection))
         if self.config.managed_bots_enabled:
             self._app.add_handler(ManagedBotUpdatedHandler(self._on_managed_bot))
+        self._app.add_handler(CallbackQueryHandler(self._on_callback_query))
         logger.info("Starting Telegram bot (polling mode)...")
         await self._app.initialize()
         await self._app.start()
@@ -493,6 +497,7 @@ class TelegramChannel(BaseChannel):
                 reply_params = ReplyParameters(
                     message_id=reply_to_message_id, allow_sending_without_reply=True
                 )
+        ask_markup = self._build_ask_inline_keyboard(metadata)
         for media_path in msg.media or []:
             try:
                 media_type = self._get_media_type(media_path)
@@ -540,6 +545,25 @@ class TelegramChannel(BaseChannel):
                 )
         if msg.content and msg.content != "[empty message]":
             is_progress = bool(metadata.get("_progress", False))
+            # Structured ask: plain send with inline keyboard (skip rich/streaming).
+            if ask_markup is not None and not is_progress:
+                chunk = next(iter(split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN)), msg.content)
+                last_mid = await self._send_text(
+                    chat_id,
+                    chunk,
+                    reply_params,
+                    thread_kwargs,
+                    reply_markup=ask_markup,
+                )
+                inbound_mid = metadata.get("message_id")
+                if last_mid is not None:
+                    self._remember_inbound_reply(chat_id, inbound_mid, last_mid)
+                    if metadata.get("business_connection_id"):
+                        self._remember_secretary_outbound(chat_id, last_mid)
+                thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
+                await self._clear_progress_message(chat_id, thread_id)
+                self._clear_draft_id(chat_id, thread_id)
+                return
             use_draft = (
                 self.config.streaming
                 and self._is_private_chat_id(chat_id)
@@ -767,6 +791,7 @@ class TelegramChannel(BaseChannel):
         thread_kwargs: dict | None = None,
         *,
         edit_message_id: int | None = None,
+        reply_markup=None,
     ) -> int | None:
         """Send or edit a plain text message with HTML fallback. Returns message_id."""
         tk = dict(thread_kwargs or {})
@@ -822,6 +847,9 @@ class TelegramChannel(BaseChannel):
                         edit_message_id,
                         e,
                     )
+        send_extra: dict[str, Any] = {}
+        if reply_markup is not None:
+            send_extra["reply_markup"] = reply_markup
         try:
             html = _markdown_to_telegram_html(text)
             sent = await self._call_with_retry(
@@ -831,6 +859,7 @@ class TelegramChannel(BaseChannel):
                 parse_mode="HTML",
                 reply_parameters=reply_params,
                 **tk,
+                **send_extra,
             )
             return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
@@ -847,6 +876,7 @@ class TelegramChannel(BaseChannel):
                 text=text,
                 reply_parameters=reply_params,
                 **tk,
+                **send_extra,
             )
             return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
@@ -855,6 +885,80 @@ class TelegramChannel(BaseChannel):
             logger.error("Error sending Telegram message: {}", e2)
             raise
 
+    @staticmethod
+    def _build_ask_inline_keyboard(metadata: dict[str, Any]) -> InlineKeyboardMarkup | None:
+        """Build InlineKeyboardMarkup from ask metadata, or None."""
+        rid = str(metadata.get("ask_request_id") or "").strip()
+        options = metadata.get("inline_keyboard")
+        if not rid or not isinstance(options, list) or not options:
+            return None
+        rows: list[list[InlineKeyboardButton]] = []
+        row: list[InlineKeyboardButton] = []
+        for opt in options:
+            if not isinstance(opt, dict):
+                continue
+            oid = str(opt.get("id") or "").strip()
+            label = str(opt.get("label") or oid).strip()
+            if not oid or not label:
+                continue
+            raw = f"ask:{rid}:{oid}"
+            # Telegram callback_data hard limit: 64 bytes
+            cb = raw.encode("utf-8")[:64].decode("utf-8", errors="ignore")
+            row.append(InlineKeyboardButton(text=label[:64], callback_data=cb))
+            if len(row) >= 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+        if not rows:
+            return None
+        return InlineKeyboardMarkup(rows)
+
+    async def _on_callback_query(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Resolve structured ask_user choices from inline keyboard taps."""
+        cq = update.callback_query
+        if not cq or not cq.data:
+            return
+        data = cq.data
+        if not data.startswith("ask:"):
+            try:
+                await cq.answer()
+            except Exception:
+                pass
+            return
+        parts = data.split(":", 2)
+        if len(parts) < 3:
+            try:
+                await cq.answer()
+            except Exception:
+                pass
+            return
+        _, request_id, option_id = parts
+        label = option_id
+        try:
+            markup = getattr(cq.message, "reply_markup", None) if cq.message else None
+            for brow in getattr(markup, "inline_keyboard", None) or []:
+                for btn in brow:
+                    if getattr(btn, "callback_data", None) == data:
+                        label = getattr(btn, "text", None) or label
+                        break
+        except Exception:
+            pass
+        try:
+            await cq.answer(text=f"Selected: {label}"[:200])
+        except Exception:
+            pass
+        try:
+            from shibaclaw.agent.interactive import get_interactive_hub
+
+            get_interactive_hub().resolve(
+                request_id,
+                {"ok": True, "option_id": option_id, "label": label},
+            )
+        except Exception as e:
+            logger.warning("ask callback resolve failed: {}", e)
 
     @staticmethod
     def _is_private_chat_id(chat_id: int) -> bool:

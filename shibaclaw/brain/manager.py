@@ -115,6 +115,37 @@ class Session:
         self.last_consolidated = 0
         self.updated_at = datetime.now()
 
+    def rewind(self, to_index: int) -> int:
+        """Truncate messages to ``to_index`` (exclusive end), aligned to a legal boundary.
+
+        Returns the actual keep length.
+        """
+        if to_index <= 0:
+            self.messages = []
+            self.last_consolidated = 0
+            self.last_learned = 0
+            self.updated_at = datetime.now()
+            return 0
+        keep = min(to_index, len(self.messages))
+        sliced = self.messages[:keep]
+        start = self._find_legal_start(sliced)
+        if start:
+            sliced = sliced[start:]
+        self.messages = sliced
+        self.last_consolidated = min(self.last_consolidated, len(self.messages))
+        self.last_learned = min(self.last_learned, len(self.messages))
+        self.updated_at = datetime.now()
+        return len(self.messages)
+
+    def fork_messages(self, from_index: int) -> list[dict[str, Any]]:
+        """Return a copy of messages up to ``from_index`` on a legal boundary."""
+        keep = max(0, min(from_index, len(self.messages)))
+        sliced = list(self.messages[:keep])
+        start = self._find_legal_start(sliced)
+        if start:
+            sliced = sliced[start:]
+        return sliced
+
 
 class PackManager:
     """
@@ -241,6 +272,12 @@ class PackManager:
 
     def save(self, session: Session) -> None:
         """Save a session to disk."""
+        # Incognito: keep in-memory only (lost on restart).
+        if session.metadata.get("incognito") or session.metadata.get("ephemeral"):
+            self._cache[session.key] = session
+            self._cache_mtime_ns[session.key] = None
+            return
+
         path = self._get_session_path(session.key)
         key = session.key
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -345,6 +382,31 @@ class PackManager:
         self._list_sessions_cache = new_cache
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
 
+    def fork_session(self, source_key: str, from_index: int) -> Session | None:
+        """Create a new session with messages forked from ``source_key``."""
+        src = self.get_or_create(source_key)
+        msgs = src.fork_messages(from_index)
+        new_key = f"{source_key}:fork:{uuid_short()}"
+        session = Session(key=new_key)
+        session.messages = msgs
+        session.metadata = {
+            **{k: v for k, v in src.metadata.items() if k not in {"incognito", "ephemeral"}},
+            "forked_from": source_key,
+            "fork_index": from_index,
+            "nickname": (src.metadata.get("nickname") or source_key) + " (fork)",
+        }
+        self._cache[new_key] = session
+        self.save(session)
+        return session
+
+    def rewind_session(self, key: str, to_index: int) -> Session | None:
+        session = self.get_or_create(key)
+        session.rewind(to_index)
+        # Force full rewrite
+        self._cache_persisted_messages_count.pop(key, None)
+        self.save(session)
+        return session
+
     def search_messages(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Scan session JSONL bodies for an exact case-insensitive phrase.
 
@@ -425,3 +487,9 @@ class PackManager:
             except OSError:
                 continue
         return hits
+
+
+def uuid_short() -> str:
+    import uuid
+
+    return uuid.uuid4().hex[:8]
