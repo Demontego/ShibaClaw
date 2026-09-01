@@ -113,6 +113,11 @@ class ExecTool(Tool):
         self.allow_patterns = allow_patterns or []
         self.restrict_to_workspace = restrict_to_workspace
         self.path_append = path_append
+        self._readonly = False
+
+    def configure_sandbox(self, *, restrict_to_workspace: bool, readonly: bool = False) -> None:
+        self.restrict_to_workspace = restrict_to_workspace
+        self._readonly = readonly
 
     @property
     def name(self) -> str:
@@ -179,6 +184,8 @@ class ExecTool(Tool):
         timeout: int | None = None,
         **kwargs: Any,
     ) -> str:
+        if self._readonly:
+            return "Error: session permission mode is readonly (exec disabled)"
         cwd = working_dir or self.working_dir or os.getcwd()
         guard_error = self._guard_command(command, cwd)
         if guard_error:

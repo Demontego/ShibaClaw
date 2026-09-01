@@ -45,6 +45,20 @@ class _FsTool(Tool):
         self._workspace = workspace
         self._allowed_dir = allowed_dir
         self._extra_allowed_dirs = extra_allowed_dirs
+        self._readonly = False
+
+    def configure_sandbox(
+        self,
+        *,
+        allowed_dir: Path | None,
+        extra_allowed_dirs: list[Path] | None = None,
+        readonly: bool = False,
+    ) -> None:
+        """Rebind workspace restriction for the current session permission mode."""
+        self._allowed_dir = allowed_dir
+        if extra_allowed_dirs is not None:
+            self._extra_allowed_dirs = extra_allowed_dirs
+        self._readonly = readonly
 
     def _resolve(self, path: str) -> Path:
         resolved = _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
@@ -173,6 +187,8 @@ class WriteFileTool(_FsTool):
         }
 
     async def execute(self, path: str, content: str, **kwargs: Any) -> str:
+        if self._readonly:
+            return "Error: session permission mode is readonly (writes disabled)"
         try:
             fp = self._resolve(path)
             fp.parent.mkdir(parents=True, exist_ok=True)
@@ -254,6 +270,8 @@ class EditFileTool(_FsTool):
         replace_all: bool = False,
         **kwargs: Any,
     ) -> str:
+        if self._readonly:
+            return "Error: session permission mode is readonly (writes disabled)"
         try:
             fp = self._resolve(path)
             if not fp.exists():

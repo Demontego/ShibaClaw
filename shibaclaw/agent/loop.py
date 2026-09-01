@@ -21,6 +21,12 @@ from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from shibaclaw.agent.tools.interactive import (
+    AskUserTool,
+    RequestCredentialTool,
+    SessionSearchTool,
+    UpdateProgressTool,
+)
 from shibaclaw.agent.tools.memory_search import MemorySearchTool
 from shibaclaw.agent.tools.message import MessageTool
 from shibaclaw.agent.tools.registry import SkillVault
@@ -28,11 +34,14 @@ from shibaclaw.agent.tools.shell import ExecTool
 from shibaclaw.agent.tools.spawn import SpawnTool
 from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
 from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
+from shibaclaw.agent.interactive import get_interactive_hub, normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
+from shibaclaw.config.paths import get_media_dir
+
 
 _MEDIA_RE = re.compile(r'\{\s*"media"\s*:\s*\[\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]\s*\}')
 
@@ -423,6 +432,11 @@ class ShibaBrain:
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
 
+        self.tools.register(AskUserTool())
+        self.tools.register(RequestCredentialTool())
+        self.tools.register(UpdateProgressTool())
+        self.tools.register(SessionSearchTool(sessions=self.sessions))
+
         # Telegram Chat Automation secretary archive (owner-only via allowFrom).
         try:
             from shibaclaw.agent.tools.secretary import BusinessSearchTool, BusinessSendTool
@@ -442,6 +456,48 @@ class ShibaBrain:
             logger.error("Failed to register secretary tools: {}", e)
 
         self.mcp.restore_active_tools()
+
+    def _apply_permission_mode(self, session: Session | None) -> str:
+        """Apply per-session FS/exec permission mode; return resolved mode."""
+        meta = session.metadata if session else {}
+        mode = normalize_permission_mode(
+            meta.get("permission_mode"),
+            restrict_to_workspace=self.restrict_to_workspace,
+        )
+        if mode == "full":
+            allowed_dir: Path | None = None
+            restrict_exec = False
+            readonly = False
+        elif mode == "readonly":
+            allowed_dir = self.workspace
+            restrict_exec = True
+            readonly = True
+        else:  # workspace
+            allowed_dir = self.workspace
+            restrict_exec = True
+            readonly = False
+
+        extra_read = None
+        if allowed_dir is not None:
+            extra_read = [BUILTIN_SKILLS_DIR, get_media_dir()]
+
+        for name in ("read_file", "write_file", "edit_file", "list_dir"):
+            tool = self.tools.get(name)
+            if tool and hasattr(tool, "configure_sandbox"):
+                # read_file keeps extra dirs; writers ignore extras
+                extras = extra_read if name == "read_file" else None
+                tool.configure_sandbox(
+                    allowed_dir=allowed_dir,
+                    extra_allowed_dirs=extras,
+                    readonly=readonly and name in {"write_file", "edit_file"},
+                )
+        exec_tool = self.tools.get("exec")
+        if exec_tool and hasattr(exec_tool, "configure_sandbox"):
+            exec_tool.configure_sandbox(
+                restrict_to_workspace=restrict_exec,
+                readonly=readonly,
+            )
+        return mode
 
     def inject_steering_message(
         self,
@@ -547,12 +603,27 @@ class ShibaBrain:
                         )
                     else:
                         tool.set_context(channel, chat_id, session_key)
+        for name in (
+            "ask_user",
+            "request_credential",
+            "update_progress",
+            "session_search",
+        ):
+            if tool := self.tools.get(name):
+                if hasattr(tool, "set_context"):
+                    tool.set_context(channel, chat_id, session_key)
         # Secretary tools need turn metadata for owner ACL.
         for name in ("business_search", "business_send"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     tool.set_context(channel, chat_id, metadata=metadata or {})
 
+        if session_key:
+            try:
+                session = self.sessions.get_or_create(session_key)
+                self._apply_permission_mode(session)
+            except Exception as e:
+                logger.debug("permission mode apply skipped: {}", e)
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
         """Remove <think>…</think> blocks that some models embed in content."""

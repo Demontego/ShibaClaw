@@ -99,6 +99,7 @@ from .routers.sessions import (
     api_sessions_get,
     api_sessions_list,
     api_sessions_patch,
+    api_sessions_search,
 )
 from .routers.settings import api_models_get, api_settings_get, api_settings_post
 from .routers.skills import (
@@ -176,6 +177,7 @@ def create_app(
         Route("/api/settings", api_settings_post, methods=["POST"]),
         Route("/api/models", api_models_get, methods=["GET"]),
         Route("/api/sessions", api_sessions_list),
+        Route("/api/sessions/search", api_sessions_search),
         Route("/api/sessions/{session_id}", api_sessions_get, methods=["GET"]),
         Route("/api/sessions/{session_id}", api_sessions_patch, methods=["PATCH"]),
         Route("/api/sessions/{session_id}", api_sessions_delete, methods=["DELETE"]),

@@ -53,6 +53,7 @@ async def api_sessions_get(request: Request):
             "model": session.metadata.get("model", ""),
             "reasoning_effort": session.metadata.get("reasoning_effort", None),
             "knowledge_bases": session.metadata.get("knowledge_bases", []),
+            "permission_mode": session.metadata.get("permission_mode"),
         }
     )
 
@@ -88,13 +89,32 @@ async def api_sessions_patch(request: Request):
         session.metadata["reasoning_effort"] = data["reasoning_effort"]
     if "knowledge_bases" in data:
         session.metadata["knowledge_bases"] = data["knowledge_bases"]
-    if any(k in data for k in ("nickname", "profile_id", "model", "reasoning_effort", "knowledge_bases")):
+    if "permission_mode" in data:
+        from shibaclaw.agent.interactive import PERMISSION_MODES
+
+        mode = str(data["permission_mode"] or "").strip().lower()
+        if mode and mode not in PERMISSION_MODES:
+            return JSONResponse(
+                {"error": f"permission_mode must be one of {sorted(PERMISSION_MODES)}"},
+                status_code=400,
+            )
+        session.metadata["permission_mode"] = mode or None
+    touch_keys = (
+        "nickname",
+        "profile_id",
+        "model",
+        "reasoning_effort",
+        "knowledge_bases",
+        "permission_mode",
+    )
+    if any(k in data for k in touch_keys):
         pm.save(session)
         return JSONResponse(
             {
                 "status": "updated",
                 "profile_id": session.metadata.get("profile_id", "default"),
                 "reasoning_effort": session.metadata.get("reasoning_effort"),
+                "permission_mode": session.metadata.get("permission_mode"),
             }
         )
     return JSONResponse({"error": "Nothing to update"}, status_code=400)
@@ -140,3 +160,21 @@ async def api_sessions_archive(request: Request):
         asyncio.create_task(agent_manager.archive_via_gateway(snapshot))
 
     return JSONResponse({"status": "archived"})
+
+
+async def api_sessions_search(request: Request):
+    """Search conversation message bodies across sessions."""
+    if not agent_manager.config:
+        return JSONResponse({"error": "No config"}, status_code=400)
+    pm = agent_manager.pm
+    if not pm:
+        return JSONResponse({"error": "Agent manager not ready"}, status_code=500)
+    q = (request.query_params.get("q") or "").strip()
+    if not q:
+        return JSONResponse({"error": "q is required"}, status_code=400)
+    try:
+        limit = int(request.query_params.get("limit") or 20)
+    except ValueError:
+        limit = 20
+    hits = pm.search_messages(q, limit=limit)
+    return JSONResponse({"query": q, "hits": hits})

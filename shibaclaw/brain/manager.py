@@ -344,3 +344,84 @@ class PackManager:
 
         self._list_sessions_cache = new_cache
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    def search_messages(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Scan session JSONL bodies for an exact case-insensitive phrase.
+
+        Returns newest-first hits with session_key, role, timestamp, snippet.
+        """
+        needle = (query or "").strip().lower()
+        if not needle:
+            return []
+        try:
+            lim = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            lim = 20
+
+        hits: list[dict[str, Any]] = []
+        try:
+            entries = os.scandir(self.sessions_dir)
+        except FileNotFoundError:
+            return []
+
+        with entries:
+            files = [e for e in entries if e.is_file() and e.name.endswith(".jsonl")]
+        files.sort(key=lambda e: e.stat().st_mtime, reverse=True)
+
+        for entry in files:
+            if len(hits) >= lim:
+                break
+            session_key = ""
+            try:
+                with open(entry.path, encoding="utf-8") as f:
+                    for line in f:
+                        if len(hits) >= lim:
+                            break
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if data.get("_type") == "metadata":
+                            session_key = str(data.get("key") or session_key)
+                            continue
+                        content = data.get("content")
+                        if isinstance(content, list):
+                            parts: list[str] = []
+                            for block in content:
+                                if isinstance(block, dict) and isinstance(
+                                    block.get("text"), str
+                                ):
+                                    parts.append(block["text"])
+                                elif isinstance(block, str):
+                                    parts.append(block)
+                            text = "\n".join(parts)
+                        elif isinstance(content, str):
+                            text = content
+                        else:
+                            continue
+                        if needle not in text.lower():
+                            continue
+                        if not session_key:
+                            session_key = entry.name[:-6].replace("_", ":", 1)
+                        idx = text.lower().find(needle)
+                        start = max(0, idx - 40)
+                        end = min(len(text), idx + len(needle) + 60)
+                        snippet = text[start:end].replace("\n", " ")
+                        if start > 0:
+                            snippet = "…" + snippet
+                        if end < len(text):
+                            snippet = snippet + "…"
+                        hits.append(
+                            {
+                                "session_key": session_key,
+                                "role": data.get("role", ""),
+                                "timestamp": data.get("timestamp"),
+                                "snippet": snippet[:240],
+                            }
+                        )
+            except OSError:
+                continue
+        return hits

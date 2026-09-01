@@ -510,6 +510,10 @@ async def gateway_command(
                     return
 
                 async def _run_chat(ws, request_id, payload):
+                    from shibaclaw.agent.interactive import get_interactive_hub
+
+                    hub = get_interactive_hub()
+
                     async def _on_ws_progress(text, *, tool_hint=False):
                         try:
                             await ws.send(
@@ -524,6 +528,23 @@ async def gateway_command(
                             )
                         except websockets.exceptions.ConnectionClosed:
                             pass
+
+                    async def _on_interactive(event: dict):
+                        try:
+                            await ws.send(
+                                json.dumps(
+                                    {
+                                        "type": "event",
+                                        "name": "chat.interactive",
+                                        "request_id": request_id,
+                                        "payload": event,
+                                    }
+                                )
+                            )
+                        except websockets.exceptions.ConnectionClosed:
+                            pass
+
+                    hub.set_emit(_on_interactive)
 
                     async def _send_token_chunk(chunk: str):
                         await ws.send(
@@ -560,6 +581,7 @@ async def gateway_command(
                             )
                         finally:
                             await coalescer.close()
+                            hub.set_emit(None)
                         if coalescer.token_count:
                             logger.debug(
                                 "WS token coalesce: {} tokens -> {} sends (dropped={})",
@@ -638,6 +660,16 @@ async def gateway_command(
                     attachments=attachments,
                 )
                 await ws.send(_ok({"injected": injected}))
+
+            elif action == "interactive_reply":
+                from shibaclaw.agent.interactive import get_interactive_hub
+
+                rid = str(payload.get("request_id") or "").strip()
+                response = payload.get("response") or {}
+                if not isinstance(response, dict):
+                    response = {"value": response}
+                ok = bool(rid) and get_interactive_hub().resolve(rid, response)
+                await ws.send(_ok({"resolved": ok, "request_id": rid}))
 
             elif action == "restart":
                 await ws.send(_ok({"status": "restarting"}))

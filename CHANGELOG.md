@@ -1,5 +1,8 @@
 ## [Unreleased]
 
+### Added
+- **OpenClaw-inspired interactive UX** — New tools `ask_user` (structured choices), `request_credential` (masked WebUI prompt; secret stored in vault namespace `runtime/` and never returned to the model), `update_progress` (durable progress card), and `session_search` (exact-phrase scan of session JSONL). Gateway event `chat.interactive` + action `interactive_reply`; WebUI cards + sidebar message-body search via `GET /api/sessions/search`. Per-session `permission_mode` metadata (`full` | `workspace` | `readonly`) rebinds FS/exec sandbox each turn.
+
 ### Changed
 - **Runtime simplification & dead-code cleanup** — Removed unused browser tool, root WhatsApp `bridge/` duplicate, vendored socket.io copies, legacy WebUI `static/js/` tree, cron/heartbeat polling aliases, and unused direct deps (`websocket-client`, `questionary`, `chardet`, empty `telegram` / `langsmith` extras). Thin `CustomThinker`, route agent session KB updates through `PackManager` (no `webui` import), extract gateway HTTP/WS helpers + streaming token coalescing, defer system-prompt rebuild work, async session save, and skip secretary qmd reindex when digests are unchanged. Characterization tests cover agent turn, gateway actions/protocol, and secretary sync.
 - **Follow-up dedupe** — Split remnant `webui/api.py` into routers; extract `telegram_rich` + shared `oauth_util`; unify automation schedule-kind parsing; drop duplicate wheel `static/css/` (bundle-only), legacy thinking CSS, heartbeat hidden settings fields (preserve `gateway.heartbeat` on save), `get_cron_dir` alias, analysis artifact `logic_lens_scope.json`, and obsolete skipped heartbeat tests.
