@@ -8,34 +8,34 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from filelock import FileLock
+# Defer langchain / filelock imports until RAG is actually used.
+RAG_AVAILABLE = False
 
-# Suppress Hugging Face Hub unauthenticated request warnings and disable progress bars
-# (Moved to _get_embeddings to avoid global side effects on import)
+_RAG_MSG = "RAG dependencies are not installed. Run: uv sync --extra rag"
 
-try:
-    from langchain_core.documents import Document  # noqa: E402
-    from langchain_community.document_loaders import (  # noqa: E402
-        BSHTMLLoader,
-        CSVLoader,
-        PyPDFLoader,
-        TextLoader,
-    )
-    from langchain_community.vectorstores import FAISS  # noqa: E402
+
+class Document:
+    """Stub; replaced by langchain_core.documents.Document when RAG loads."""
+
+
+BSHTMLLoader = CSVLoader = PyPDFLoader = TextLoader = FAISS = None  # type: ignore[assignment,misc]
+RecursiveCharacterTextSplitter = None  # type: ignore[assignment,misc]
+
+
+def _file_lock(path: str):
     try:
-        from langchain_huggingface import HuggingFaceEmbeddings  # noqa: E402, F401
-    except ImportError:
-        HuggingFaceEmbeddings = None  # type: ignore[misc, assignment]
-    from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: E402
-    RAG_AVAILABLE = True
-except ImportError:
-    class Document:
-        pass
-    RAG_AVAILABLE = False
+        from filelock import FileLock
+    except ImportError as e:
+        raise RuntimeError(
+            "filelock is required for Knowledge Bases. Run: uv sync --extra rag"
+        ) from e
+    return FileLock(path)
 
 
 def is_rag_available() -> bool:
     global RAG_AVAILABLE, Document, BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader, FAISS, RecursiveCharacterTextSplitter
+    if RAG_AVAILABLE:
+        return True
     import importlib.util
     import sys
 
@@ -80,8 +80,8 @@ logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=4)
 def _get_embeddings(provider: str, api_key: str, api_base: str, model: str):
-    if not RAG_AVAILABLE:
-        raise RuntimeError("RAG dependencies are not installed. Please run `pip install 'shibaclaw[rag]'`.")
+    if not is_rag_available():
+        raise RuntimeError(_RAG_MSG)
     
     warnings.filterwarnings("ignore", category=UserWarning, module="huggingface_hub")
     os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
@@ -93,7 +93,7 @@ def _get_embeddings(provider: str, api_key: str, api_base: str, model: str):
         try:
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
         except ImportError:
-            raise RuntimeError("Missing Google RAG dependencies. Please run `pip install 'shibaclaw[rag]'`.")
+            raise RuntimeError("Missing Google RAG dependencies. Run: uv sync --extra rag")
         mdl = model or "models/gemini-embedding-001"
         return GoogleGenerativeAIEmbeddings(model=mdl, google_api_key=api_key)
     
@@ -103,7 +103,7 @@ def _get_embeddings(provider: str, api_key: str, api_base: str, model: str):
         try:
             from langchain_openai import OpenAIEmbeddings
         except ImportError:
-            raise RuntimeError(f"Missing {provider.capitalize()} RAG dependencies. Please run `pip install 'shibaclaw[rag]'`.")
+            raise RuntimeError(f"Missing {provider.capitalize()} RAG dependencies. Run: uv sync --extra rag")
         mdl = model or ("openai/text-embedding-3-small" if provider == "openrouter" else "text-embedding-3-small")
         base = api_base or ("https://openrouter.ai/api/v1" if provider == "openrouter" else None)
         return OpenAIEmbeddings(openai_api_base=base, model=mdl, openai_api_key=api_key)
@@ -116,7 +116,7 @@ def _get_embeddings(provider: str, api_key: str, api_base: str, model: str):
         except ImportError:
             raise RuntimeError(
                 "Local HuggingFace embeddings are not installed. "
-                "To use the 'local' provider, please run: pip install 'shibaclaw[rag-local]'"
+                "To use the 'local' provider, run: uv sync --extra rag-local"
             )
     else:
         raise ValueError(f"Unknown RAG embedding provider: '{provider}'")
@@ -130,7 +130,7 @@ class KnowledgeManager:
         self.workspace_path = workspace_path
         self.base_dir = self.workspace_path / "memory" / "knowledge"
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        if RAG_AVAILABLE:
+        if is_rag_available():
             self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         else:
             self.text_splitter = None
@@ -189,7 +189,7 @@ class KnowledgeManager:
         coll_dir.mkdir(parents=True)
         meta = {"id": collection_id, "name": name, "description": description, "files": []}
         meta_file = coll_dir / "meta.json"
-        lock = FileLock(f"{meta_file}.lock")
+        lock = _file_lock(f"{meta_file}.lock")
         with lock:
             with open(meta_file, "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=2)
@@ -200,7 +200,7 @@ class KnowledgeManager:
         if not coll_dir.exists():
             raise ValueError(f"Collection {collection_id} does not exist")
         meta_file = coll_dir / "meta.json"
-        lock = FileLock(f"{meta_file}.lock")
+        lock = _file_lock(f"{meta_file}.lock")
         with lock:
             with open(meta_file, "r", encoding="utf-8") as f:
                 meta = json.load(f)
@@ -221,8 +221,8 @@ class KnowledgeManager:
             del self._faiss_cache[cid]
 
     def _get_loader(self, file_path: Path):
-        if not RAG_AVAILABLE:
-            raise RuntimeError("Local RAG dependencies are not installed. Please run `pip install 'shibaclaw[rag]'`.")
+        if not is_rag_available():
+            raise RuntimeError(_RAG_MSG)
         ext = file_path.suffix.lower()
         if ext == ".pdf":
             return PyPDFLoader(str(file_path))
@@ -234,8 +234,8 @@ class KnowledgeManager:
             return TextLoader(str(file_path), autodetect_encoding=True)
 
     def add_document(self, collection_id: str, file_path: Path, filename: str) -> None:
-        if not RAG_AVAILABLE:
-            raise RuntimeError("Local RAG dependencies are not installed. Please run `pip install 'shibaclaw[rag]'`.")
+        if not is_rag_available():
+            raise RuntimeError(_RAG_MSG)
         coll_dir = self._get_collection_dir(collection_id)
         if not coll_dir.exists():
             raise ValueError(f"Collection {collection_id} does not exist")
@@ -290,7 +290,7 @@ class KnowledgeManager:
             
             # Update meta safely
             meta_file = coll_dir / "meta.json"
-            lock = FileLock(f"{meta_file}.lock")
+            lock = _file_lock(f"{meta_file}.lock")
             with lock:
                 with open(meta_file, "r", encoding="utf-8") as f:
                     meta = json.load(f)
@@ -312,7 +312,7 @@ class KnowledgeManager:
             raise e
 
     def search(self, collection_ids: List[str], query: str, k: int = 4) -> List[Document]:
-        if not RAG_AVAILABLE:
+        if not is_rag_available():
             raise RuntimeError("Local RAG dependencies are not installed. Please run `pip install 'shibaclaw[rag]'`.")
         results = []
         for cid in collection_ids:

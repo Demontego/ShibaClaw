@@ -156,7 +156,7 @@ jobs:
         shell: bash
         run: >
           uv sync --frozen --all-packages
-          --extra dev --extra rag --extra windows-native --extra all-channels
+          --extra dev --extra desktop --extra rag --extra windows-native --extra all-channels
 
       - name: Build with PyInstaller
         run: uv run python scripts/build_windows.py

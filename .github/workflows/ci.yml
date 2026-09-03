@@ -46,7 +46,7 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --frozen --all-packages --extra dev
+        run: uv sync --frozen --all-packages --extra dev --extra rag
 
       - name: Lint with Ruff
         run: uv run ruff check .
@@ -68,7 +68,7 @@ jobs:
 
       - name: Install dependencies (desktop + dev)
         shell: bash
-        run: uv sync --frozen --all-packages --extra dev --extra rag --extra windows-native
+        run: uv sync --frozen --all-packages --extra dev --extra desktop --extra rag --extra windows-native
 
       - name: Smoke-test desktop imports
         run: >

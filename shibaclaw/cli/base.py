@@ -37,7 +37,6 @@ def _make_provider(config: Config, exit_on_error: bool = True):
     """Create the appropriate Thinker from config."""
     from shibaclaw.thinkers.azure_openai_provider import AzureOpenAIThinker
     from shibaclaw.thinkers.base import GenerationSettings
-    from shibaclaw.thinkers.openai_codex_provider import OpenAICodexThinker
     from shibaclaw.thinkers.registry import PROVIDERS, find_by_name
 
     from .auth import _is_oauth_authenticated
@@ -60,6 +59,8 @@ def _make_provider(config: Config, exit_on_error: bool = True):
                     break
 
     if provider_name == "openai_codex" or model.startswith("openai-codex/"):
+        from shibaclaw.thinkers.openai_codex_provider import OpenAICodexThinker
+
         provider = OpenAICodexThinker(default_model=model)
     elif provider_name == "custom":
         from shibaclaw.thinkers.custom_provider import CustomThinker

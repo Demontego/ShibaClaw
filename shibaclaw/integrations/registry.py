@@ -92,6 +92,32 @@ def discover_local_plugins() -> dict[str, type[BaseChannel]]:
     return plugins
 
 
+def discover_enabled(enabled_names: set[str] | frozenset[str]) -> dict[str, type[BaseChannel]]:
+    """Load only the requested built-in channel modules (+ all plugins).
+
+    Skips importing disabled channel modules at gateway startup.
+    """
+    builtin: dict[str, type[BaseChannel]] = {}
+    for modname in discover_channel_names():
+        if modname not in enabled_names:
+            continue
+        try:
+            builtin[modname] = load_channel_class(modname)
+        except ImportError as e:
+            logger.debug("Channel '{}' not loadable: {}", modname, e)
+
+    external = discover_plugins()
+    local = discover_local_plugins()
+
+    all_external = {**external, **local}
+
+    shadowed = set(all_external) & set(builtin)
+    if shadowed:
+        logger.warning("Plugin(s) shadowed by built-in channels (ignored): {}", shadowed)
+
+    return {**all_external, **builtin}
+
+
 def discover_all() -> dict[str, type[BaseChannel]]:
     """Return all channels: built-in (pkgutil) merged with external (entry_points).
 

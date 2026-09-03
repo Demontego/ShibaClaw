@@ -263,7 +263,9 @@ async def _audit_pip(
         result.summary = "Audit timed out"
         return result
     except FileNotFoundError:
-        result.warnings.append("pip-audit not installed — allowing install with caution")
+        result.warnings.append(
+            "pip-audit not installed — run: uv sync --extra audit (allowing install with caution)"
+        )
         result.confidence = "low"
         result.summary = "Audit tool not available"
         return result
