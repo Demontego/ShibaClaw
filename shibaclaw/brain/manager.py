@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -358,7 +358,7 @@ class PackManager:
                         new_cache[path_str] = cached_data
                         continue
 
-                    updated_at = datetime.fromtimestamp(mtime).isoformat()
+                    updated_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
                     with open(path_str, encoding="utf-8") as f:
                         first_line = f.readline().strip()
                         if first_line:

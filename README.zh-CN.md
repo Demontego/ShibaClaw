@@ -40,15 +40,18 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>📢 <b>最新动态 — v0.9.13</b>（点击展开）</summary>
+<summary>📢 <b>最新动态 — v0.9.20</b>（点击展开）</summary>
 
-**最新发布 (2026-08-01):**
+**最新发布 (2026-08-07):**
 
-- **修复 ExecTool 命令注入漏洞** — 通过将基于 shell 的执行替换为安全的 `shlex` 参数解析和直接进程执行（`create_subprocess_exec`），解决了 Shell 执行中的严重命令注入漏洞（CWE-78）。
-- **依赖项安全漏洞修复** — 通过更新 `protobufjs` (v7.6.5) 和 `sharp` (v0.35.3) 的覆盖配置，解决了 bridge npm 依赖项中的安全漏洞。
-- **智能体循环与转向稳定性** — 修复了 `/update` 命令导致的崩溃，修复了活动任务期间消息转向的会话路由和事件发射。
-- **WebUI Token 估算** — 修复了传递消息列表时 `estimate_prompt_tokens` API 端点中的参数类型处理。
-- **云端 RAG 依赖** — 纠正了云端 RAG 依赖项范围和默认嵌入模型配置。
+- **全新 WebUI 侧边栏与 Telegram UI 优化** — Telegram 与 WebUI 迎来了精心打磨与多项改善！包括 Shiba Gold 暗色侧边栏设计、Telegram **Rich Messages** 提示图标与说明、`allow_from` 允许列表中 `@username` 的明确指引及紧凑型工具栏。
+- **Telegram Bot API 10.1 Rich Messages** — 可选支持 Telegram Bot API 10.1 Rich Messages (`sendRichMessage`)，支持数学公式、格式化表格和媒体拼图的自动块生成。
+- **Telegram 秘书自动化与 Mini App 认证** — 整合 Telegram 秘书自动化、Mini App 身份验证及基于配置文件的工具访问控制。
+- **会话下拉菜单遮挡与 Z-Index 修复** — 解决了下拉菜单裁剪问题，添加了优先 `z-index: 100` 及智能边界翻转检测。
+- **智能体头像渲染与降级修复** — 修复了头像尺寸 (30px × 30px)、显示属性及动态降级路径 (`/static/shibaclaw_logo.webp`)。
+- **Gateway 客户端异常处理** — 引用正确的 `websockets.exceptions` 命名空间，解决了 `AttributeError` 崩溃。
+- **私聊 DM 论坛主题会话隔离** — 私聊中的主题现在遵循独立会话隔离 (`telegram:{chat_id}:topic:{thread_id}`)。
+- **Telegram 轮询包含 `callback_query` 更新类型** — 在 `allowed_updates` 中包含了 `callback_query`，确保内联键盘回调正常响应。
 
 完整版本历史请查看 [CHANGELOG.md](./CHANGELOG.md)。
 

@@ -37,17 +37,24 @@ class MessageBus:
         if self._rate_limit <= 0:
             return False
         now = time.monotonic()
-        window = self._inbound_timestamps.get(sender_id, [])
         cutoff = now - 60.0
-        window = [ts for ts in window if ts > cutoff]
+
+        # Periodic sweep to prevent memory leak from one-off senders
+        if len(self._inbound_timestamps) > 100:
+            stale_keys = [
+                k for k, timestamps in self._inbound_timestamps.items()
+                if not any(ts > cutoff for ts in timestamps)
+            ]
+            for k in stale_keys:
+                self._inbound_timestamps.pop(k, None)
+
+        window = [ts for ts in self._inbound_timestamps.get(sender_id, []) if ts > cutoff]
         if not window:
             self._inbound_timestamps.pop(sender_id, None)
         else:
             self._inbound_timestamps[sender_id] = window
         if len(window) >= self._rate_limit:
             return True
-        if sender_id not in self._inbound_timestamps:
-            self._inbound_timestamps[sender_id] = []
         self._inbound_timestamps[sender_id].append(now)
         return False
 

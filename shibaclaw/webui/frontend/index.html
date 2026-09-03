@@ -21,13 +21,14 @@
 
     <!-- Styles -->
     <link rel="stylesheet" href="/index.css?v=2">
+    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=1">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/js/realtime.js"></script>
     <script src="/js/subagent_ui.js"></script>
     <script src="/vendor/marked.min.js"></script>
-    <script src="/vendor/purify.min.js"></script>
-
+    <!-- Tally Embed SDK -->
+    <script async src="https://tally.so/widgets/embed.js"></script>
 
     <!-- Highlight.js for syntax highlighting -->
     <link rel="stylesheet" href="/vendor/github-dark.min.css">
@@ -93,30 +94,38 @@
 
             <div class="sidebar-actions">
                 <button class="btn-action btn-new-chat" id="btn-new-session">
-                    <span class="material-icons-round">add_circle</span>
+                    <span class="material-icons-round">add</span>
                     <span data-i18n="nav.new_session">New Session</span>
                 </button>
             </div>
 
-
-            <div class="sidebar-section">
+            <div class="sidebar-section tools-section">
                 <div class="section-title" data-i18n="nav.tools">TOOLS</div>
-                <button class="btn-command" onclick="openModal('fs-modal')">
-                    <span class="material-icons-round">folder_open</span> <span data-i18n="nav.files">Files</span>
-                </button>
-                <button class="btn-command" onclick="openModal('automation-modal')">
-                    <span class="material-icons-round">event_repeat</span> <span data-i18n="nav.automation">Automation</span>
-                    <span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
-                </button>
-                <button class="btn-command" onclick="openModal('knowledge-modal')">
-                    <span class="material-icons-round">library_books</span> <span data-i18n="nav.knowledge">Knowledge Base</span>
-                </button>
-                <button class="btn-command" onclick="openModal('connected-apps-modal')">
-                    <span class="material-icons-round">apps</span> <span data-i18n="nav.apps">Apps</span>
-                </button>
-                <button class="btn-command" onclick="openModal('settings-modal')">
-                    <span class="material-icons-round">settings</span> <span data-i18n="nav.settings">Settings</span>
-                </button>
+                <nav class="sidebar-tools" aria-label="Tools">
+                    <button class="btn-command" onclick="openModal('fs-modal')" data-i18n-title="nav.files"
+                        data-i18n-aria="nav.files" title="Files" aria-label="Files">
+                        <span class="material-icons-round">folder_open</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('automation-modal')"
+                        data-i18n-title="nav.automation" data-i18n-aria="nav.automation" title="Automation"
+                        aria-label="Automation">
+                        <span class="material-icons-round">event_repeat</span>
+                        <span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('knowledge-modal')"
+                        data-i18n-title="nav.knowledge" data-i18n-aria="nav.knowledge" title="Knowledge Base"
+                        aria-label="Knowledge Base">
+                        <span class="material-icons-round">library_books</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('connected-apps-modal')" data-i18n-title="nav.apps"
+                        data-i18n-aria="nav.apps" title="Apps" aria-label="Apps">
+                        <span class="material-icons-round">apps</span>
+                    </button>
+                    <button class="btn-command" onclick="openModal('settings-modal')" data-i18n-title="nav.settings"
+                        data-i18n-aria="nav.settings" title="Settings" aria-label="Settings">
+                        <span class="material-icons-round">settings</span>
+                    </button>
+                </nav>
             </div>
 
             <!-- History Section -->
@@ -1407,21 +1416,20 @@
         </div>
     </div>
 
-    <!-- GitHub Star Popup -->
-    <div id="gh-star-popup">
-        <div class="gh-star-icon">
-            <span class="material-icons-round">star</span>
+    <!-- Tally Feedback Popup -->
+    <div id="feedback-popup">
+        <div class="gh-star-icon" style="color: var(--color-primary, #6366f1);">
+            <span class="material-icons-round">rate_review</span>
         </div>
         <div class="gh-star-content">
-            <div class="gh-star-title" data-i18n="ghstar.title">Support ShibaClaw</div>
-            <div class="gh-star-text" data-i18n="ghstar.body">If you like ShibaClaw, please consider giving us a star on GitHub to help us grow!
-            </div>
+            <div class="gh-star-title" data-i18n="feedback.title">Do you like ShibaClaw?</div>
+            <div class="gh-star-text" data-i18n="feedback.body">Let us know how we can make ShibaClaw better for you!</div>
         </div>
         <div class="gh-star-actions">
-            <a href="https://github.com/RikyZ90/ShibaClaw" target="_blank" class="gh-star-btn" id="gh-star-link">
-                <span class="material-icons-round" style="font-size:14px">star_border</span> <span data-i18n="ghstar.star">Star</span>
-            </a>
-            <button class="gh-star-close" id="gh-star-dismiss" data-i18n="ghstar.later">Maybe later</button>
+            <button class="gh-star-btn" id="feedback-link" data-tally-open="WO6dqP" data-tally-emoji-text="👋" data-tally-emoji-animation="wave">
+                <span class="material-icons-round" style="font-size:14px">sentiment_satisfied_alt</span> <span data-i18n="feedback.btn">Feedback</span>
+            </button>
+            <button class="gh-star-close" id="feedback-dismiss" data-i18n="feedback.later">Maybe later</button>
         </div>
     </div>
 
@@ -1530,6 +1538,7 @@
     <script src="/js/mcp_manager.js?v=1"></script>
     <script src="/js/connected_apps.js?v=1"></script>
     <script src="/js/mentions.js?v=1"></script>
+    <script src="/static/js/chat_history_window.js?v=1"></script>
 </body>
 
 </html>

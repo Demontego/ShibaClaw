@@ -92,6 +92,10 @@ async function build() {
     if (fs.existsSync('frontend/favicon.ico')) {
         fs.copyFileSync('frontend/favicon.ico', 'static/favicon.ico');
     }
+    fs.mkdirSync('static/js', { recursive: true });
+    fs.copyFileSync('frontend/js/chat_history_window.js', 'static/js/chat_history_window.js');
+    fs.mkdirSync('static/css', { recursive: true });
+    fs.copyFileSync('frontend/css/sidebar_modern.css', 'static/css/sidebar_modern.css');
 
     // Rewrite script/link tags
     // 1. Remove all the bundled scripts
@@ -110,6 +114,14 @@ async function build() {
     // 2. Replace CSS link
     // Look for index.css and replace it with bundle.css
     html = html.replace(/<link rel="stylesheet" href="\/index\.css[^>]*>/, `<link rel="stylesheet" href="/static/bundle.css?v=${buildVer}">`);
+    html = html.replace(
+        /^[ \t]*<link rel="stylesheet" href="\/static\/css\/sidebar_modern\.css(?:\?v=[^"]*)?">[ \t]*\r?\n/gm,
+        ''
+    );
+    html = html.replace(
+        /(<link rel="stylesheet" href="\/static\/bundle\.css\?v=[^"]+">)/,
+        `$1\n    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=${buildVer}">`
+    );
     // Ensure vendor links have /static/
     html = html.replace(/href="\/vendor\//g, 'href="/static/vendor/');
     html = html.replace(/src="\/vendor\//g, 'src="/static/vendor/');
@@ -121,8 +133,17 @@ async function build() {
     
     // CSS is fully bundled into bundle.css (no separate static/css tree).
     
-    // 3. Add bundle.js at the end of body
-    html = html.replace('</body>', `    <script src="/static/bundle.js?v=${buildVer}"></script>\n</body>`);
+    // 3. Add bundle.js and the history override at the end of body, in that order.
+    html = html.replace(
+        /^[ \t]*<script src="\/static\/js\/chat_history_window\.js(?:\?v=[^"]*)?"><\/script>[ \t]*\r?\n/gm,
+        ''
+    );
+    html = html.replace(
+        '</body>',
+        `    <script src="/static/bundle.js?v=${buildVer}"></script>\n` +
+        `    <script src="/static/js/chat_history_window.js?v=${buildVer}"></script>\n` +
+        '</body>'
+    );
 
     fs.writeFileSync('static/index.html', html);
     console.log('Build complete!');

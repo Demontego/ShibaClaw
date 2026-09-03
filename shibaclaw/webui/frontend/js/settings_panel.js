@@ -878,7 +878,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
 
     const searchInput = document.getElementById("provider-search");
     if (searchInput) {
-        searchInput.addEventListener("input", () => {
+        searchInput.addEventListener("input", debounce(() => {
             const q = searchInput.value.toLowerCase().trim();
             for (const [name, tile] of provTiles) {
                 const matches = !q || name.toLowerCase().includes(q) || tile.dataset.displayName.includes(q);
@@ -893,7 +893,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
                     expandedProv = null;
                 }
             }
-        });
+        }, 250));
     }
 
     const tw = cfg.tools?.web || {};
@@ -977,8 +977,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         verification_token: { section: "credentials", tooltip: "Webhook verification token. Validates that events originate from Feishu." },
         access_token: { section: "credentials", tooltip: "Matrix access token. Authenticate with your homeserver." },
         claw_token: { section: "credentials", tooltip: "Mochat authentication token. Stored encrypted in the vault." },
-        allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs. Adding a group ID allows all its members." },
-        group_allow_from: { section: "credentials", tooltip: "Comma-separated IDs allowed to trigger the bot in group channels." },
+        allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username). Adding a group ID allows all its members." },
+        allowFrom: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username). Adding a group ID allows all its members." },
+        group_allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username) allowed to trigger the bot in group channels." },
+        groupAllowFrom: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username) allowed to trigger the bot in group channels." },
         homeserver: { section: "credentials", tooltip: "Matrix homeserver URL (e.g., https://matrix.org)." },
         user_id: { section: "credentials", tooltip: "The bot's full Matrix user ID (e.g., @bot:matrix.org)." },
         device_id: { section: "credentials", tooltip: "Matrix device identifier. Required for E2EE session management." },
@@ -988,6 +990,8 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         reply_to_message: { section: "logic", tooltip: "Quote the original message when the bot sends its reply." },
         reply_in_thread: { section: "logic", tooltip: "Reply inside the message thread instead of the main channel." },
         streaming: { section: "logic", tooltip: "Stream the response incrementally instead of sending one final message." },
+        rich_messages: { section: "logic", tooltip: "Enable Telegram Bot API 10.1+ Rich Messages for formatted LaTeX math, GFM tables, media collages, and rich streaming." },
+        richMessages: { section: "logic", tooltip: "Enable Telegram Bot API 10.1+ Rich Messages for formatted LaTeX math, GFM tables, media collages, and rich streaming." },
         guest_mode: { section: "logic", tooltip: "Allow unauthenticated users to interact (bypasses allow_from check)." },
         allow_bot_messages: { section: "logic", tooltip: "Process messages from other bots, not just human users." },
         open_groups: { section: "logic", tooltip: "Accept messages from any group member. Private bot DMs remain restricted to allow_from." },
@@ -1033,7 +1037,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         watch_limit: { section: "network", tooltip: "Maximum number of events returned per watch/poll cycle." },
         retry_delay_ms: { section: "network", tooltip: "Base delay between retry attempts on transient failures (ms)." },
         max_retry_attempts: { section: "network", tooltip: "Maximum retries on failure. 0 = unlimited retries." },
-        max_media_bytes: { section: "network", tooltip: "Maximum file attachment size in bytes (default: 20 MB)." },
+        max_media_bytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        maxMediaBytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        local_api_url: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
+        localApiUrl: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
         sync_stop_grace_seconds: { section: "network", tooltip: "Seconds to wait for Matrix sync to stop cleanly on shutdown." }
     };
 

@@ -40,15 +40,18 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Novedades — v0.9.13</b> (haz clic para expandir)</summary>
+<summary>📢 <b>Novedades — v0.9.20</b> (haz clic para expandir)</summary>
 
-**Última versión (2026-08-01):**
+**Última versión (2026-08-07):**
 
-- **Corrección de inyección de comandos en ExecTool** — Se resolvió una vulnerabilidad crítica de inyección de comandos (CWE-78) en la ejecución de shell usando parseo seguro de argumentos con `shlex` y ejecución directa de procesos (`create_subprocess_exec`).
-- **Vulnerabilidades de seguridad en dependencias** — Se resolvieron vulnerabilidades de seguridad en dependencias npm de bridge actualizando los overrides para `protobufjs` (v7.6.5) y `sharp` (v0.35.3).
-- **Estabilidad de bucle de agente y direccionamiento** — Se corrigieron cierres inesperados en el comando `/update`, el enrutamiento de sesiones y la emisión de eventos para mensajes activos.
-- **Estimación de tokens en WebUI** — Se corrigió el manejo de tipos de argumentos en el endpoint API `estimate_prompt_tokens` al pasar listas de mensajes.
-- **Dependencias de RAG en la nube** — Se corrigieron los límites de dependencias de Cloud RAG y la configuración del modelo de embeddings por defecto.
+- **Barra lateral WebUI rediseñada y mejoras de Telegram** — ¡Telegram y la WebUI han recibido muchas mejoras! Incluye tonos Shiba Gold, tooltips informativos para **Rich Messages**, soporte explícito de `@username` en listas `allow_from` y barra de herramientas compacta.
+- **Telegram Bot API 10.1 Rich Messages** — Soporte opcional para Telegram Bot API 10.1 Rich Messages (`sendRichMessage`), con generación automática de bloques para expresiones matemáticas, tablas formateadas y collages.
+- **Automatización de secretaria en Telegram y autenticación Mini App** — Automatización integrada de secretaria, autenticación Mini App y control de acceso a herramientas basado en perfiles.
+- **Corrección de menú desplegable de sesión y elevación Z-Index** — Se resolvió el recorte de menú y se agregó z-index prioritario (`z-index: 100`) con detección inteligente de bordes.
+- **Renderizado de avatar del agente y soluciones de respaldo** — Se corrigió el tamaño del avatar (30px × 30px), propiedades de despliegue y resolución dinámica de rutas.
+- **Manejo de excepciones en cliente Gateway** — Corrección de `AttributeError` referenciando el espacio de nombres `websockets.exceptions` correcto.
+- **Aislamiento de sesiones en temas de foros DM privados** — Los temas en chats privados ahora siguen un aislamiento por tema (`telegram:{chat_id}:topic:{thread_id}`).
+- **Soporte de `callback_query` en Telegram Polling** — Se incluyó `callback_query` en `allowed_updates` para que los botones de teclados inline funcionen correctamente.
 
 Consulta el [Changelog](./CHANGELOG.md) para el historial completo de versiones.
 

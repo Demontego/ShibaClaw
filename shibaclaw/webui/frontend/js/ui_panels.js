@@ -191,14 +191,36 @@ async function _loadContextModalContent() {
     }
 }
 
+function _sessionUpdatedMs(sess) {
+    let iso = (sess && (sess.updated_at || sess.created_at)) || "";
+    if (!iso) return 0;
+    // Older session records may contain naive UTC ISO timestamps.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(iso) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) {
+        iso += "Z";
+    }
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? ms : 0;
+}
+
+function _formatSessionWhen(sess) {
+    const ms = _sessionUpdatedMs(sess);
+    if (!ms) return "";
+    return new Date(ms).toLocaleString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
 function _buildSessionEl(sess) {
     const el = document.createElement("div");
     el.className = "history-item";
     el.dataset.sessionKey = sess.key;
     if (sess.key === state.sessionId) el.classList.add("active");
 
-    const date = new Date(sess.created_at).toLocaleDateString();
-    const time = new Date(sess.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const when = _formatSessionWhen(sess);
     const name = sess.nickname || sess.key;
     const displayName = _cleanSessionTitle(name, sess.key);
     const channel = _extractChannel(sess.key);
@@ -215,7 +237,7 @@ function _buildSessionEl(sess) {
             <div class="session-name">${safeName}</div>
             <div class="session-subline">
                 ${channelTag}
-                <div class="session-meta">${date} ${time}</div>
+                <div class="session-meta">${when}</div>
             </div>
         </div>
         <div class="session-actions">
@@ -386,6 +408,7 @@ function _renderSessionsList() {
 
         const itemsEl = document.createElement("div");
         itemsEl.className = "channel-group-items" + (collapsed ? " collapsed" : "");
+        items.sort((a, b) => _sessionUpdatedMs(b) - _sessionUpdatedMs(a));
         items.forEach((s) => itemsEl.appendChild(_buildSessionEl(s)));
 
         header.addEventListener("click", () => _toggleChannelGroup(ch, header));
@@ -429,17 +452,23 @@ window.toggleSessionMenu = function (event, btn, key) {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 
     if (!isActive && dropdown) {
         dropdown.classList.add("active");
         btn.classList.add("active");
+
+        const historyItem = btn.closest(".history-item");
+        if (historyItem) {
+            historyItem.classList.add("has-active-dropdown");
+        }
 
         const container = dropdown.closest('.history-section');
         if (container) {
             const containerRect = container.getBoundingClientRect();
             const rect = dropdown.getBoundingClientRect();
 
-            if (rect.bottom > containerRect.bottom) {
+            if (rect.bottom > containerRect.bottom - 10 || rect.bottom > window.innerHeight - 10) {
                 dropdown.style.top = "auto";
                 dropdown.style.bottom = "100%";
                 dropdown.style.marginBottom = "4px";
@@ -610,6 +639,7 @@ document.addEventListener("click", () => {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 });
 
 async function loadSession(sessionId) {
@@ -676,8 +706,10 @@ async function loadSession(sessionId) {
             if (!_isCurrentSessionLoad(loadSeq, sessionId)) return;
             chatHistory.appendChild(fragment);
 
+            // Open already at the latest messages before the first paint.
+            chatHistory.scrollTop = chatHistory.scrollHeight;
             console.debug("[SHIBA] loadSession rendered:", parsedGroups.length, "process groups");
-            scrollToBottom();
+            scrollToBottom({ force: true });
         } else {
             chatHistory.classList.remove("active");
             welcomeScreen.style.display = "";
@@ -723,8 +755,9 @@ function _parseSessionMessages(messages, loadSeq, sessionId) {
         
         if (msg.role === "user") {
             if (msg.metadata && msg.metadata.hidden) continue;
-            if (!msg.content || msg.content === lastUserContent) continue;
-            lastUserContent = msg.content;
+            const hasMedia = !!(msg.metadata && msg.metadata.media && msg.metadata.media.length);
+            if ((!msg.content && !hasMedia) || (msg.content && msg.content === lastUserContent)) continue;
+            if (msg.content) lastUserContent = msg.content;
 
             const hasExeSteps = turnSteps.some(s => s.badge === "EXE");
             if (turnSteps.length > 0 && hasExeSteps) {
@@ -827,7 +860,23 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
                 enhanceCodeBlocks(bubble);
             }
 
-            const attachments = item.data.metadata?.attachments || [];
+            let attachments = item.data.metadata?.attachments
+                ? [...item.data.metadata.attachments]
+                : [];
+            if (!attachments.length && Array.isArray(item.data.metadata?.media)) {
+                item.data.metadata.media.forEach(p => {
+                    const name = p.split(/[/\\]/).pop();
+                    let type = "application/octet-stream";
+                    if (name.match(/\.(png|jpe?g|gif|webp|svg)$/i)) type = "image/png";
+                    else if (name.match(/\.(mp3|ogg|wav|m4a)$/i)) type = "audio/mpeg";
+                    else if (name.match(/\.(mp4|webm|mov)$/i)) type = "video/mp4";
+                    attachments.push({
+                        name,
+                        url: "/api/file-get?path=" + encodeURIComponent(p),
+                        type,
+                    });
+                });
+            }
             attachments.forEach(file => _appendHistoryAttachment(bubble, file));
 
             group.querySelector(".message-content").appendChild(bubble);
@@ -843,12 +892,18 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
             enhanceCodeBlocks(bubble);
 
             let attachments = item.data.metadata?.attachments ? [...item.data.metadata.attachments] : [];
-            if (item.data.metadata?.media && Array.isArray(item.data.metadata.media)) {
+            if (!attachments.length && Array.isArray(item.data.metadata?.media)) {
                 item.data.metadata.media.forEach(p => {
                     const name = p.split(/[/\\]/).pop();
                     let type = "application/octet-stream";
                     if (name.match(/\.(png|jpe?g|gif|webp|svg)$/i)) type = "image/png";
-                    attachments.push({ name: name, url: "/api/file-get?path=" + encodeURIComponent(p), type: type });
+                    else if (name.match(/\.(mp3|ogg|wav|m4a)$/i)) type = "audio/mpeg";
+                    else if (name.match(/\.(mp4|webm|mov)$/i)) type = "video/mp4";
+                    attachments.push({
+                        name,
+                        url: "/api/file-get?path=" + encodeURIComponent(p),
+                        type,
+                    });
                 });
             }
             attachments.forEach(file => _appendHistoryAttachment(bubble, file));

@@ -139,7 +139,8 @@ class ScentKeeper:
 
     async def write_user_profile(self, content: str) -> None:
         async with self._file_lock:
-            self.user_file.write_text(content, encoding="utf-8")
+            async with aiofiles.open(self.user_file, "w", encoding="utf-8") as f:
+                await f.write(content)
 
     def read_long_term(self) -> str:
         if not self.memory_file.exists():
@@ -157,7 +158,8 @@ class ScentKeeper:
 
     async def write_long_term(self, content: str) -> None:
         async with self._file_lock:
-            self.memory_file.write_text(content, encoding="utf-8")
+            async with aiofiles.open(self.memory_file, "w", encoding="utf-8") as f:
+                await f.write(content)
 
     async def append_history(self, entry: str) -> None:
         """Append new entry to HISTORY.md."""

@@ -39,6 +39,7 @@ from shibaclaw.agent.interactive import get_interactive_hub, normalize_permissio
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
 from shibaclaw.config.paths import get_media_dir
@@ -394,6 +395,8 @@ class ShibaBrain:
         """Register the default set of tools."""
         allowed_dir = self.workspace if self.restrict_to_workspace else None
         extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
+        if allowed_dir:
+            extra_read = [*(extra_read or []), get_media_dir()]
         self.tools.register(
             ReadFileTool(
                 workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read
@@ -760,7 +763,7 @@ class ShibaBrain:
             session_kb_ids = []
             kb_session_key = session_key or chat_id
             if kb_session_key and self.sessions:
-                sess = self.sessions.get_or_create(kb_session_key)
+                sess = await asyncio.to_thread(self.sessions.get_or_create, kb_session_key)
                 session_kb_ids = sess.metadata.get("knowledge_bases", [])
                 try:
                     from shibaclaw.agent.profiles import ProfileManager
@@ -798,7 +801,7 @@ class ShibaBrain:
                         active_kbs.append(f"ID: {col_id} (Name: '{col_name}'){desc_part}")
 
                 if changed and kb_session_key and self.sessions:
-                    sess = self.sessions.get_or_create(kb_session_key)
+                    sess = await asyncio.to_thread(self.sessions.get_or_create, kb_session_key)
                     sess.metadata["knowledge_bases"] = new_session_kb_ids
                     await self.sessions.asave(sess)
         except Exception:
@@ -864,7 +867,7 @@ class ShibaBrain:
             session_reasoning_effort = None
             if session_key and hasattr(self, "sessions") and self.sessions:
                 try:
-                    sess = self.sessions.get_or_create(session_key)
+                    sess = await asyncio.to_thread(self.sessions.get_or_create, session_key)
                     session_reasoning_effort = sess.metadata.get("reasoning_effort")
                 except Exception:
                     pass
@@ -1054,11 +1057,18 @@ class ShibaBrain:
                 task = asyncio.create_task(self._dispatch(msg))
                 self._active_tasks.setdefault(msg.session_key, []).append(task)
                 task.add_done_callback(
-                    lambda t, k=msg.session_key: (
-                        self._active_tasks.get(k, [])
-                        and self._safe_remove_task(self._active_tasks.get(k, []), t)
-                    )
+                    lambda t, k=msg.session_key: self._remove_active_task(k, t)
                 )
+
+    def _remove_active_task(self, session_key: str, task: asyncio.Task) -> None:
+        tasks = self._active_tasks.get(session_key)
+        if tasks is not None:
+            self._safe_remove_task(tasks, task)
+            if not tasks:
+                self._active_tasks.pop(session_key, None)
+                lock = self._session_locks.get(session_key)
+                if lock and not lock.locked():
+                    self._session_locks.pop(session_key, None)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""

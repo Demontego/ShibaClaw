@@ -37,16 +37,18 @@
 ---
 
 <details open>
-<summary>📢 <b>What's new — v0.9.13</b> (click to expand)</summary>
+<summary>📢 <b>What's new — v0.9.20</b> (click to expand)</summary>
 
-**Latest release (2026-08-01):**
+**Latest release (2026-08-07):**
 
-- **Telegram Secretary, Archives & Owner Tools** — Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary search & send tools, secretary summons via trigger words or replies, guest/secretary safety preambles, and Telegram session history age trimming.
-- **Telegram Mini App & Profile Controls** — Telegram Mini App initData authentication, per-profile tool allow/deny lists with fail-closed security, profile temperature overrides, default KB pinning, and WebUI Telegram session grouping with speaker autolabeling.
-- **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window.
-- **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks.
-- **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.
-- **Cloud RAG Dependencies** — Corrected Cloud RAG dependency bounds and default embedding model configuration.
+- **Redesigned WebUI Sidebar & Telegram UI Enhancements** — Telegram and WebUI received extra love! Implemented tactile Shiba Gold design tokens, high-contrast dark charcoal surface hierarchy (`#111113`), info tooltips for Telegram **Rich Messages**, `@username` guidance in `allow_from` mouseover tooltips, compact tool action rail, and handcrafted command search bar.
+- **Telegram Bot API 10.1 Rich Messages** — Opt-in Telegram Bot API 10.1 Rich Messages support (`sendRichMessage` via direct `do_api_request`), featuring automatic layout block generation (`auto-build rich blocks`) for mathematical expressions, formatted tables, and media collages.
+- **Telegram Secretary Automation, Mini App Auth & Profile Access Control Integration** — Consolidated Telegram secretary automation, Mini App auth, and profile-based tool access control into core metadata, manifest updates, and build assets.
+- **Session Dropdown Menu Clipping & Z-Index Elevation** — Resolved dropdown clipping caused by `.channel-group-items` overflow containment. Added `.has-active-dropdown` z-index elevation (`z-index: 100`) and smart bottom boundary flip detection.
+- **Agent Avatar Rendering & Dynamic Fallbacks** — Fixed agent avatar sizing (30px × 30px circular badge), display properties, and dynamic `onerror` fallback resolution (`/static/shibaclaw_logo.webp` <-> `/shibaclaw_logo.webp`).
+- **Gateway Client WebSocket Exception Handling** — Resolved `AttributeError` by referencing the correct `websockets.exceptions` namespace in Gateway client reconnect/disconnect loop.
+- **Private DM Forum Topics Session Isolation** — Bot API 9.3+ topics in private chats with the bot follow per-topic session isolation (`telegram:{chat_id}:topic:{thread_id}`).
+- **Telegram Polling Missing `callback_query` Update Type** — Included `callback_query` in `allowed_updates` so inline keyboard callbacks reach the bot.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 

@@ -38,9 +38,9 @@ async def api_sessions_get(request: Request):
             session.metadata["model"] = canonical
             pm.save(session)
 
-    # Dynamically build attachments for assistant messages
+    # Hydrate attachments for any role with persisted channel media.
     for m in session.messages:
-        if m.get("role") == "assistant" and "metadata" in m and "media" in m["metadata"]:
+        if "metadata" in m and m["metadata"].get("media"):
             from shibaclaw.webui.ws_handler import _build_attachments
 
             m.setdefault("metadata", {})["attachments"] = _build_attachments(m["metadata"]["media"])

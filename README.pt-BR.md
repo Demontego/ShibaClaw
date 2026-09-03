@@ -40,15 +40,18 @@
 > As notas de versão estão em [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Novidades — v0.9.13</b> (clique para expandir)</summary>
+<summary>📢 <b>Novidades — v0.9.20</b> (clique para expandir)</summary>
 
-**Última versão (2026-08-01):**
+**Última versão (2026-08-07):**
 
-- **Correção de vulnerabilidade de injeção de comandos no ExecTool** — Resolvida uma vulnerabilidade crítica de injeção de comandos (CWE-78) na execução de shell usando análise segura de argumentos com `shlex` e execução direta de processos (`create_subprocess_exec`).
-- **Vulnerabilidades de segurança em dependências** — Resolvidas vulnerabilidades de segurança em dependências npm do bridge atualizando os overrides para `protobufjs` (v7.6.5) e `sharp` (v0.35.3).
-- **Estabilidade do loop de agente e direcionamento** — Corrigidas falhas no comando `/update`, roteamento de sessões e emissão de eventos para mensagens ativas.
-- **Estimativa de tokens na WebUI** — Corrigido o tratamento de tipos de argumentos no endpoint da API `estimate_prompt_tokens` ao passar listas de mensagens.
-- **Dependências de Cloud RAG** — Corrigidos os limites de dependência do Cloud RAG e a configuração do modelo de embedding padrão.
+- **Barra lateral da WebUI redimensionada e melhorias na UI do Telegram** — O Telegram e a WebUI receberam aprimoramentos! Inclui tokens de design Shiba Gold, dicas de ferramentas para **Rich Messages** do Telegram, orientação explícita para `@username` nas listas de permissão `allow_from` e barra de ferramentas compacta.
+- **Telegram Bot API 10.1 Rich Messages** — Suporte opt-in para Telegram Bot API 10.1 Rich Messages (`sendRichMessage`), com geração automática de blocos para expressões matemáticas, tabelas formatadas e colagens de mídia.
+- **Automação de Secretária no Telegram & Autenticação de Mini App** — Automação de secretária, autenticação de Mini App e controle de acesso a ferramentas por perfil.
+- **Correção do menu suspenso de sessão e sobreposição Z-Index** — Resolvido o corte de menu e adicionada prioridade `z-index: 100` com detecção inteligente de bordas.
+- **Renderização e fallback do avatar do agente** — Corrigido o tamanho do avatar (30px × 30px), propriedades de exibição e resolução de caminhos (`/static/shibaclaw_logo.webp`).
+- **Tratamento de exceções do cliente Gateway** — Correção de `AttributeError` referenciando o namespace `websockets.exceptions` correto.
+- **Isolamento de sessão de tópicos em DMs privadas** — Tópicos em conversas privadas agora seguem isolamento por tópico (`telegram:{chat_id}:topic:{thread_id}`).
+- **Inclusão do tipo `callback_query` no Polling do Telegram** — Adicionado `callback_query` em `allowed_updates` para funcionamento dos botões inline.
 
 Veja o [Changelog](./CHANGELOG.md) para o histórico completo de lançamentos.
 

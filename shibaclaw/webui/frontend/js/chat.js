@@ -389,9 +389,17 @@ function createMessageGroup(type, targetContainer = chatHistory, opts = {}) {
         avatar.style.display = "none";
     } else {
         const img = document.createElement("img");
-        img.src = state.profileAvatar || DEFAULT_AVATAR;
+        const avatarSrc = state.profileAvatar || DEFAULT_AVATAR;
+        img.src = avatarSrc;
         img.alt = "Shiba";
         img.className = "agent-avatar-img";
+        img.onerror = function() {
+            if (this.src.includes("/static/")) {
+                this.src = "/shibaclaw_logo.webp";
+            } else {
+                this.src = "/static/shibaclaw_logo.webp";
+            }
+        };
         avatar.appendChild(img);
     }
     group.appendChild(avatar);
@@ -616,17 +624,38 @@ function hideTypingBubble() {
     if (el) el.remove();
 }
 
-function scrollToBottom() {
-    if (scrollToBottom._frame) return;
-    
-    // Do not force scroll if the user is scrolling up to read history
-    const threshold = 150;
-    const isNearBottom = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight < threshold;
-    if (!isNearBottom && chatHistory.scrollTop > 0) return;
+function scrollToBottom(opts) {
+    const force = !!(opts && opts.force);
+    if (scrollToBottom._frame) {
+        if (!force) return;
+        cancelAnimationFrame(scrollToBottom._frame);
+        scrollToBottom._frame = null;
+    }
 
+    // Do not force scroll if the user is scrolling up to read history
+    if (!force) {
+        const threshold = 150;
+        const isNearBottom = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight < threshold;
+        if (!isNearBottom && chatHistory.scrollTop > 0) return;
+    }
+
+    const snap = () => {
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    };
+    if (force) {
+        // Snap synchronously so an opened session starts at its latest messages.
+        snap();
+        requestAnimationFrame(() => {
+            snap();
+            requestAnimationFrame(snap);
+        });
+        setTimeout(snap, 120);
+        setTimeout(snap, 400);
+        return;
+    }
     scrollToBottom._frame = requestAnimationFrame(() => {
         scrollToBottom._frame = null;
-        chatHistory.scrollTop = chatHistory.scrollHeight;
+        snap();
     });
 }
 

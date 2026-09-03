@@ -40,15 +40,18 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Nouveautés — v0.9.13</b> (cliquez pour déplier)</summary>
+<summary>📢 <b>Nouveautés — v0.9.20</b> (cliquez pour déplier)</summary>
 
-**Dernière version (2026-08-01) :**
+**Dernière version (2026-08-07) :**
 
-- **Correction de faille d'injection de commandes dans ExecTool** — Résolution d'une vulnérabilité critique d'injection de commandes (CWE-78) dans l'exécution shell via `shlex` et exécution directe des processus (`create_subprocess_exec`).
-- **Vulnérabilités de sécurité dans les dépendances** — Résolution des vulnérabilités de sécurité dans les dépendances npm du bridge en mettant à jour les substitutions pour `protobufjs` (v7.6.5) et `sharp` (v0.35.3).
-- **Stabilité de la boucle d'agent et du guidage** — Correction des plantages de la commande `/update`, du routage de session et de l'émission d'événements pour les messages actifs.
-- **Estimation des jetons WebUI** — Correction du traitement des types d'arguments sur le point de terminaison API `estimate_prompt_tokens` lors de la transmission de listes de messages.
-- **Dépendances RAG Cloud** — Correction des limites de dépendances RAG Cloud et de la configuration du modèle d'embedding par défaut.
+- **Refonte de la barre latérale WebUI & améliorations Telegram** — Telegram et la WebUI ont reçu de nombreuses améliorations ! Nouvelle barre latérale WebUI aux tons Shiba Gold, bulles d'information pour les **Rich Messages** Telegram, conseils sur les `@username` dans les listes `allow_from` et barre d'actions compacte.
+- **Telegram Bot API 10.1 Rich Messages** — Support optionnel des Rich Messages Telegram Bot API 10.1 (`sendRichMessage`), avec génération automatique de blocs de mise en page pour expressions mathématiques, tableaux formatés et collages médias.
+- **Automatisation du secrétaire Telegram & Auth Mini App** — Automatisation du secrétaire Telegram, authentification Mini App et contrôle d'accès aux outils par profil.
+- **Correction du menu déroulant de session & Z-Index** — Résolution du tronquage du menu et ajout d'un z-index prioritaire (`z-index: 100`) avec détection intelligente des limites.
+- **Rendu de l'avatar de l'agent & gestion de secours** — Correction des dimensions de l'avatar (30px × 30px), affichage et résolution dynamique du chemin de l'image.
+- **Gestion des exceptions du client Gateway** — Résolution d'une `AttributeError` en référençant le bon espace de noms `websockets.exceptions`.
+- **Isolation de session des sujets de forum en DM privé** — Les sujets dans les discussions privées suivent désormais une isolation par sujet (`telegram:{chat_id}:topic:{thread_id}`).
+- **Inclusion de `callback_query` dans le Polling Telegram** — Ajout de `callback_query` dans `allowed_updates` pour le bon fonctionnement des boutons de claviers en ligne.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
 

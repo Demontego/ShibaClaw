@@ -38,20 +38,14 @@ class MCPManager:
                             fut.set_result(None)
                         except BaseException as e:
                             if not fut.done():
-                                if isinstance(e, Exception):
-                                    fut.set_result(e)
-                                else:
-                                    fut.set_exception(e)
+                                fut.set_exception(e)
                     elif op == "close":
                         try:
                             await self._do_close_mcp()
                             fut.set_result(None)
                         except BaseException as e:
                             if not fut.done():
-                                if isinstance(e, Exception):
-                                    fut.set_result(e)
-                                else:
-                                    fut.set_exception(e)
+                                fut.set_exception(e)
                     self._mcp_queue.task_done()
                 except asyncio.CancelledError:
                     break
@@ -127,9 +121,7 @@ class MCPManager:
         fut = asyncio.get_running_loop().create_future()
         await self._mcp_queue.put(("connect", fut))
         try:
-            res = await fut
-            if isinstance(res, Exception):
-                raise res
+            await fut
         finally:
             self._mcp_connecting = False
 
@@ -139,9 +131,7 @@ class MCPManager:
             self._worker_task = asyncio.create_task(self._mcp_worker())
         fut = asyncio.get_running_loop().create_future()
         await self._mcp_queue.put(("close", fut))
-        res = await fut
-        if isinstance(res, Exception):
-            raise res
+        await fut
 
     def reconfigure(self, new_servers: dict) -> bool:
         """Update MCP servers config. Returns True if changed."""
