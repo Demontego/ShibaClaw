@@ -35,14 +35,13 @@ from shibaclaw.agent.tools.shell import ExecTool
 from shibaclaw.agent.tools.spawn import SpawnTool
 from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
 from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
-from shibaclaw.agent.interactive import get_interactive_hub, normalize_permission_mode
+from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
-from shibaclaw.config.paths import get_media_dir
 
 
 _MEDIA_RE = re.compile(r'\{\s*"media"\s*:\s*\[\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]\s*\}')

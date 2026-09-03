@@ -113,7 +113,7 @@ irm https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | 
    ```powershell
    pip install -e ".[windows-native,dev]"
    ```
-   Use **Python 3.12 or 3.13** for the desktop build. `pywebview` is not yet reliably installable on local Python 3.14 environments.
+   Use **Python 3.12 or 3.13** for the desktop build. Core CI also runs on **3.14**; `pywebview` desktop packaging is still validated on 3.12 only (Windows job).
    For a local non-packaged launch from that Python environment, run:
    ```powershell
    shibaclaw desktop

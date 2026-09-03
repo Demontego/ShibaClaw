@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,7 @@ from shibaclaw.agent.profiles import ProfileManager
 from shibaclaw.agent.skill_workshop import SkillWorkshop
 from shibaclaw.automation.grants import job_is_approved, operation_fingerprint
 from shibaclaw.automation.types import AutomationJob, AutomationPayload, AutomationSchedule
-from shibaclaw.brain.manager import PackManager, Session
+from shibaclaw.brain.manager import PackManager
 from shibaclaw.config.history import append_config_history, list_config_history
 
 

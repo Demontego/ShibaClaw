@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from shibaclaw.agent.interactive import DEFAULT_INTERACTIVE_TIMEOUT, get_interactive_hub
