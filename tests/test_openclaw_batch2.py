@@ -64,7 +64,28 @@ def test_profile_model_allowlist(tmp_path: Path):
     assert pm.model_allowed("trader", "openai/gpt-4o")
     assert pm.model_allowed("trader", "google/gemini-3-flash")
     assert not pm.model_allowed("trader", "anthropic/claude-opus")
-    assert pm.model_allowed("default", "anything")  # unrestricted
+    # Substring must not match (e.g. gpt-4o inside a longer id).
+    assert not pm.model_allowed("trader", "openai/gpt-4o-mini")
+    assert pm.model_allowed("default", "anything")  # None = unrestricted
+
+    pm.create_profile("locked", "Locked", allowed_models=[])
+    assert not pm.model_allowed("locked", "openai/gpt-4o")  # [] = deny all
+
+
+@pytest.mark.asyncio
+async def test_memory_forget_rejects_short_needle(tmp_path: Path):
+    from shibaclaw.agent.memory import ScentKeeper
+
+    store = ScentKeeper(tmp_path)
+    store.memory_file.parent.mkdir(parents=True, exist_ok=True)
+    store.memory_file.write_text("keep this line\nsecret password here\n", encoding="utf-8")
+    short = await store.forget_memory_lines("ab")
+    assert short.get("error")
+    assert "secret password here" in store.memory_file.read_text(encoding="utf-8")
+    ok = await store.forget_memory_lines("password")
+    assert not ok.get("error")
+    assert ok["MEMORY.md"] == 1
+    assert "password" not in store.memory_file.read_text(encoding="utf-8")
 
 
 def test_session_rewind_fork_incognito(tmp_path: Path):

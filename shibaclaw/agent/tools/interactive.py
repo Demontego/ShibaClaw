@@ -26,12 +26,14 @@ class AskUserTool(Tool):
         self._session_key = ""
         self._channel = ""
         self._chat_id = ""
+        self._initiator_user_id = ""
 
     def set_context(
         self,
         channel: str,
         chat_id: str,
         session_key: str | None = None,
+        metadata: dict[str, Any] | None = None,
         **_kwargs: Any,
     ) -> None:
         self._channel = channel or ""
@@ -39,6 +41,14 @@ class AskUserTool(Tool):
         self._session_key = session_key or (
             f"{channel}:{chat_id}" if channel and chat_id else ""
         )
+        meta = metadata or {}
+        # Prefer explicit sender; fall back to private-chat id.
+        sender = meta.get("sender_id") or meta.get("user_id") or meta.get("from_user_id")
+        if sender is None and channel == "telegram" and str(chat_id).lstrip("-").isdigit():
+            # Private chats: positive chat_id == user id
+            if not str(chat_id).startswith("-"):
+                sender = chat_id
+        self._initiator_user_id = str(sender).strip() if sender is not None else ""
 
     @property
     def name(self) -> str:
@@ -107,7 +117,6 @@ class AskUserTool(Tool):
                 clean_options.append({"id": oid, "label": label})
 
         hub = get_interactive_hub()
-        prev_emit = hub._emit
         telegram_wired = False
         if (
             self._channel.lower() == "telegram"
@@ -135,28 +144,30 @@ class AskUserTool(Tool):
                         },
                     )
                 )
-                if prev_emit is not None:
-                    await prev_emit(event)
 
-            hub.set_emit(telegram_emit)
+            hub.set_emit(telegram_emit, session_key=self._session_key)
             telegram_wired = True
 
         try:
+            payload: dict[str, Any] = {
+                "prompt": prompt,
+                "options": clean_options,
+                "allow_free_text": bool(allow_free_text),
+                "allow_skip": bool(allow_skip),
+                "channel": self._channel,
+            }
+            if self._initiator_user_id:
+                payload["initiator_user_id"] = self._initiator_user_id
+                payload["allowed_user_ids"] = [self._initiator_user_id]
             result = await hub.request(
                 kind="ask",
                 session_key=self._session_key,
-                payload={
-                    "prompt": prompt,
-                    "options": clean_options,
-                    "allow_free_text": bool(allow_free_text),
-                    "allow_skip": bool(allow_skip),
-                    "channel": self._channel,
-                },
+                payload=payload,
                 timeout=DEFAULT_INTERACTIVE_TIMEOUT,
             )
         finally:
             if telegram_wired:
-                hub.set_emit(prev_emit)
+                hub.set_emit(None, session_key=self._session_key)
 
         if result.get("skipped") or result.get("error") == "no_interactive_ui":
             # Fallback text for Telegram/CLI: list options; no wait.

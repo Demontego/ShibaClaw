@@ -24,24 +24,43 @@ class InteractiveHub:
     def __init__(self) -> None:
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._pending_meta: dict[str, dict[str, Any]] = {}
-        self._emit: EmitFn | None = None
+        # Per-session emitters avoid concurrent-turn races on a single callback.
+        self._emitters: dict[str, EmitFn] = {}
+        self._default_emit: EmitFn | None = None
         self._progress_cards: dict[str, dict[str, Any]] = {}
         self._lock = asyncio.Lock()
 
-    def set_emit(self, callback: EmitFn | None) -> None:
-        self._emit = callback
+    def set_emit(self, callback: EmitFn | None, session_key: str | None = None) -> None:
+        """Register emit callback for a session, or the process-wide default."""
+        if session_key:
+            if callback is None:
+                self._emitters.pop(session_key, None)
+            else:
+                self._emitters[session_key] = callback
+            return
+        self._default_emit = callback
+
+    def _resolve_emit(self, session_key: str) -> EmitFn | None:
+        if session_key and session_key in self._emitters:
+            return self._emitters[session_key]
+        return self._default_emit
 
     async def emit(self, event: dict[str, Any]) -> None:
         """Fire-and-forget interactive/progress event (no wait)."""
-        if self._emit is None:
+        sk = str(event.get("session_key") or "")
+        cb = self._resolve_emit(sk)
+        if cb is None:
             return
-        await self._emit(event)
+        await cb(event)
 
     def get_progress_card(self, session_key: str) -> dict[str, Any] | None:
         return self._progress_cards.get(session_key)
 
     def set_progress_card(self, session_key: str, card: dict[str, Any]) -> None:
         self._progress_cards[session_key] = card
+
+    def get_pending_meta(self, request_id: str) -> dict[str, Any] | None:
+        return self._pending_meta.get(request_id)
 
     async def request(
         self,
@@ -55,13 +74,25 @@ class InteractiveHub:
         request_id = uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[dict[str, Any]] = loop.create_future()
+        meta = {
+            "kind": kind,
+            "session_key": session_key,
+            **{
+                k: payload.get(k)
+                for k in (
+                    "key",
+                    "namespace",
+                    "title",
+                    "options",
+                    "initiator_user_id",
+                    "allowed_user_ids",
+                )
+                if k in payload
+            },
+        }
         async with self._lock:
             self._pending[request_id] = fut
-            self._pending_meta[request_id] = {
-                "kind": kind,
-                "session_key": session_key,
-                **{k: payload.get(k) for k in ("key", "namespace", "title") if k in payload},
-            }
+            self._pending_meta[request_id] = meta
 
         event = {
             "kind": kind,
@@ -69,7 +100,8 @@ class InteractiveHub:
             "session_key": session_key,
             **payload,
         }
-        if self._emit is None:
+        emit_cb = self._resolve_emit(session_key)
+        if emit_cb is None:
             async with self._lock:
                 self._pending.pop(request_id, None)
                 self._pending_meta.pop(request_id, None)
@@ -81,7 +113,7 @@ class InteractiveHub:
             }
 
         try:
-            await self._emit(event)
+            await emit_cb(event)
         except Exception as e:
             logger.warning("Interactive emit failed: {}", e)
             async with self._lock:
@@ -115,6 +147,18 @@ class InteractiveHub:
             return False
         payload = dict(response) if isinstance(response, dict) else {"value": response}
         meta = self._pending_meta.get(request_id) or {}
+
+        # Resolve option index → id/label when Telegram uses compact callback_data.
+        if "option_index" in payload and isinstance(meta.get("options"), list):
+            try:
+                idx = int(payload["option_index"])
+                opt = meta["options"][idx]
+                if isinstance(opt, dict):
+                    payload.setdefault("option_id", opt.get("id"))
+                    payload.setdefault("label", opt.get("label") or opt.get("id"))
+            except (TypeError, ValueError, IndexError):
+                pass
+
         if meta.get("kind") == "credential" and isinstance(payload.get("secret"), str):
             secret = payload.pop("secret")
             if secret and payload.get("action") != "skip":

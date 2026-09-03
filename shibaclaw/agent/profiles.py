@@ -79,31 +79,45 @@ class ProfileManager:
             return None
 
     def get_allowed_models(self, profile_id: str | None) -> list[str] | None:
-        """Return model allowlist for *profile_id*, or None if unrestricted."""
+        """Return model allowlist for *profile_id*, or None if unrestricted.
+
+        Distinguishes missing key (None = unrestricted) from empty list
+        (``[]`` = deny all models).
+        """
         pid = profile_id or DEFAULT_PROFILE_ID
         meta = self._load_manifest().get(pid, {})
+        if "allowed_models" not in meta:
+            return None
         allowed = meta.get("allowed_models")
         if not isinstance(allowed, list):
             return None
-        return [str(x) for x in allowed if str(x).strip()]
+        return [str(x).strip() for x in allowed if str(x).strip()]
 
     def model_allowed(self, profile_id: str | None, model: str | None) -> bool:
-        """True if model is permitted for profile (empty allowlist = all)."""
+        """True if model is permitted for profile.
+
+        Matching: exact (case-insensitive) or ``fnmatch`` wildcards
+        (e.g. ``openai/*``). Substring matching is intentionally not used.
+        ``None`` allowlist = unrestricted; ``[]`` = deny all.
+        """
+        import fnmatch
+
         if not model:
             return True
         allowed = self.get_allowed_models(profile_id)
-        if not allowed:
+        if allowed is None:
             return True
+        if not allowed:
+            return False
         m = model.strip().lower()
         for entry in allowed:
             e = entry.strip().lower()
             if not e:
                 continue
-            if e.endswith("*") and m.startswith(e[:-1]):
+            if m == e or fnmatch.fnmatch(m, e):
                 return True
-            if m == e or m.endswith("/" + e) or e.endswith("/" + m):
-                return True
-            if e in m:
+            # Also allow matching bare model id against provider/model entries.
+            if "/" in m and fnmatch.fnmatch(m.split("/", 1)[1], e):
                 return True
         return False
 

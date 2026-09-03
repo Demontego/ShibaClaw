@@ -46,6 +46,8 @@ class MemoryForgetTool(Tool):
         if not (needle or "").strip():
             return "Error: needle is required."
         counts = await self._store.forget_memory_lines(needle)
+        if counts.get("error"):
+            return f"Error: {counts['error']}"
         return json.dumps({"ok": True, "removed": counts}, ensure_ascii=False)
 
 

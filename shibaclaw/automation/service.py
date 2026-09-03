@@ -818,10 +818,15 @@ class AutomationService:
             job.state.run_count += 1
             job.state.last_run_at_ms = start_ms
             job.updated_at_ms = start_ms
+            # One-shot jobs must not stay enabled with next_run=0 forever.
+            if job.schedule.kind == "at":
+                job.enabled = False
+                job.state.next_run_at_ms = 0
             logger.warning(
                 "AutomationService: job '{}' blocked — approve-once grant missing/stale",
                 job.name,
             )
+            self._save_unlocked()
             return
         logger.info(
             "AutomationService: executing '{}' [{}] ({})",

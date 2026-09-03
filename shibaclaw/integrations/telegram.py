@@ -887,23 +887,28 @@ class TelegramChannel(BaseChannel):
 
     @staticmethod
     def _build_ask_inline_keyboard(metadata: dict[str, Any]) -> InlineKeyboardMarkup | None:
-        """Build InlineKeyboardMarkup from ask metadata, or None."""
+        """Build InlineKeyboardMarkup from ask metadata, or None.
+
+        Uses compact ``ask:{request_id}:{index}`` callback_data to stay under
+        Telegram's 64-byte limit (option ids are resolved from hub meta).
+        """
         rid = str(metadata.get("ask_request_id") or "").strip()
         options = metadata.get("inline_keyboard")
         if not rid or not isinstance(options, list) or not options:
             return None
+        # Keep request_id short enough: ask: + rid + : + idx ≤ 64
+        if len(f"ask:{rid}:99".encode("utf-8")) > 64:
+            rid = rid[:12]
         rows: list[list[InlineKeyboardButton]] = []
         row: list[InlineKeyboardButton] = []
-        for opt in options:
+        for idx, opt in enumerate(options):
             if not isinstance(opt, dict):
                 continue
             oid = str(opt.get("id") or "").strip()
             label = str(opt.get("label") or oid).strip()
             if not oid or not label:
                 continue
-            raw = f"ask:{rid}:{oid}"
-            # Telegram callback_data hard limit: 64 bytes
-            cb = raw.encode("utf-8")[:64].decode("utf-8", errors="ignore")
+            cb = f"ask:{rid}:{idx}"
             row.append(InlineKeyboardButton(text=label[:64], callback_data=cb))
             if len(row) >= 2:
                 rows.append(row)
@@ -935,28 +940,75 @@ class TelegramChannel(BaseChannel):
             except Exception:
                 pass
             return
-        _, request_id, option_id = parts
-        label = option_id
-        try:
-            markup = getattr(cq.message, "reply_markup", None) if cq.message else None
-            for brow in getattr(markup, "inline_keyboard", None) or []:
-                for btn in brow:
-                    if getattr(btn, "callback_data", None) == data:
-                        label = getattr(btn, "text", None) or label
-                        break
-        except Exception:
-            pass
-        try:
-            await cq.answer(text=f"Selected: {label}"[:200])
-        except Exception:
-            pass
-        try:
-            from shibaclaw.agent.interactive import get_interactive_hub
+        _, request_id, option_ref = parts
 
-            get_interactive_hub().resolve(
+        from shibaclaw.agent.interactive import get_interactive_hub
+
+        hub = get_interactive_hub()
+        pending = hub.get_pending_meta(request_id) or {}
+
+        user = cq.from_user
+        uid = str(user.id) if user else ""
+        uname = getattr(user, "username", None) if user else None
+        allowed_ids = {
+            str(x)
+            for x in (pending.get("allowed_user_ids") or [])
+            if x is not None and str(x).strip()
+        }
+        initiator = str(pending.get("initiator_user_id") or "").strip()
+        if initiator:
+            allowed_ids.add(initiator)
+
+        authorized = False
+        if uid and self._sender_is_allowlisted(uid, uname):
+            authorized = True
+        elif uid and uid in allowed_ids:
+            authorized = True
+
+        if not authorized:
+            try:
+                await cq.answer(text="Not allowed to answer this prompt.", show_alert=True)
+            except Exception:
+                pass
+            logger.warning(
+                "Telegram ask callback denied for user {} on request {}",
+                uid,
                 request_id,
-                {"ok": True, "option_id": option_id, "label": label},
             )
+            return
+
+        response: dict[str, Any] = {"ok": True}
+        # Prefer index form; fall back to option_id for older messages.
+        if option_ref.isdigit():
+            response["option_index"] = int(option_ref)
+            opts = pending.get("options") if isinstance(pending.get("options"), list) else []
+            try:
+                opt = opts[int(option_ref)]
+                if isinstance(opt, dict):
+                    response["option_id"] = opt.get("id")
+                    response["label"] = opt.get("label") or opt.get("id")
+            except (IndexError, TypeError, ValueError):
+                response["option_id"] = option_ref
+                response["label"] = option_ref
+        else:
+            response["option_id"] = option_ref
+            response["label"] = option_ref
+            try:
+                markup = getattr(cq.message, "reply_markup", None) if cq.message else None
+                for brow in getattr(markup, "inline_keyboard", None) or []:
+                    for btn in brow:
+                        if getattr(btn, "callback_data", None) == data:
+                            response["label"] = getattr(btn, "text", None) or option_ref
+                            break
+            except Exception:
+                pass
+
+        try:
+            await cq.answer(text=f"Selected: {response.get('label', '')}"[:200])
+        except Exception:
+            pass
+        try:
+            hub.resolve(request_id, response)
         except Exception as e:
             logger.warning("ask callback resolve failed: {}", e)
 

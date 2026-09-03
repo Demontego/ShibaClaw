@@ -460,47 +460,17 @@ class ShibaBrain:
 
         self.mcp.restore_active_tools()
 
-    def _apply_permission_mode(self, session: Session | None) -> str:
-        """Apply per-session FS/exec permission mode; return resolved mode."""
+    def _apply_permission_mode(self, session: Session | None):
+        """Bind per-turn FS/exec permission mode via contextvars; return (mode, tokens)."""
+        from shibaclaw.agent.sandbox_ctx import bind_permission_mode
+
         meta = session.metadata if session else {}
         mode = normalize_permission_mode(
             meta.get("permission_mode"),
             restrict_to_workspace=self.restrict_to_workspace,
         )
-        if mode == "full":
-            allowed_dir: Path | None = None
-            restrict_exec = False
-            readonly = False
-        elif mode == "readonly":
-            allowed_dir = self.workspace
-            restrict_exec = True
-            readonly = True
-        else:  # workspace
-            allowed_dir = self.workspace
-            restrict_exec = True
-            readonly = False
-
-        extra_read = None
-        if allowed_dir is not None:
-            extra_read = [BUILTIN_SKILLS_DIR, get_media_dir()]
-
-        for name in ("read_file", "write_file", "edit_file", "list_dir"):
-            tool = self.tools.get(name)
-            if tool and hasattr(tool, "configure_sandbox"):
-                # read_file keeps extra dirs; writers ignore extras
-                extras = extra_read if name == "read_file" else None
-                tool.configure_sandbox(
-                    allowed_dir=allowed_dir,
-                    extra_allowed_dirs=extras,
-                    readonly=readonly and name in {"write_file", "edit_file"},
-                )
-        exec_tool = self.tools.get("exec")
-        if exec_tool and hasattr(exec_tool, "configure_sandbox"):
-            exec_tool.configure_sandbox(
-                restrict_to_workspace=restrict_exec,
-                readonly=readonly,
-            )
-        return mode
+        tokens = bind_permission_mode(mode, self.workspace)
+        return mode, tokens
 
     def inject_steering_message(
         self,
@@ -614,19 +584,18 @@ class ShibaBrain:
         ):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
-                    tool.set_context(channel, chat_id, session_key)
+                    tool.set_context(
+                        channel,
+                        chat_id,
+                        session_key,
+                        metadata=metadata or {},
+                    )
         # Secretary tools need turn metadata for owner ACL.
         for name in ("business_search", "business_send"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     tool.set_context(channel, chat_id, metadata=metadata or {})
 
-        if session_key:
-            try:
-                session = self.sessions.get_or_create(session_key)
-                self._apply_permission_mode(session)
-            except Exception as e:
-                logger.debug("permission mode apply skipped: {}", e)
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
         """Remove <think>…</think> blocks that some models embed in content."""
@@ -699,6 +668,47 @@ class ShibaBrain:
         LLM call so the model always sees an up-to-date timestamp,
         channel info, and current iteration number.
         """
+        from shibaclaw.agent.sandbox_ctx import reset_permission_mode
+
+        perm_tokens = None
+        if session_key:
+            try:
+                session = self.sessions.get_or_create(session_key)
+                _, perm_tokens = self._apply_permission_mode(session)
+            except Exception as e:
+                logger.debug("permission mode bind skipped: {}", e)
+        try:
+            return await self._run_agent_loop_inner(
+                initial_messages,
+                on_progress,
+                on_response_token,
+                channel=channel,
+                chat_id=chat_id,
+                skill_names=skill_names,
+                profile_id=profile_id,
+                model=model,
+                session_key=session_key,
+                metadata=metadata,
+                temperature=temperature,
+            )
+        finally:
+            reset_permission_mode(perm_tokens)
+
+    async def _run_agent_loop_inner(
+        self,
+        initial_messages: list[dict],
+        on_progress: Callable[..., Awaitable[None]] | None = None,
+        on_response_token: Callable[[str], Awaitable[None]] | None = None,
+        *,
+        channel: str = "cli",
+        chat_id: str = "direct",
+        skill_names: list[str] | None = None,
+        profile_id: str | None = None,
+        model: str | None = None,
+        session_key: str | None = None,
+        metadata: dict | None = None,
+        temperature: float | None = None,
+    ) -> tuple[str | None, list[str], list[dict]]:
         messages = initial_messages
         iteration = 0
         final_content = None

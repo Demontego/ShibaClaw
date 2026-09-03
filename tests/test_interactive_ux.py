@@ -90,6 +90,84 @@ async def test_interactive_hub_resolve_ask():
 
 
 @pytest.mark.asyncio
+async def test_interactive_hub_per_session_emit():
+    hub = InteractiveHub()
+    a_events: list[dict] = []
+    b_events: list[dict] = []
+
+    async def emit_a(ev: dict) -> None:
+        a_events.append(ev)
+
+    async def emit_b(ev: dict) -> None:
+        b_events.append(ev)
+
+    hub.set_emit(emit_a, session_key="webui:a")
+    hub.set_emit(emit_b, session_key="webui:b")
+
+    async def answer_a():
+        await asyncio.sleep(0.02)
+        rid = a_events[0]["request_id"]
+        hub.resolve(rid, {"ok": True, "option_id": "a"})
+
+    async def answer_b():
+        await asyncio.sleep(0.02)
+        rid = b_events[0]["request_id"]
+        hub.resolve(rid, {"ok": True, "option_index": 1})
+
+    ta = asyncio.create_task(answer_a())
+    tb = asyncio.create_task(answer_b())
+    ra, rb = await asyncio.gather(
+        hub.request(
+            kind="ask",
+            session_key="webui:a",
+            payload={
+                "prompt": "A?",
+                "options": [{"id": "a", "label": "A"}],
+                "initiator_user_id": "1",
+            },
+            timeout=2,
+        ),
+        hub.request(
+            kind="ask",
+            session_key="webui:b",
+            payload={
+                "prompt": "B?",
+                "options": [
+                    {"id": "x", "label": "X"},
+                    {"id": "y", "label": "Y"},
+                ],
+            },
+            timeout=2,
+        ),
+    )
+    await ta
+    await tb
+    assert a_events and not any(e.get("session_key") == "webui:b" for e in a_events)
+    assert b_events and not any(e.get("session_key") == "webui:a" for e in b_events)
+    assert ra["option_id"] == "a"
+    assert rb["option_id"] == "y"
+    hub.set_emit(None, session_key="webui:a")
+    hub.set_emit(None, session_key="webui:b")
+
+
+@pytest.mark.asyncio
+async def test_fs_turn_readonly_via_contextvar(tmp_path: Path):
+    from shibaclaw.agent.sandbox_ctx import bind_permission_mode, reset_permission_mode
+
+    tool = WriteFileTool(workspace=tmp_path, allowed_dir=None)
+    tokens = bind_permission_mode("readonly", tmp_path)
+    try:
+
+        async def _run():
+            return await tool.execute(path="x.txt", content="hi")
+
+        out = await _run()
+        assert "readonly" in out.lower()
+    finally:
+        reset_permission_mode(tokens)
+
+
+@pytest.mark.asyncio
 async def test_credential_hub_stores_without_returning_secret(tmp_path: Path, monkeypatch):
     mgr = CredentialManager(store_dir=tmp_path)
     monkeypatch.setattr(

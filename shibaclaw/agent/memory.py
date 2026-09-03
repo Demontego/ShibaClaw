@@ -179,11 +179,16 @@ class ScentKeeper:
 
         Case-insensitive match. Never deletes the files themselves.
         Returns per-file removed line counts.
+
+        Rejects whitespace-only or short needles (< 3 non-whitespace chars)
+        to prevent prompt-injection mass wipes.
         """
-        needle_cf = (needle or "").casefold()
-        counts = {"MEMORY.md": 0, "HISTORY.md": 0}
-        if not needle_cf:
+        stripped = (needle or "").strip()
+        counts: dict[str, Any] = {"MEMORY.md": 0, "HISTORY.md": 0}
+        if len(stripped) < 3:
+            counts["error"] = "needle must be at least 3 non-whitespace characters"
             return counts
+        needle_cf = stripped.casefold()
 
         async with self._file_lock:
             for label, path in (

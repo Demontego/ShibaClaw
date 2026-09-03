@@ -119,6 +119,18 @@ class ExecTool(Tool):
         self.restrict_to_workspace = restrict_to_workspace
         self._readonly = readonly
 
+    def _effective_flags(self) -> tuple[bool, bool]:
+        """Return (restrict_to_workspace, readonly) for this turn."""
+        from shibaclaw.agent.sandbox_ctx import resolve_turn_sandbox, turn_permission_mode
+
+        if turn_permission_mode() is None:
+            return self.restrict_to_workspace, self._readonly
+        _allowed, readonly, restrict = resolve_turn_sandbox(
+            default_allowed_dir=None,
+            default_readonly=self._readonly,
+        )
+        return restrict, readonly
+
     @property
     def name(self) -> str:
         return "exec"
@@ -184,10 +196,17 @@ class ExecTool(Tool):
         timeout: int | None = None,
         **kwargs: Any,
     ) -> str:
-        if self._readonly:
+        restrict, readonly = self._effective_flags()
+        if readonly:
             return "Error: session permission mode is readonly (exec disabled)"
         cwd = working_dir or self.working_dir or os.getcwd()
-        guard_error = self._guard_command(command, cwd)
+        # Temporarily apply turn restrict for guard checks.
+        prev = self.restrict_to_workspace
+        self.restrict_to_workspace = restrict
+        try:
+            guard_error = self._guard_command(command, cwd)
+        finally:
+            self.restrict_to_workspace = prev
         if guard_error:
             return guard_error
 

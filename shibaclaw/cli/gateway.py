@@ -544,7 +544,10 @@ async def gateway_command(
                         except websockets.exceptions.ConnectionClosed:
                             pass
 
-                    hub.set_emit(_on_interactive)
+                    hub.set_emit(
+                        _on_interactive,
+                        session_key=payload.get("session_key", "webui:direct"),
+                    )
 
                     async def _send_token_chunk(chunk: str):
                         await ws.send(
@@ -581,7 +584,10 @@ async def gateway_command(
                             )
                         finally:
                             await coalescer.close()
-                            hub.set_emit(None)
+                            hub.set_emit(
+                                None,
+                                session_key=payload.get("session_key", "webui:direct"),
+                            )
                         if coalescer.token_count:
                             logger.debug(
                                 "WS token coalesce: {} tokens -> {} sends (dropped={})",
