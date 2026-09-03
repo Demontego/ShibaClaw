@@ -35,7 +35,7 @@ async def api_status(request: Request):
             if isinstance(ch_data, dict) and ch_data.get("enabled", False):
                 active_channels.append(ch_name)
 
-    from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+    from shibaclaw.agent.knowledge_manager import is_rag_available
 
     resp = {
         "status": "ok" if gw_ready else "gateway_offline",
@@ -48,7 +48,7 @@ async def api_status(request: Request):
         "restrict_workspace": cfg.tools.restrict_to_workspace if cfg else True,
         "active_channels": active_channels,
         "gateway": gw_ready,
-        "rag_available": RAG_AVAILABLE,
+        "rag_available": is_rag_available(),
     }
     return JSONResponse(resp)
 

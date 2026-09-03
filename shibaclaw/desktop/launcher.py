@@ -51,8 +51,8 @@ def run(
     except ImportError:
         print(
             "[ShibaClaw] pywebview is not installed.\n"
-            "Install it with:  pip install pywebview\n"
-            "or (inside the project):  pip install -e '.[windows-native]'",
+            "Install it with:  uv sync --extra desktop\n"
+            "or on Windows also:  uv sync --extra desktop --extra windows-native",
             file=sys.stderr,
         )
         sys.exit(1)
