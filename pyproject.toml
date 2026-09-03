@@ -172,6 +172,9 @@ filterwarnings = [
 [tool.uv.workspace]
 members = ["plugins/*"]
 
+[tool.uv]
+default-groups = ["dev"]
+
 [tool.uv.sources]
 shibaclaw = { workspace = true }
 
