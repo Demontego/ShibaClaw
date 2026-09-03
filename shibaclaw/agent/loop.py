@@ -409,9 +409,9 @@ class ShibaBrain:
                 )
             )
         self.tools.register(WebSearchTool(config=self.web_search_config, proxy=self.web_proxy))
-        from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+        from shibaclaw.agent.knowledge_manager import is_rag_available
 
-        if RAG_AVAILABLE:
+        if is_rag_available():
             self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
         self.tools.register(MemorySearchTool(workspace=self.workspace))
@@ -669,10 +669,10 @@ class ShibaBrain:
 
         active_kbs = None
         try:
-            from shibaclaw.agent.knowledge_manager import KnowledgeManager, RAG_AVAILABLE
+            from shibaclaw.agent.knowledge_manager import KnowledgeManager, is_rag_available
             import asyncio
 
-            if RAG_AVAILABLE:
+            if is_rag_available():
                 km = KnowledgeManager(self.context.workspace)
                 all_collections = await asyncio.to_thread(km.list_collections)
 

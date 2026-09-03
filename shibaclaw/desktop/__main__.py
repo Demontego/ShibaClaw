@@ -75,7 +75,7 @@ def main() -> None:
             _show_startup_error(
                 "Unable to start ShibaClaw Desktop.\n\n"
                 "If this came from a pip install, use 'shibaclaw desktop' from a terminal or "
-                "install the desktop extras with: pip install -e \".[windows-native,dev]\"\n\n"
+                "install desktop deps with: uv sync --extra desktop --extra windows-native\n\n"
                 "For the portable packaged app, use dist/ShibaClaw/ShibaClaw.exe instead of the CLI launcher."
             )
         raise

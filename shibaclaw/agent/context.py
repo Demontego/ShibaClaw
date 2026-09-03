@@ -217,9 +217,9 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
             lines.append(
                 'Use the message tool with channel="<name>" to send cross-channel messages.'
             )
-        from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+        from shibaclaw.agent.knowledge_manager import is_rag_available
 
-        if active_kbs and RAG_AVAILABLE:
+        if active_kbs and is_rag_available():
             lines.append("Active Knowledge Bases for this session:")
             for kb in active_kbs:
                 lines.append(f"- {kb}")
@@ -234,7 +234,7 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
                     "Telegram forward origin (verified Message.forward_origin metadata; "
                     f"not user-typed text): {label}"
                 )
-            kbs = metadata.get("mentioned_kbs") if RAG_AVAILABLE else None
+            kbs = metadata.get("mentioned_kbs") if is_rag_available() else None
             mcps = metadata.get("mentioned_mcps")
             apps = metadata.get("mentioned_apps")
 

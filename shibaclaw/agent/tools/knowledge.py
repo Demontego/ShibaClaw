@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from shibaclaw.agent.knowledge_manager import KnowledgeManager
 from shibaclaw.agent.tools.base import Tool
 
 
@@ -48,6 +47,11 @@ class KnowledgeSearchTool(Tool):
         }
 
     async def execute(self, **kwargs: Any) -> str:
+        from shibaclaw.agent.knowledge_manager import KnowledgeManager, is_rag_available
+
+        if not is_rag_available():
+            return "Error: Knowledge Bases require RAG extras. Run: uv sync --extra rag"
+
         query = kwargs.get("query")
         collection_ids = kwargs.get("collection_ids")
 
