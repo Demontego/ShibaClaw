@@ -404,11 +404,16 @@ class UpdateProgressTool(Tool):
 
 
 class SessionSearchTool(Tool):
-    """Search past conversation transcripts (owner/WebUI tool)."""
+    """Search past conversation transcripts (owner WebUI/CLI only)."""
+
+    # Global transcript search is intentionally not available on Telegram/other
+    # channels — those turns must not read WebUI or unrelated session bodies.
+    _ALLOWED_CHANNELS = frozenset({"webui", "cli", "system"})
 
     def __init__(self, sessions: PackManager) -> None:
         self._sessions = sessions
         self._channel = ""
+        self._session_key = ""
 
     def set_context(
         self,
@@ -417,7 +422,8 @@ class SessionSearchTool(Tool):
         session_key: str | None = None,
         **_kwargs: Any,
     ) -> None:
-        self._channel = channel or ""
+        self._channel = (channel or "").strip().lower()
+        self._session_key = session_key or ""
 
     @property
     def name(self) -> str:
@@ -427,7 +433,8 @@ class SessionSearchTool(Tool):
     def description(self) -> str:
         return (
             "Search visible text across past conversation sessions by exact "
-            "words or phrases. Returns matching session keys, roles, and snippets."
+            "words or phrases. Owner WebUI/CLI only. Returns matching session "
+            "keys, roles, and snippets."
         )
 
     @property
@@ -447,6 +454,11 @@ class SessionSearchTool(Tool):
         }
 
     async def execute(self, query: str, limit: int = 20, **_kwargs: Any) -> str:
+        if self._channel not in self._ALLOWED_CHANNELS:
+            return (
+                "Error: session_search is only available on WebUI/CLI "
+                "(not Telegram or other chat channels)."
+            )
         q = (query or "").strip()
         if not q:
             return "Error: query is required"

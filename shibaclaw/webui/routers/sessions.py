@@ -233,20 +233,37 @@ async def api_sessions_archive(request: Request):
     session = pm.get_or_create(session_id)
 
     snapshot = list(session.messages[session.last_consolidated :])
+    incognito = bool(session.metadata.get("incognito") or session.metadata.get("ephemeral"))
 
     path = pm._get_session_path(session_id)
     if path.exists():
         os.remove(path)
     pm.invalidate(session_id)
 
-    if snapshot:
-        asyncio.create_task(agent_manager.archive_via_gateway(snapshot))
+    # Incognito/ephemeral: drop session disk state without consolidating to memory.
+    if snapshot and not incognito:
+        asyncio.create_task(agent_manager.archive_via_gateway(snapshot, session_key=session_id))
 
-    return JSONResponse({"status": "archived"})
+    return JSONResponse({"status": "archived", "incognito_skipped": incognito})
 
 
 async def api_sessions_search(request: Request):
-    """Search conversation message bodies across sessions."""
+    """Search conversation message bodies across sessions (authenticated WebUI only)."""
+    from shibaclaw.webui.auth import (
+        _auth_enabled,
+        check_token,
+        is_telegram_mini_surface,
+    )
+
+    # Owner WebUI only — Mini App / unauthenticated clients must not scan transcripts.
+    if is_telegram_mini_surface(request):
+        return JSONResponse(
+            {"error": "session search is available on the browser WebUI only"},
+            status_code=403,
+        )
+    if _auth_enabled() and not check_token(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=400)
     pm = agent_manager.pm

@@ -536,13 +536,19 @@ class ShibaBrain:
         metadata: dict | None,
         channel: str | None = None,
     ) -> list[dict]:
-        """Allow-list only for non-allowlisted Telegram turns (default-deny)."""
-        if self._is_allowlisted_turn(metadata, channel):
-            return tool_defs
+        """Allow-list only for non-allowlisted Telegram turns (default-deny).
+
+        Also strips ``session_search`` outside WebUI/CLI/system — global
+        transcript search must not run on chat channels (cross-session leak).
+        """
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
         out: list[dict] = []
+        allowlisted = self._is_allowlisted_turn(metadata, channel)
         for d in tool_defs:
             name = (d.get("function") or {}).get("name") or d.get("name") or ""
-            if self._non_allowlisted_tool_allowed(name):
+            if name == "session_search" and ch not in {"webui", "cli", "system"}:
+                continue
+            if allowlisted or self._non_allowlisted_tool_allowed(name):
                 out.append(d)
         return out
 
@@ -552,6 +558,9 @@ class ShibaBrain:
         metadata: dict | None,
         channel: str | None = None,
     ) -> bool:
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
+        if tool_name == "session_search" and ch not in {"webui", "cli", "system"}:
+            return True
         if self._is_allowlisted_turn(metadata, channel):
             return False
         return not self._non_allowlisted_tool_allowed(tool_name)
@@ -1331,16 +1340,19 @@ class ShibaBrain:
         cmd = msg.content.strip().lower()
         if cmd == "/new":
             snapshot = session.messages[session.last_consolidated :]
-            session.clear()
-            await self.sessions.asave(session)
-            self.sessions.invalidate(session.key)
-
-            if snapshot:
+            incognito = bool(
+                session.metadata.get("incognito") or session.metadata.get("ephemeral")
+            )
+            # Schedule archive while session (and incognito flag) still in cache.
+            if snapshot and not incognito:
                 self._schedule_background(
                     self.memory_consolidator.archive_snapshot(
                         snapshot, session_key=session.key
                     )
                 )
+            session.clear()
+            await self.sessions.asave(session)
+            self.sessions.invalidate(session.key)
 
             return OutboundMessage(
                 channel=msg.channel, chat_id=msg.chat_id, content="New session started."

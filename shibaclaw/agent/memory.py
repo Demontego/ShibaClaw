@@ -730,6 +730,14 @@ class PackMemory:
     ) -> bool:
         if not messages:
             return True
+        # Defense-in-depth: never persist incognito/ephemeral session content.
+        # Peek cache only — get_or_create would invent a fresh non-incognito session.
+        if session_key:
+            sess = getattr(self.sessions, "_cache", {}).get(session_key)
+            if sess is not None and (
+                sess.metadata.get("incognito") or sess.metadata.get("ephemeral")
+            ):
+                return True
         for _ in range(self.store._MAX_FAILURES_BEFORE_RAW_ARCHIVE):
             if await self.consolidate_messages(messages, session_key=session_key):
                 await self.maybe_compact_memory()

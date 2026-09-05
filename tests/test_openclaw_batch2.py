@@ -112,6 +112,57 @@ def test_session_rewind_fork_incognito(tmp_path: Path):
     assert not path.exists()
 
 
+@pytest.mark.asyncio
+async def test_session_search_denied_on_telegram(tmp_path: Path):
+    from shibaclaw.agent.tools.interactive import SessionSearchTool
+
+    pm = PackManager(tmp_path)
+    s = pm.get_or_create("webui:secret")
+    s.add_message("user", "top-secret-phrase")
+    pm.save(s)
+
+    tool = SessionSearchTool(sessions=pm)
+    tool.set_context("telegram", "1", "telegram:1")
+    out = await tool.execute(query="top-secret-phrase")
+    assert "only available on WebUI" in out
+    assert "top-secret-phrase" not in out
+
+    tool.set_context("webui", "direct", "webui:direct")
+    ok = await tool.execute(query="top-secret-phrase")
+    assert "top-secret-phrase" in ok or "Found" in ok
+
+
+@pytest.mark.asyncio
+async def test_archive_snapshot_skips_incognito(tmp_path: Path):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from shibaclaw.agent.memory import PackMemory
+
+    pm = PackManager(tmp_path)
+    sess = pm.get_or_create("webui:incog")
+    sess.metadata["incognito"] = True
+    sess.add_message("user", "secret chat content")
+
+    consolidator = PackMemory(
+        workspace=tmp_path,
+        provider=MagicMock(),
+        model="test",
+        sessions=pm,
+        context_window_tokens=8000,
+        build_messages=lambda *a, **k: [],
+        get_tool_definitions=lambda: [],
+    )
+    consolidator.consolidate_messages = AsyncMock(return_value=True)
+    consolidator.maybe_compact_memory = AsyncMock()
+
+    ok = await consolidator.archive_snapshot(
+        [{"role": "user", "content": "secret chat content"}],
+        session_key="webui:incog",
+    )
+    assert ok is True
+    consolidator.consolidate_messages.assert_not_called()
+
+
 def test_config_history(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "shibaclaw.config.history._history_path",
