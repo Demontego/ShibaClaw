@@ -25,6 +25,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from .agent_manager import agent_manager
 from .auth import _auth_enabled, _verify_session_token
 from .gateway_client import gateway_client
+from . import android_bridge
 
 # ── Shared state ─────────────────────────────────────────────
 sessions: dict[str, dict[str, Any]] = {}  # ws_id → session state
@@ -184,7 +185,12 @@ async def ws_endpoint(websocket: WebSocket):
 
     # ── Session setup ──
     provided_id = msg.get("session_id")
-    session_id = provided_id if provided_id else f"webui:{ws_id[:8]}"
+    device_id = str(msg.get("device_id") or "").strip()
+    device_label = str(msg.get("label") or "")
+    if device_id:
+        session_id = android_bridge.session_key_for(device_id)
+    else:
+        session_id = provided_id if provided_id else f"webui:{ws_id[:8]}"
     sessions[ws_id] = _make_session_state(session_id)
     _ws_clients[ws_id] = websocket
     _subscribe_ws_to_session(ws_id, session_id)
@@ -211,7 +217,23 @@ async def ws_endpoint(websocket: WebSocket):
 
     await _emit_session_status(websocket, session_id)
 
-    # ── Message loop ──
+    if device_id:
+        try:
+            status = await android_bridge.register_phone(
+                ws_id, websocket, device_id, device_label
+            )
+            await _emit_to_ws(
+                websocket,
+                {"type": "device_ready", "device": status},
+            )
+        except Exception as exc:
+            logger.warning("Android register failed: {}", exc)
+            await _emit_to_ws(
+                websocket,
+                {"type": "error", "message": f"Android register failed: {exc}"},
+            )
+
+    # ── Message loop ───────────────────────────────────────────────────
     try:
         async for raw_msg in websocket.iter_text():
             try:
@@ -245,11 +267,15 @@ async def ws_endpoint(websocket: WebSocket):
             elif msg_type == "interactive_reply":
                 await _handle_interactive_reply(ws_id, websocket, data)
 
+            elif msg_type == "device_result":
+                await android_bridge.submit_result(data)
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.debug("WS handler error: {}", e)
     finally:
+        await android_bridge.unregister_phone(ws_id)
         _unsubscribe_ws(ws_id)
         sessions.pop(ws_id, None)
         _ws_clients.pop(ws_id, None)
@@ -421,7 +447,7 @@ async def _handle_user_message(ws_id: str, ws: WebSocket, data: dict[str, Any]) 
             payload: dict[str, Any] = {
                 "content": message["content"],
                 "session_key": session_key,
-                "channel": "webui",
+                "channel": "android" if session_key.startswith("android:") else "webui",
                 "chat_id": session_key,
                 "media": message.get("media"),
                 "metadata": {

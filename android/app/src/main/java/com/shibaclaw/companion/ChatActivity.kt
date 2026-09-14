@@ -4,32 +4,45 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
-import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 
 class ChatActivity : AppCompatActivity() {
-    private val buf = StringBuilder()
+    private val adapter = ChatAdapter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContentView(R.layout.activity_chat)
+        val root = findViewById<android.view.View>(R.id.chat_root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime(),
+            )
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
         val face = findViewById<ImageView>(R.id.chat_face)
         val status = findViewById<TextView>(R.id.chat_status)
-        val transcript = findViewById<TextView>(R.id.transcript)
-        val scroll = findViewById<ScrollView>(R.id.transcript_scroll)
+        val list = findViewById<RecyclerView>(R.id.messages)
         val input = findViewById<EditText>(R.id.input)
         face.setImageResource(Mood.from(Prefs.mood(this)).drawable())
+        list.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
+        list.adapter = adapter
         if (Prefs.lastBubble(this).isNotBlank()) {
-            buf.append("Shiba: ").append(Prefs.lastBubble(this)).append("\n")
-            transcript.text = buf
+            adapter.add(ChatLine(fromUser = false, text = Prefs.lastBubble(this)))
         }
         ShibaService.start(this)
         findViewById<Button>(R.id.send).setOnClickListener {
             val text = input.text.toString().trim()
             if (text.isEmpty()) return@setOnClickListener
-            buf.append("You: ").append(text).append("\n")
-            transcript.text = buf
+            adapter.add(ChatLine(fromUser = true, text = text))
+            list.scrollToPosition(adapter.lastPosition())
             input.setText("")
             ShibaService.start(this, ShibaService.ACTION_CHAT, text)
         }
@@ -38,9 +51,8 @@ class ChatActivity : AppCompatActivity() {
         ChatBus.doneListener = { text ->
             runOnUiThread {
                 if (text.isNotBlank()) {
-                    buf.append("Shiba: ").append(text).append("\n\n")
-                    transcript.text = buf
-                    scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+                    adapter.add(ChatLine(fromUser = false, text = text))
+                    list.scrollToPosition(adapter.lastPosition())
                 }
             }
         }
