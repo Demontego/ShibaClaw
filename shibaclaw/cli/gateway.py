@@ -831,6 +831,14 @@ async def gateway_command(
                 )
                 await ws.send(_ok({"matched": matched}))
 
+            elif action == "device.detach":
+                device_id = str(payload.get("device_id") or "").strip() or None
+                device_hub.detach(device_id)
+                stale = [sock for sock, did in list(_device_sockets.items()) if did == device_id]
+                for sock in stale:
+                    _device_sockets.pop(sock, None)
+                await ws.send(_ok(device_hub.status()))
+
             elif action == "archive":
                 snapshot = payload.get("snapshot", [])
                 archived = False

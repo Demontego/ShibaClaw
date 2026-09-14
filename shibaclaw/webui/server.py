@@ -20,6 +20,7 @@ from starlette.staticfiles import StaticFiles
 
 from .agent_manager import agent_manager
 from .auth import AuthMiddleware, _auth_enabled
+from . import android_bridge
 from .routers.notifications import (
     api_internal_session_notify,
     api_notifications_delete,
@@ -375,6 +376,7 @@ async def _start_gateway_client() -> None:
                     )
 
             gateway_client.on_event("session.notify", _on_session_notify)
+            gateway_client.on_event("device.tools.invoke", android_bridge.forward_invoke)
 
             await gateway_client.start()
             logger.info("Gateway WS client started")

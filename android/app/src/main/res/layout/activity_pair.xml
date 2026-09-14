@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pair_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
@@ -30,30 +31,30 @@
             android:textStyle="bold" />
 
         <EditText
-            android:id="@+id/host"
+            android:id="@+id/url"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:hint="@string/host_hint"
+            android:hint="@string/url_hint"
             android:inputType="textUri"
+            android:importantForAutofill="no"
             android:textColor="@color/text"
             android:textColorHint="@color/text_muted" />
 
         <EditText
-            android:id="@+id/port"
+            android:id="@+id/username"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/port_hint"
-            android:inputType="number"
-            android:text="19998"
+            android:hint="@string/username_hint"
+            android:inputType="text"
             android:textColor="@color/text"
             android:textColorHint="@color/text_muted" />
 
         <EditText
-            android:id="@+id/token"
+            android:id="@+id/password"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/token_hint"
+            android:hint="@string/password_hint"
             android:inputType="textPassword"
             android:textColor="@color/text"
             android:textColorHint="@color/text_muted" />
