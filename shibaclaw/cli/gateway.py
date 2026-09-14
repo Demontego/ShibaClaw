@@ -282,6 +282,8 @@ async def gateway_command(
             hb_cfg.interval_min,
         )
 
+    from shibaclaw.agent.device_hub import DeviceHub
+
     agent = ShibaBrain(
         bus=bus,
         provider=provider,
@@ -303,6 +305,7 @@ async def gateway_command(
         memory_compact_threshold_tokens=config.agents.defaults.memory_compact_threshold_tokens,
         session_router=session_router,
     )
+    device_hub = DeviceHub(agent.tools)
 
     channels = ChannelManager(config, bus)
 
@@ -375,6 +378,7 @@ async def gateway_command(
             provider = new_provider
 
             await agent.reconfigure(new_cfg, new_provider)
+            device_hub.bind_vault(agent.tools)
             await channels.reconfigure(new_cfg)
             new_hb = new_cfg.gateway.heartbeat
             await automation.reconfigure(new_provider, new_hb.model or None)
@@ -429,6 +433,7 @@ async def gateway_command(
     _ws_clients: set[websockets.ServerConnection] = set()
     _chat_tasks: dict[str, asyncio.Task] = {}
     _ws_start_time = time.time()
+    _device_sockets: dict[websockets.ServerConnection, str] = {}
 
     async def _ws_handler(websocket: websockets.ServerConnection):
         authed = False
@@ -442,6 +447,10 @@ async def gateway_command(
             if expected_token and hello.get("token") != expected_token:
                 await websocket.send(json.dumps({"type": "error", "error": "unauthorized"}))
                 await websocket.close(4003, "Unauthorized")
+                return
+            role = str(hello.get("role") or "webui").strip().lower()
+            if role == "device":
+                await _device_ws_loop(websocket, hello)
                 return
             authed = True
             _ws_clients.add(websocket)
@@ -500,11 +509,16 @@ async def gateway_command(
                             "status": "ok" if provider else "idle",
                             "uptime": int(time.time() - _ws_start_time),
                             "provider_ready": provider is not None,
+                            "device": device_hub.status(),
                         }
                     )
                 )
 
             elif action == "chat":
+                if ws in _device_sockets:
+                    payload.setdefault("session_key", device_hub.session_key())
+                    payload.setdefault("channel", "android")
+                    payload.setdefault("chat_id", _device_sockets[ws])
                 if not provider:
                     await ws.send(_err("no_provider"))
                     return
@@ -781,6 +795,42 @@ async def gateway_command(
                 else:
                     await ws.send(_err("job not found"))
 
+            elif action == "device.register":
+                device_id = str(payload.get("device_id") or _device_sockets.get(ws) or "").strip()
+                label = str(payload.get("label") or "")
+
+                async def _send_invoke(invoke_payload: dict) -> None:
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "event",
+                                "name": "device.tools.invoke",
+                                "payload": invoke_payload,
+                            }
+                        )
+                    )
+
+                try:
+                    conn = device_hub.attach(device_id, _send_invoke, label=label)
+                except ValueError as exc:
+                    await ws.send(_err(str(exc)))
+                    return
+                _device_sockets[ws] = conn.device_id
+                await ws.send(_ok(device_hub.status()))
+
+            elif action == "device.tools.result":
+                invoke_id = str(payload.get("id") or "")
+                ok_flag = bool(payload.get("ok", True))
+                result = payload.get("result")
+                error = payload.get("error")
+                matched = device_hub.complete(
+                    invoke_id,
+                    ok=ok_flag,
+                    result="" if result is None else str(result),
+                    error="" if error is None else str(error),
+                )
+                await ws.send(_ok({"matched": matched}))
+
             elif action == "archive":
                 snapshot = payload.get("snapshot", [])
                 archived = False
@@ -804,6 +854,68 @@ async def gateway_command(
                 await ws.send(_err(str(e)))
             except Exception as _e:
                 logger.debug("Ignored error: {}", _e)
+
+    async def _device_ws_loop(websocket: websockets.ServerConnection, hello: dict) -> None:
+        device_id = str(hello.get("device_id") or "").strip()
+        label = str(hello.get("label") or "")
+
+        async def _send_invoke(invoke_payload: dict) -> None:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "event",
+                        "name": "device.tools.invoke",
+                        "payload": invoke_payload,
+                    }
+                )
+            )
+
+        try:
+            conn = device_hub.attach(device_id, _send_invoke, label=label)
+        except ValueError as exc:
+            await websocket.send(json.dumps({"type": "error", "error": str(exc)}))
+            await websocket.close(4002, "Invalid device_id")
+            return
+
+        _device_sockets[websocket] = conn.device_id
+        await websocket.send(
+            json.dumps(
+                {
+                    "type": "hello_ok",
+                    "version": __version__,
+                    "provider_ready": provider is not None,
+                    "uptime": int(time.time() - _ws_start_time),
+                    "role": "device",
+                    "device": device_hub.status(),
+                }
+            )
+        )
+        logger.info("📱 Android companion connected: {}", conn.device_id)
+        try:
+            async for raw_msg in websocket:
+                try:
+                    msg = json.loads(raw_msg)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                msg_type = msg.get("type", "")
+                request_id = msg.get("id", str(uuid.uuid4())[:8])
+                if msg_type == "ping":
+                    await websocket.send(json.dumps({"type": "pong"}))
+                elif msg_type == "request":
+                    action = msg.get("action", "")
+                    payload = msg.get("payload") or {}
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    await _handle_ws_request(websocket, request_id, action, payload)
+        except websockets.exceptions.ConnectionClosed:
+            pass
+        except Exception as e:
+            logger.debug("Android WS handler error: {}", e)
+        finally:
+            _device_sockets.pop(websocket, None)
+            if device_hub.device_id == conn.device_id:
+                device_hub.detach(conn.device_id)
+            logger.info("📱 Android companion disconnected: {}", conn.device_id)
 
     async def _broadcast_ws_event(name: str, payload: dict, session_key: str | None = None):
         msg = json.dumps(
