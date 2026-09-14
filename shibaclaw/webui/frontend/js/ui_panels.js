@@ -1,16 +1,27 @@
 // ── Channel icons & labels for grouping ─────────────────────
 const CHANNEL_META = {
-    webui: { icon: "language", label: "Web UI" },
-    telegram: { icon: "send", label: "Telegram" },
-    discord: { icon: "forum", label: "Discord" },
-    slack: { icon: "tag", label: "Slack" },
-    api: { icon: "api", label: "API" },
-    cli: { icon: "terminal", label: "CLI" },
-    automation: { icon: "autorenew", label: "Automation" },
-    heartbeat: { icon: "autorenew", label: "Recurring" },
-    cron: { icon: "schedule_send", label: "One-time" },
-    _default: { icon: "chat_bubble", label: "Other" }
+    webui: { icon: "language" },
+    telegram: { icon: "send" },
+    discord: { icon: "forum" },
+    slack: { icon: "tag" },
+    api: { icon: "api" },
+    cli: { icon: "terminal" },
+    automation: { icon: "autorenew" },
+    heartbeat: { icon: "autorenew" },
+    cron: { icon: "schedule_send" },
+    _default: { icon: "chat_bubble" }
 };
+const _CHANNEL_LABEL_FB = {
+    webui: "Web UI", telegram: "Telegram", discord: "Discord", slack: "Slack",
+    api: "API", cli: "CLI", automation: "Automation", heartbeat: "Recurring",
+    cron: "One-time", other: "Other"
+};
+function _channelLabel(ch) {
+    const key = ch === "_default" ? "sessions.channel.other" : `sessions.channel.${ch}`;
+    return (typeof t === "function" ? t(key) : _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch])
+        || _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch]
+        || ch.charAt(0).toUpperCase() + ch.slice(1);
+}
 const CHANNEL_ORDER = ["telegram", "webui", "automation", "heartbeat", "cron", "cli", "api", "discord", "slack"];
 
 let _sessionSearchQuery = "";
@@ -36,7 +47,8 @@ function _extractChannel(key) {
 }
 
 function _channelInfo(ch) {
-    return CHANNEL_META[ch] || { icon: CHANNEL_META._default.icon, label: ch.charAt(0).toUpperCase() + ch.slice(1) };
+    const meta = CHANNEL_META[ch] || CHANNEL_META._default;
+    return { icon: meta.icon, label: _channelLabel(ch === "_default" ? "other" : ch) };
 }
 
 function _sessionKeyTail(key) {
@@ -179,14 +191,36 @@ async function _loadContextModalContent() {
     }
 }
 
+function _sessionUpdatedMs(sess) {
+    let iso = (sess && (sess.updated_at || sess.created_at)) || "";
+    if (!iso) return 0;
+    // Older session records may contain naive UTC ISO timestamps.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(iso) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(iso)) {
+        iso += "Z";
+    }
+    const ms = Date.parse(iso);
+    return Number.isFinite(ms) ? ms : 0;
+}
+
+function _formatSessionWhen(sess) {
+    const ms = _sessionUpdatedMs(sess);
+    if (!ms) return "";
+    return new Date(ms).toLocaleString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
 function _buildSessionEl(sess) {
     const el = document.createElement("div");
     el.className = "history-item";
     el.dataset.sessionKey = sess.key;
     if (sess.key === state.sessionId) el.classList.add("active");
 
-    const date = new Date(sess.created_at).toLocaleDateString();
-    const time = new Date(sess.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const when = _formatSessionWhen(sess);
     const name = sess.nickname || sess.key;
     const displayName = _cleanSessionTitle(name, sess.key);
     const channel = _extractChannel(sess.key);
@@ -203,7 +237,7 @@ function _buildSessionEl(sess) {
             <div class="session-name">${safeName}</div>
             <div class="session-subline">
                 ${channelTag}
-                <div class="session-meta">${date} ${time}</div>
+                <div class="session-meta">${when}</div>
             </div>
         </div>
         <div class="session-actions">
@@ -212,13 +246,13 @@ function _buildSessionEl(sess) {
             </button>
             <div class="session-dropdown" data-session-key="${safeKey}">
                 <div class="dropdown-item rename-action">
-                    <span class="material-icons-round">edit</span> Rename
+                    <span class="material-icons-round">edit</span> ${escapeHtml(typeof t === "function" ? t("sessions.rename") : "Rename")}
                 </div>
                 <div class="dropdown-item archive-action">
-                    <span class="material-icons-round">archive</span> Archive
+                    <span class="material-icons-round">archive</span> ${escapeHtml(typeof t === "function" ? t("sessions.archive") : "Archive")}
                 </div>
                 <div class="dropdown-item danger delete-action">
-                    <span class="material-icons-round">delete</span> Delete
+                    <span class="material-icons-round">delete</span> ${escapeHtml(typeof t === "function" ? t("sessions.delete") : "Delete")}
                 </div>
             </div>
         </div>
@@ -254,10 +288,57 @@ function _wireSessionSearch() {
     if (!input || _sessionSearchWired) return;
     _sessionSearchWired = true;
     if (_sessionSearchQuery) input.value = _sessionSearchQuery;
+    let msgSearchTimer = null;
     input.addEventListener("input", () => {
         _sessionSearchQuery = input.value || "";
         _renderSessionsList();
+        clearTimeout(msgSearchTimer);
+        const q = (_sessionSearchQuery || "").trim();
+        if (q.length < 2) {
+            _clearMessageHits();
+            return;
+        }
+        msgSearchTimer = setTimeout(() => _searchMessageBodies(q), 280);
     });
+}
+
+function _clearMessageHits() {
+    const el = document.getElementById("session-msg-hits");
+    if (el) el.remove();
+}
+
+async function _searchMessageBodies(q) {
+    try {
+        const res = await authFetch(
+            `/api/sessions/search?q=${encodeURIComponent(q)}&limit=12`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        _renderMessageHits(data.hits || [], q);
+    } catch {
+        /* ignore */
+    }
+}
+
+function _renderMessageHits(hits, q) {
+    _clearMessageHits();
+    const list = $("history-list");
+    if (!list || !hits.length) return;
+    const wrap = document.createElement("div");
+    wrap.id = "session-msg-hits";
+    wrap.className = "session-msg-hits";
+    for (const hit of hits) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "session-msg-hit";
+        const key = hit.session_key || "";
+        btn.innerHTML = `<strong>${escapeHtml(_cleanSessionTitle(key, key))}</strong> · ${escapeHtml(hit.role || "")}<br>${escapeHtml(hit.snippet || "")}`;
+        btn.addEventListener("click", () => {
+            if (typeof loadSession === "function") loadSession(key);
+        });
+        wrap.appendChild(btn);
+    }
+    list.prepend(wrap);
 }
 
 function _sessionMatchesQuery(sess, q) {
@@ -297,11 +378,11 @@ function _renderSessionsList() {
     list.innerHTML = "";
 
     if (!_sessionsCache.length) {
-        list.innerHTML = `<div class="history-empty">No past sessions</div>`;
+        list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.empty") : "No past sessions")}</div>`;
         return;
     }
     if (!sessions.length) {
-        list.innerHTML = `<div class="history-empty">No matches</div>`;
+        list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.no_matches") : "No matches")}</div>`;
         return;
     }
 
@@ -327,6 +408,7 @@ function _renderSessionsList() {
 
         const itemsEl = document.createElement("div");
         itemsEl.className = "channel-group-items" + (collapsed ? " collapsed" : "");
+        items.sort((a, b) => _sessionUpdatedMs(b) - _sessionUpdatedMs(a));
         items.forEach((s) => itemsEl.appendChild(_buildSessionEl(s)));
 
         header.addEventListener("click", () => _toggleChannelGroup(ch, header));
@@ -350,148 +432,12 @@ async function loadHistory() {
         _sessionsCache = data.sessions || [];
         _renderSessionsList();
     } catch (e) {
-        if (list) list.innerHTML = `<div class="history-empty">Error loading history</div>`;
+        if (list) list.innerHTML = `<div class="history-empty">${escapeHtml(typeof t === "function" ? t("sessions.load_error") : "Error loading history")}</div>`;
     }
 }
+window.loadHistory = loadHistory;
+window._renderSessionsList = _renderSessionsList;
 
-
-const _autoCollapsed = JSON.parse(localStorage.getItem("autoCollapsed") || "{}");
-
-function _saveAutoCollapsed() {
-    localStorage.setItem("autoCollapsed", JSON.stringify(_autoCollapsed));
-}
-
-function _toggleAutoSection(key, headerEl) {
-    _autoCollapsed[key] = !_autoCollapsed[key];
-    const items = headerEl.nextElementSibling;
-    if (_autoCollapsed[key]) {
-        headerEl.classList.add("collapsed");
-        items.classList.add("collapsed");
-    } else {
-        headerEl.classList.remove("collapsed");
-        items.classList.remove("collapsed");
-        items.style.maxHeight = items.scrollHeight + "px";
-    }
-    _saveAutoCollapsed();
-}
-
-// _formatSchedule, _timeAgo, _cronStatusClass → consolidated in utils.js as formatSchedule, timeAgo, jobStatusClass
-
-async function loadCronSection() {
-    const list = $("cron-list");
-    if (!list) return;
-    const count = $("cron-count");
-    try {
-        const res = await authFetch("/api/cron/jobs");
-        const data = await res.json();
-        const jobs = data.jobs || [];
-        if (count) count.textContent = jobs.length;
-
-        if (jobs.length === 0) {
-            list.innerHTML = `<div class="auto-empty">No one-time jobs</div>`;
-            return;
-        }
-
-        list.innerHTML = "";
-        for (const job of jobs) {
-            const row = document.createElement("div");
-            row.className = "auto-row";
-            const stCls = jobStatusClass(job);
-            const meta = job.state.lastRunAtMs ? timeAgo(job.state.lastRunAtMs) : formatSchedule(job.schedule);
-            const safeName = escapeHtml(job.name || job.payload.message.slice(0, 30));
-            row.innerHTML = `
-                <div class="auto-status ${stCls}"></div>
-                <div class="auto-name" title="${escapeHtml(job.payload.message)}">${safeName}</div>
-                <div class="auto-meta">${escapeHtml(meta)}</div>
-                <button class="btn-auto-trigger" title="Run now">▶</button>
-            `;
-            row.querySelector(".btn-auto-trigger").addEventListener("click", async (e) => {
-                const btn = e.currentTarget;
-                btn.disabled = true;
-                btn.textContent = "…";
-                try {
-                    await authFetch(`/api/cron/jobs/${encodeURIComponent(job.id)}/trigger`, { method: "POST" });
-                } catch (_) { }
-                await loadCronSection();
-            });
-            list.appendChild(row);
-        }
-    } catch (e) {
-        list.innerHTML = `<div class="auto-empty">Error loading one-time jobs</div>`;
-    }
-}
-
-async function loadHeartbeatSection() {
-    const list = $("heartbeat-list");
-    if (!list) return;
-    const badge = $("heartbeat-badge");
-    try {
-        const res = await authFetch("/api/heartbeat/status");
-        const data = await res.json();
-
-        if (!data.reachable) {
-            badge.className = "automation-badge badge-off";
-            badge.textContent = "offline";
-            list.innerHTML = `<div class="auto-empty">Gateway unreachable</div>`;
-            return;
-        }
-
-        if (!data.enabled) {
-            badge.className = "automation-badge badge-off";
-            badge.textContent = "off";
-            list.innerHTML = `<div class="auto-empty">Recurring check disabled</div>`;
-            return;
-        }
-
-        badge.className = "automation-badge " + (data.last_error ? "badge-error" : (data.running ? "badge-ok" : "badge-off"));
-        badge.textContent = data.last_error ? "error" : (data.running ? "active" : "idle");
-
-        let info = `<div class="auto-hb-info">`;
-        info += `<span class="hb-label">Interval:</span> ${data.interval_min}min<br>`;
-        if (data.session_key) info += `<span class="hb-label">Session:</span> ${escapeHtml(data.session_key)}<br>`;
-        if (data.profile_id) info += `<span class="hb-label">Profile:</span> ${escapeHtml(data.profile_id)}<br>`;
-        if (data.targets && Object.keys(data.targets).length) info += `<span class="hb-label">Targets:</span> ${escapeHtml(Object.entries(data.targets).map(([channel, target]) => `${channel}:${target}`).join(", "))}<br>`;
-        if (data.last_check_ms) info += `<span class="hb-label">Last check:</span> ${timeAgo(data.last_check_ms)} — ${data.last_action || "?"}<br>`;
-        if (data.last_run_ms) info += `<span class="hb-label">Last run:</span> ${timeAgo(data.last_run_ms)}<br>`;
-        if (data.last_error) info += `<span class="hb-label">Error:</span> ${escapeHtml(data.last_error)}<br>`;
-        info += `<span class="hb-label">File:</span> ${data.heartbeat_file_exists ? `<a class="hb-file-link" href="#" onclick="openHeartbeatFile(event)">TASK.md</a>` : "missing"}`;
-        info += `</div>`;
-        info += `<div class="auto-row"><button class="btn-auto-trigger" id="btn-hb-trigger" title="Run recurring check now">▶ Trigger</button></div>`;
-
-        list.innerHTML = info;
-        $("btn-hb-trigger").addEventListener("click", async (e) => {
-            const btn = e.currentTarget;
-            btn.disabled = true;
-            btn.textContent = "…";
-            try {
-                await authFetch("/api/heartbeat/trigger", { method: "POST" });
-            } catch (_) { }
-            await loadHeartbeatSection();
-        });
-    } catch (e) {
-        badge.className = "automation-badge badge-off";
-        badge.textContent = "";
-        list.innerHTML = `<div class="auto-empty">Error loading status</div>`;
-    }
-}
-
-function initAutomationSections() {
-    const cronHeader = $("cron-header");
-    const hbHeader = $("heartbeat-header");
-    if (!state.automationInitialized) {
-        if (cronHeader) {
-            cronHeader.addEventListener("click", () => _toggleAutoSection("cron", cronHeader));
-            if (_autoCollapsed["cron"]) { cronHeader.classList.add("collapsed"); $("cron-list").classList.add("collapsed"); }
-        }
-        if (hbHeader) {
-            hbHeader.addEventListener("click", () => _toggleAutoSection("heartbeat", hbHeader));
-            if (_autoCollapsed["heartbeat"]) { hbHeader.classList.add("collapsed"); $("heartbeat-list").classList.add("collapsed"); }
-        }
-        state.automationInitialized = true;
-    }
-    loadCronSection();
-    loadHeartbeatSection();
-}
 
 window.toggleSessionMenu = function (event, btn, key) {
     event.stopPropagation();
@@ -506,17 +452,23 @@ window.toggleSessionMenu = function (event, btn, key) {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 
     if (!isActive && dropdown) {
         dropdown.classList.add("active");
         btn.classList.add("active");
+
+        const historyItem = btn.closest(".history-item");
+        if (historyItem) {
+            historyItem.classList.add("has-active-dropdown");
+        }
 
         const container = dropdown.closest('.history-section');
         if (container) {
             const containerRect = container.getBoundingClientRect();
             const rect = dropdown.getBoundingClientRect();
 
-            if (rect.bottom > containerRect.bottom) {
+            if (rect.bottom > containerRect.bottom - 10 || rect.bottom > window.innerHeight - 10) {
                 dropdown.style.top = "auto";
                 dropdown.style.bottom = "100%";
                 dropdown.style.marginBottom = "4px";
@@ -526,7 +478,10 @@ window.toggleSessionMenu = function (event, btn, key) {
 };
 
 window.renameSessionPrompt = async function (key, currentName) {
-    const newName = await shibaDialog("prompt", "Rename Session", "Enter new name for session:", { defaultValue: currentName, confirmText: "Rename" });
+    const newName = await shibaDialog("prompt",
+        typeof t === "function" ? t("sessions.rename_title") : "Rename Session",
+        typeof t === "function" ? t("sessions.rename_prompt") : "Enter new name for session:",
+        { defaultValue: currentName, confirmText: typeof t === "function" ? t("sessions.rename") : "Rename" });
     if (newName && newName !== currentName) {
         renameSession(key, newName);
     }
@@ -647,7 +602,10 @@ function removeSessionFromUI(key) {
 }
 
 window.deleteSession = async function (key) {
-    const ok = await shibaDialog("confirm", "Delete Session", "This session will be permanently deleted.", { confirmText: "Delete", danger: true });
+    const ok = await shibaDialog("confirm",
+        typeof t === "function" ? t("sessions.delete_title") : "Delete Session",
+        typeof t === "function" ? t("sessions.delete_body") : "This session will be permanently deleted.",
+        { confirmText: typeof t === "function" ? t("sessions.delete") : "Delete", danger: true });
     if (!ok) return;
 
     removeSessionFromUI(key);
@@ -659,7 +617,10 @@ window.deleteSession = async function (key) {
 };
 
 window.archiveSession = async function (key) {
-    const ok = await shibaDialog("confirm", "Archive Session", "This session will run the same consolidation flow as /new and then be removed.", { confirmText: "Archive" });
+    const ok = await shibaDialog("confirm",
+        typeof t === "function" ? t("sessions.archive_title") : "Archive Session",
+        typeof t === "function" ? t("sessions.archive_body") : "This session will run the same consolidation flow as /new and then be removed.",
+        { confirmText: typeof t === "function" ? t("sessions.archive") : "Archive" });
     if (!ok) return;
 
     removeSessionFromUI(key);
@@ -678,6 +639,7 @@ document.addEventListener("click", () => {
         d.style.marginBottom = "";
     });
     document.querySelectorAll(".btn-session-menu").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".history-item").forEach(item => item.classList.remove("has-active-dropdown"));
 });
 
 async function loadSession(sessionId) {
@@ -744,8 +706,10 @@ async function loadSession(sessionId) {
             if (!_isCurrentSessionLoad(loadSeq, sessionId)) return;
             chatHistory.appendChild(fragment);
 
+            // Open already at the latest messages before the first paint.
+            chatHistory.scrollTop = chatHistory.scrollHeight;
             console.debug("[SHIBA] loadSession rendered:", parsedGroups.length, "process groups");
-            scrollToBottom();
+            scrollToBottom({ force: true });
         } else {
             chatHistory.classList.remove("active");
             welcomeScreen.style.display = "";
@@ -791,8 +755,9 @@ function _parseSessionMessages(messages, loadSeq, sessionId) {
         
         if (msg.role === "user") {
             if (msg.metadata && msg.metadata.hidden) continue;
-            if (!msg.content || msg.content === lastUserContent) continue;
-            lastUserContent = msg.content;
+            const hasMedia = !!(msg.metadata && msg.metadata.media && msg.metadata.media.length);
+            if ((!msg.content && !hasMedia) || (msg.content && msg.content === lastUserContent)) continue;
+            if (msg.content) lastUserContent = msg.content;
 
             const hasExeSteps = turnSteps.some(s => s.badge === "EXE");
             if (turnSteps.length > 0 && hasExeSteps) {
@@ -895,7 +860,23 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
                 enhanceCodeBlocks(bubble);
             }
 
-            const attachments = item.data.metadata?.attachments || [];
+            let attachments = item.data.metadata?.attachments
+                ? [...item.data.metadata.attachments]
+                : [];
+            if (!attachments.length && Array.isArray(item.data.metadata?.media)) {
+                item.data.metadata.media.forEach(p => {
+                    const name = p.split(/[/\\]/).pop();
+                    let type = "application/octet-stream";
+                    if (name.match(/\.(png|jpe?g|gif|webp|svg)$/i)) type = "image/png";
+                    else if (name.match(/\.(mp3|ogg|wav|m4a)$/i)) type = "audio/mpeg";
+                    else if (name.match(/\.(mp4|webm|mov)$/i)) type = "video/mp4";
+                    attachments.push({
+                        name,
+                        url: "/api/file-get?path=" + encodeURIComponent(p),
+                        type,
+                    });
+                });
+            }
             attachments.forEach(file => _appendHistoryAttachment(bubble, file));
 
             group.querySelector(".message-content").appendChild(bubble);
@@ -911,12 +892,18 @@ function _renderSessionHistory(parsedMessages, parsedGroups, fragment, loadSeq, 
             enhanceCodeBlocks(bubble);
 
             let attachments = item.data.metadata?.attachments ? [...item.data.metadata.attachments] : [];
-            if (item.data.metadata?.media && Array.isArray(item.data.metadata.media)) {
+            if (!attachments.length && Array.isArray(item.data.metadata?.media)) {
                 item.data.metadata.media.forEach(p => {
                     const name = p.split(/[/\\]/).pop();
                     let type = "application/octet-stream";
                     if (name.match(/\.(png|jpe?g|gif|webp|svg)$/i)) type = "image/png";
-                    attachments.push({ name: name, url: "/api/file-get?path=" + encodeURIComponent(p), type: type });
+                    else if (name.match(/\.(mp3|ogg|wav|m4a)$/i)) type = "audio/mpeg";
+                    else if (name.match(/\.(mp4|webm|mov)$/i)) type = "video/mp4";
+                    attachments.push({
+                        name,
+                        url: "/api/file-get?path=" + encodeURIComponent(p),
+                        type,
+                    });
                 });
             }
             attachments.forEach(file => _appendHistoryAttachment(bubble, file));
@@ -994,6 +981,8 @@ window.openModal = async function (id) {
             state.fsOpenTarget = null;
             openFileEditor(target, target.split(/[\\/\\]/).pop());
         }
+    } else if (id === "memory-modal") {
+        if (typeof loadMemoryData === "function") await loadMemoryData();
     } else if (id === "changelog-modal") {
         const contentEl = $("changelog-content");
         contentEl.innerHTML = '<div class="loader">Fetching release notes...</div>';
@@ -1041,15 +1030,6 @@ window.openChangelog = function () {
     openModal("changelog-modal");
 };
 
-window.openHeartbeatFile = async function (event) {
-    if (event && event.preventDefault) event.preventDefault();
-    const filePath = "TASK.md";
-    const dir = filePath.includes("/") ? filePath.replace(/\\/g, "/").split("/").slice(0, -1).join("/") : ".";
-    state.currentFsPath = dir || ".";
-    state.fsOpenTarget = filePath;
-    openModal("fs-modal");
-};
-
 window.closeModal = function (id) {
     const modal = $(id);
     if (!modal) return;
@@ -1086,24 +1066,3 @@ function hideThinking() {
 
 // ── Onboard Wizard ──────────────────────────────────────────
 /* ── Model Selector (Chat Window) ────────────────────────────────── */
-/* ── Heartbeat panel ── */
-async function loadHeartbeatSettingsPanel() {
-    const profileSelect = $("s-hb-profile");
-    if (!profileSelect) return;
-    try {
-        const res = await authFetch("/api/profiles");
-        if (res.ok) {
-            const data = await res.json();
-            const profiles = data.profiles || [];
-            let html = '<option value="">Default (inherit)</option>';
-            for (const p of profiles) {
-                html += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`;
-            }
-            const currentVal = profileSelect.value;
-            profileSelect.innerHTML = html;
-            profileSelect.value = currentVal; // Restore selection after populating
-        }
-    } catch (e) {
-        console.error("loadHeartbeatSettingsPanel profiles fetch failed", e);
-    }
-}

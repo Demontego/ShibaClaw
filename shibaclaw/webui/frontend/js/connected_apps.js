@@ -70,7 +70,7 @@
   window.loadConnectedAppsPanel = async function () {
     const container = document.getElementById('connected-apps-container');
     if (!container) return;
-    container.innerHTML = '<div class="ca-loading">Loading\u2026</div>';
+    container.innerHTML = `<div class="ca-loading">${escapeHtml(typeof t === "function" ? t("common.loading") : "Loading\u2026")}</div>`;
     await Promise.all([_loadApps(), _loadBackend()]);
     _renderPanel(container);
   };
@@ -126,18 +126,18 @@
     const toggleClass = _backendConfigured ? 'ca-backend-toggle ca-backend-toggle--ok' : 'ca-backend-toggle';
     const toggleLabel = _backendConfigured
       ? '\u2699\uFE0F\u00a0Configured \u2713'
-      : '\u2699\uFE0F\u00a0Configure backend';
+      : (typeof t === "function" ? `\u2699\uFE0F\u00a0${t("apps.configure_backend")}` : '\u2699\uFE0F\u00a0Configure backend');
 
     container.innerHTML = `
       <div class="ca-header">
         <div class="ca-header__top">
           <div>
-            <h2 class="ca-title">Connected Apps</h2>
-            <p class="ca-subtitle">Connect Gmail, Drive, Outlook, Slack, GitHub and more to ShibaClaw.</p>
+            <h2 class="ca-title">${escapeHtml(typeof t === "function" ? t("apps.title") : "Connected Apps")}</h2>
+            <p class="ca-subtitle">${escapeHtml(typeof t === "function" ? t("apps.subtitle") : "Connect Gmail, Drive, Outlook and more via Klavis.")}</p>
           </div>
           <button class="${toggleClass}" id="ca-backend-toggle">${toggleLabel}</button>
         </div>
-        ${!_backendConfigured ? '<div class="ca-warning-box">Configure the Klavis backend to enable app connections.</div>' : ''}
+        ${!_backendConfigured ? `<div class="ca-warning-box">${escapeHtml(typeof t === "function" ? t("apps.backend_warn") : "Configure the Klavis backend to enable app connections.")}</div>` : ''}
       </div>
 
       <div id="ca-backend-section" class="ca-backend-section" style="display:none">
@@ -163,23 +163,23 @@
 
   function _renderAppCard(app, accentColor) {
     let badgeClass = 'ca-badge--disconnected';
-    let badgeLabel = 'Not connected';
-    let btnLabel   = 'Connect';
+    let badgeLabel = typeof t === "function" ? t("apps.not_connected") : "Not connected";
+    let btnLabel   = typeof t === "function" ? t("apps.connect") : "Connect";
     let btnCls     = 'ca-card__btn ca-card__btn--connect';
     let btnAction  = `data-action="connect" data-app-id="${_esc(app.id)}"`;
     let cardMod    = '';
 
     if (app.connected && app.enabled) {
       badgeClass = 'ca-badge--connected';
-      badgeLabel = 'Connected';
-      btnLabel   = 'Disconnect';
+      badgeLabel = typeof t === "function" ? t("apps.connected") : "Connected";
+      btnLabel   = typeof t === "function" ? t("apps.disconnect") : "Disconnect";
       btnCls     = 'ca-card__btn ca-card__btn--disconnect';
       btnAction  = `data-action="disconnect" data-app-id="${_esc(app.id)}"`;
       cardMod    = ' ca-card--connected';
     } else if (app.connected && !app.enabled) {
       badgeClass = 'ca-badge--disabled';
       badgeLabel = 'Disabled';
-      btnLabel   = 'Reconnect';
+      btnLabel   = typeof t === "function" ? t("apps.reconnect") : "Reconnect";
       btnCls     = 'ca-card__btn ca-card__btn--reconnect';
       btnAction  = `data-action="connect" data-app-id="${_esc(app.id)}"`;
     }
@@ -229,7 +229,7 @@
       <div class="ca-modal-overlay" id="ca-app-modal-overlay" style="display:none">
         <div class="ca-modal" role="dialog" aria-modal="true" aria-labelledby="ca-modal-title">
           <div class="ca-modal__header">
-            <h3 id="ca-modal-title">Connecting\u2026</h3>
+            <h3 id="ca-modal-title">${escapeHtml(typeof t === "function" ? t("apps.connecting") : "Connecting\u2026")}</h3>
             <button class="ca-modal__close" id="ca-modal-close" aria-label="Close">&times;</button>
           </div>
           <div class="ca-modal__body" id="ca-modal-body">

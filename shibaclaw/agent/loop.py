@@ -21,18 +21,28 @@ from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from shibaclaw.agent.tools.interactive import (
+    AskUserTool,
+    RequestCredentialTool,
+    SessionSearchTool,
+    UpdateProgressTool,
+)
 from shibaclaw.agent.tools.memory_search import MemorySearchTool
+from shibaclaw.agent.tools.memory_ops import MemoryForgetTool, ProposeSkillTool
 from shibaclaw.agent.tools.message import MessageTool
 from shibaclaw.agent.tools.registry import SkillVault
 from shibaclaw.agent.tools.shell import ExecTool
 from shibaclaw.agent.tools.spawn import SpawnTool
 from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
 from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
+from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
+
 
 _MEDIA_RE = re.compile(r'\{\s*"media"\s*:\s*\[\s*"[^"]*"(?:\s*,\s*"[^"]*")*\s*\]\s*\}')
 
@@ -384,6 +394,8 @@ class ShibaBrain:
         """Register the default set of tools."""
         allowed_dir = self.workspace if self.restrict_to_workspace else None
         extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
+        if allowed_dir:
+            extra_read = [*(extra_read or []), get_media_dir()]
         self.tools.register(
             ReadFileTool(
                 workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read
@@ -406,12 +418,14 @@ class ShibaBrain:
                 )
             )
         self.tools.register(WebSearchTool(config=self.web_search_config, proxy=self.web_proxy))
-        from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+        from shibaclaw.agent.knowledge_manager import is_rag_available
 
-        if RAG_AVAILABLE:
-            self.tools.register(KnowledgeSearchTool())
+        if is_rag_available():
+            self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
         self.tools.register(MemorySearchTool(workspace=self.workspace))
+        self.tools.register(MemoryForgetTool(workspace=self.workspace))
+        self.tools.register(ProposeSkillTool(workspace=self.workspace))
         self.tools.register(
             MessageTool(
                 send_callback=self.bus.publish_outbound,
@@ -422,6 +436,11 @@ class ShibaBrain:
         self.tools.register(SpawnTool(manager=self.subagents))
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
+
+        self.tools.register(AskUserTool(send_callback=self.bus.publish_outbound))
+        self.tools.register(RequestCredentialTool())
+        self.tools.register(UpdateProgressTool())
+        self.tools.register(SessionSearchTool(sessions=self.sessions))
 
         # Telegram Chat Automation secretary archive (owner-only via allowFrom).
         try:
@@ -442,6 +461,18 @@ class ShibaBrain:
             logger.error("Failed to register secretary tools: {}", e)
 
         self.mcp.restore_active_tools()
+
+    def _apply_permission_mode(self, session: Session | None):
+        """Bind per-turn FS/exec permission mode via contextvars; return (mode, tokens)."""
+        from shibaclaw.agent.sandbox_ctx import bind_permission_mode
+
+        meta = session.metadata if session else {}
+        mode = normalize_permission_mode(
+            meta.get("permission_mode"),
+            restrict_to_workspace=self.restrict_to_workspace,
+        )
+        tokens = bind_permission_mode(mode, self.workspace)
+        return mode, tokens
 
     def inject_steering_message(
         self,
@@ -505,13 +536,19 @@ class ShibaBrain:
         metadata: dict | None,
         channel: str | None = None,
     ) -> list[dict]:
-        """Allow-list only for non-allowlisted Telegram turns (default-deny)."""
-        if self._is_allowlisted_turn(metadata, channel):
-            return tool_defs
+        """Allow-list only for non-allowlisted Telegram turns (default-deny).
+
+        Also strips ``session_search`` outside WebUI/CLI/system — global
+        transcript search must not run on chat channels (cross-session leak).
+        """
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
         out: list[dict] = []
+        allowlisted = self._is_allowlisted_turn(metadata, channel)
         for d in tool_defs:
             name = (d.get("function") or {}).get("name") or d.get("name") or ""
-            if self._non_allowlisted_tool_allowed(name):
+            if name == "session_search" and ch not in {"webui", "cli", "system"}:
+                continue
+            if allowlisted or self._non_allowlisted_tool_allowed(name):
                 out.append(d)
         return out
 
@@ -521,6 +558,9 @@ class ShibaBrain:
         metadata: dict | None,
         channel: str | None = None,
     ) -> bool:
+        ch = str(channel or (metadata or {}).get("channel") or "").lower()
+        if tool_name == "session_search" and ch not in {"webui", "cli", "system"}:
+            return True
         if self._is_allowlisted_turn(metadata, channel):
             return False
         return not self._non_allowlisted_tool_allowed(tool_name)
@@ -547,6 +587,20 @@ class ShibaBrain:
                         )
                     else:
                         tool.set_context(channel, chat_id, session_key)
+        for name in (
+            "ask_user",
+            "request_credential",
+            "update_progress",
+            "session_search",
+        ):
+            if tool := self.tools.get(name):
+                if hasattr(tool, "set_context"):
+                    tool.set_context(
+                        channel,
+                        chat_id,
+                        session_key,
+                        metadata=metadata or {},
+                    )
         # Secretary tools need turn metadata for owner ACL.
         for name in ("business_search", "business_send"):
             if tool := self.tools.get(name):
@@ -625,6 +679,47 @@ class ShibaBrain:
         LLM call so the model always sees an up-to-date timestamp,
         channel info, and current iteration number.
         """
+        from shibaclaw.agent.sandbox_ctx import reset_permission_mode
+
+        perm_tokens = None
+        if session_key:
+            try:
+                session = self.sessions.get_or_create(session_key)
+                _, perm_tokens = self._apply_permission_mode(session)
+            except Exception as e:
+                logger.debug("permission mode bind skipped: {}", e)
+        try:
+            return await self._run_agent_loop_inner(
+                initial_messages,
+                on_progress,
+                on_response_token,
+                channel=channel,
+                chat_id=chat_id,
+                skill_names=skill_names,
+                profile_id=profile_id,
+                model=model,
+                session_key=session_key,
+                metadata=metadata,
+                temperature=temperature,
+            )
+        finally:
+            reset_permission_mode(perm_tokens)
+
+    async def _run_agent_loop_inner(
+        self,
+        initial_messages: list[dict],
+        on_progress: Callable[..., Awaitable[None]] | None = None,
+        on_response_token: Callable[[str], Awaitable[None]] | None = None,
+        *,
+        channel: str = "cli",
+        chat_id: str = "direct",
+        skill_names: list[str] | None = None,
+        profile_id: str | None = None,
+        model: str | None = None,
+        session_key: str | None = None,
+        metadata: dict | None = None,
+        temperature: float | None = None,
+    ) -> tuple[str | None, list[str], list[dict]]:
         messages = initial_messages
         iteration = 0
         final_content = None
@@ -666,31 +761,29 @@ class ShibaBrain:
 
         active_kbs = None
         try:
-            from shibaclaw.agent.knowledge_manager import KnowledgeManager, RAG_AVAILABLE
+            from shibaclaw.agent.knowledge_manager import KnowledgeManager, is_rag_available
             import asyncio
 
-            if RAG_AVAILABLE:
+            if is_rag_available():
                 km = KnowledgeManager(self.context.workspace)
                 all_collections = await asyncio.to_thread(km.list_collections)
 
             session_kb_ids = []
-            if chat_id:
-                from shibaclaw.webui.agent_manager import agent_manager
+            kb_session_key = session_key or chat_id
+            if kb_session_key and self.sessions:
+                sess = await asyncio.to_thread(self.sessions.get_or_create, kb_session_key)
+                session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                try:
+                    from shibaclaw.agent.profiles import ProfileManager
 
-                if agent_manager.pm:
-                    sess = agent_manager.pm.get_or_create(chat_id)
-                    session_kb_ids = sess.metadata.get("knowledge_bases", [])
-                    try:
-                        from shibaclaw.agent.profiles import ProfileManager
-
-                        pid = sess.metadata.get("profile_id") or profile_id
-                        if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
-                            sess.metadata, pid, None
-                        ):
-                            agent_manager.pm.save(sess)
-                            session_kb_ids = sess.metadata.get("knowledge_bases", [])
-                    except Exception:
-                        pass
+                    pid = sess.metadata.get("profile_id") or profile_id
+                    if ProfileManager(self.context.workspace).sync_session_knowledge_bases(
+                        sess.metadata, pid, None
+                    ):
+                        await self.sessions.asave(sess)
+                        session_kb_ids = sess.metadata.get("knowledge_bases", [])
+                except Exception:
+                    pass
 
             mentioned_kb_names = [
                 k.lower() for k in (metadata.get("mentioned_kbs", []) if metadata else [])
@@ -715,13 +808,10 @@ class ShibaBrain:
                         desc_part = f" - Desc: {col_desc}" if col_desc else ""
                         active_kbs.append(f"ID: {col_id} (Name: '{col_name}'){desc_part}")
 
-                if changed and chat_id:
-                    from shibaclaw.webui.agent_manager import agent_manager
-
-                    if agent_manager.pm:
-                        sess = agent_manager.pm.get_or_create(chat_id)
-                        sess.metadata["knowledge_bases"] = new_session_kb_ids
-                        agent_manager.pm.save(sess)
+                if changed and kb_session_key and self.sessions:
+                    sess = await asyncio.to_thread(self.sessions.get_or_create, kb_session_key)
+                    sess.metadata["knowledge_bases"] = new_session_kb_ids
+                    await self.sessions.asave(sess)
         except Exception:
             pass
 
@@ -785,7 +875,7 @@ class ShibaBrain:
             session_reasoning_effort = None
             if session_key and hasattr(self, "sessions") and self.sessions:
                 try:
-                    sess = self.sessions.get_or_create(session_key)
+                    sess = await asyncio.to_thread(self.sessions.get_or_create, session_key)
                     session_reasoning_effort = sess.metadata.get("reasoning_effort")
                 except Exception:
                     pass
@@ -975,11 +1065,18 @@ class ShibaBrain:
                 task = asyncio.create_task(self._dispatch(msg))
                 self._active_tasks.setdefault(msg.session_key, []).append(task)
                 task.add_done_callback(
-                    lambda t, k=msg.session_key: (
-                        self._active_tasks.get(k, [])
-                        and self._safe_remove_task(self._active_tasks.get(k, []), t)
-                    )
+                    lambda t, k=msg.session_key: self._remove_active_task(k, t)
                 )
+
+    def _remove_active_task(self, session_key: str, task: asyncio.Task) -> None:
+        tasks = self._active_tasks.get(session_key)
+        if tasks is not None:
+            self._safe_remove_task(tasks, task)
+            if not tasks:
+                self._active_tasks.pop(session_key, None)
+                lock = self._session_locks.get(session_key)
+                if lock and not lock.locked():
+                    self._session_locks.pop(session_key, None)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""
@@ -1150,6 +1247,7 @@ class ShibaBrain:
                 memory_max_prompt_tokens=self.memory_consolidator.memory_max_prompt_tokens,
                 available_channels=self._available_channels,
                 profile_id=profile_id,
+                defer_system=True,
             )
             _temp = self._resolve_temperature(
                 profile_id, session.metadata, self.workspace
@@ -1164,7 +1262,7 @@ class ShibaBrain:
                 temperature=_temp,
             )
             self._save_turn(session, all_msgs, 1 + len(history))
-            self.sessions.save(session)
+            await self.sessions.asave(session)
             self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
             return OutboundMessage(
                 channel=channel,
@@ -1201,13 +1299,13 @@ class ShibaBrain:
                     self.workspace,
                     owner_ids=telegram_owner_ids(self.channels_config),
                 ):
-                    self.sessions.save(session)
+                    await self.sessions.asave(session)
             except Exception as e:
                 logger.warning("telegram session autolabel failed: {}", e)
         profile_id = profile_id_override or session.metadata.get("profile_id") or None
         if profile_id_override and session.metadata.get("profile_id") != profile_id_override:
             session.metadata["profile_id"] = profile_id_override
-            self.sessions.save(session)
+            await self.sessions.asave(session)
 
         # Normalize model ID if present
         if model := session.metadata.get("model"):
@@ -1216,17 +1314,59 @@ class ShibaBrain:
             canonical = canonicalize_model_id(self.config, model)
             if canonical != model:
                 session.metadata["model"] = canonical
-                self.sessions.save(session)
+                await self.sessions.asave(session)
+
+        # Profile model allowlist — reject / clear disallowed session model.
+        # Fail closed when an allowlist cannot be evaluated (auth boundary).
+        if session.metadata.get("model"):
+            try:
+                from shibaclaw.agent.profiles import ProfileManager
+
+                pm_prof = ProfileManager(self.workspace)
+                allowed = pm_prof.get_allowed_models(profile_id)
+                if allowed is not None and not pm_prof.model_allowed(
+                    profile_id, session.metadata.get("model")
+                ):
+                    blocked = session.metadata.pop("model", None)
+                    await self.sessions.asave(session)
+                    return OutboundMessage(
+                        channel=msg.channel,
+                        chat_id=msg.chat_id,
+                        content=(
+                            f"Model `{blocked}` is not allowed for this profile. "
+                            "Cleared session model override — using profile/default."
+                        ),
+                    )
+            except Exception as e:
+                logger.warning("model allowlist check failed closed: {}", e)
+                blocked = session.metadata.pop("model", None)
+                await self.sessions.asave(session)
+                return OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=(
+                        "Could not validate profile model allowlist"
+                        + (f" for `{blocked}`" if blocked else "")
+                        + ". Cleared session model override — using profile/default."
+                    ),
+                )
 
         cmd = msg.content.strip().lower()
         if cmd == "/new":
             snapshot = session.messages[session.last_consolidated :]
+            incognito = bool(
+                session.metadata.get("incognito") or session.metadata.get("ephemeral")
+            )
+            # Schedule archive while session (and incognito flag) still in cache.
+            if snapshot and not incognito:
+                self._schedule_background(
+                    self.memory_consolidator.archive_snapshot(
+                        snapshot, session_key=session.key
+                    )
+                )
             session.clear()
-            self.sessions.save(session)
+            await self.sessions.asave(session)
             self.sessions.invalidate(session.key)
-
-            if snapshot:
-                self._schedule_background(self.memory_consolidator.archive_snapshot(snapshot))
 
             return OutboundMessage(
                 channel=msg.channel, chat_id=msg.chat_id, content="New session started."
@@ -1380,6 +1520,7 @@ class ShibaBrain:
             memory_max_prompt_tokens=self.memory_consolidator.memory_max_prompt_tokens,
             available_channels=self._available_channels,
             profile_id=profile_id,
+            defer_system=True,
         )
 
         _user_entry = {
@@ -1395,7 +1536,7 @@ class ShibaBrain:
         if metadata:
             _user_entry["metadata"] = metadata
         session.messages.append(_user_entry)
-        self.sessions.save(session)
+        await self.sessions.asave(session)
 
         if msg.metadata and msg.metadata.get("no_reply"):
             return None
@@ -1434,7 +1575,7 @@ class ShibaBrain:
             final_content = ""
 
         self._save_turn(session, all_msgs, 1 + len(history) + _pre_saved_count)
-        self.sessions.save(session)
+        await self.sessions.asave(session)
         self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
         self._schedule_background(self.memory_consolidator.maybe_proactive_learn(session))
 

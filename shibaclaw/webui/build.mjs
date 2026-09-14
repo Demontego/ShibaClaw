@@ -5,12 +5,16 @@ import path from 'path';
 // Scripts to bundle (in order)
 const jsFiles = [
     'frontend/js/state.js',
+    'frontend/js/i18n_catalogs.js',
+    'frontend/js/i18n.js',
     'frontend/js/auth.js',
     'frontend/js/knowledge.js',
+    'frontend/js/memory.js',
     'frontend/js/utils.js',
     'frontend/js/realtime.js',
     'frontend/js/api_socket.js',
     'frontend/js/chat.js',
+    'frontend/js/interactive.js',
     'frontend/js/files.js',
     'frontend/js/ui_panels.js',
     'frontend/js/settings_panel.js',
@@ -83,15 +87,16 @@ async function build() {
     if (fs.existsSync('frontend/img')) {
         fs.cpSync('frontend/img', 'static/img', { recursive: true });
     }
-    if (fs.existsSync('frontend/js')) {
-        fs.cpSync('frontend/js', 'static/js', { recursive: true });
-    }
     if (fs.existsSync('frontend/shibaclaw_logo.webp')) {
         fs.copyFileSync('frontend/shibaclaw_logo.webp', 'static/shibaclaw_logo.webp');
     }
     if (fs.existsSync('frontend/favicon.ico')) {
         fs.copyFileSync('frontend/favicon.ico', 'static/favicon.ico');
     }
+    fs.mkdirSync('static/js', { recursive: true });
+    fs.copyFileSync('frontend/js/chat_history_window.js', 'static/js/chat_history_window.js');
+    fs.mkdirSync('static/css', { recursive: true });
+    fs.copyFileSync('frontend/css/sidebar_modern.css', 'static/css/sidebar_modern.css');
 
     // Rewrite script/link tags
     // 1. Remove all the bundled scripts
@@ -110,28 +115,36 @@ async function build() {
     // 2. Replace CSS link
     // Look for index.css and replace it with bundle.css
     html = html.replace(/<link rel="stylesheet" href="\/index\.css[^>]*>/, `<link rel="stylesheet" href="/static/bundle.css?v=${buildVer}">`);
+    html = html.replace(
+        /^[ \t]*<link rel="stylesheet" href="\/static\/css\/sidebar_modern\.css(?:\?v=[^"]*)?">[ \t]*\r?\n/gm,
+        ''
+    );
+    html = html.replace(
+        /(<link rel="stylesheet" href="\/static\/bundle\.css\?v=[^"]+">)/,
+        `$1\n    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=${buildVer}">`
+    );
     // Ensure vendor links have /static/
     html = html.replace(/href="\/vendor\//g, 'href="/static/vendor/');
     html = html.replace(/src="\/vendor\//g, 'src="/static/vendor/');
     
-    // Ensure remaining /js/ links point to /static/js/
-    html = html.replace(/src="\/js\//g, 'src="/static/js/');
-
     // Ensure images and root files point to /static/
     html = html.replace(/href="\/shibaclaw_logo\.webp"/g, 'href="/static/shibaclaw_logo.webp"');
     html = html.replace(/src="\/shibaclaw_logo\.webp"/g, 'src="/static/shibaclaw_logo.webp"');
     html = html.replace(/href="\/favicon\.ico"/g, 'href="/static/favicon.ico"');
     
-    // Ensure all remaining /css/ links point to /static/css/
-    html = html.replace(/href="\/css\//g, 'href="/static/css/');
+    // CSS is fully bundled into bundle.css (no separate static/css tree).
     
-    // Copy the css folder as well so unbundled css files are available
-    if (fs.existsSync('frontend/css')) {
-        fs.cpSync('frontend/css', 'static/css', { recursive: true });
-    }
-    
-    // 3. Add bundle.js at the end of body
-    html = html.replace('</body>', `    <script src="/static/bundle.js?v=${buildVer}"></script>\n</body>`);
+    // 3. Add bundle.js and the history override at the end of body, in that order.
+    html = html.replace(
+        /^[ \t]*<script src="\/static\/js\/chat_history_window\.js(?:\?v=[^"]*)?"><\/script>[ \t]*\r?\n/gm,
+        ''
+    );
+    html = html.replace(
+        '</body>',
+        `    <script src="/static/bundle.js?v=${buildVer}"></script>\n` +
+        `    <script src="/static/js/chat_history_window.js?v=${buildVer}"></script>\n` +
+        '</body>'
+    );
 
     fs.writeFileSync('static/index.html', html);
     console.log('Build complete!');

@@ -9,12 +9,17 @@ from typing import Any, AsyncGenerator
 
 import httpx
 from loguru import logger
-from oauth_cli_kit import get_token as get_codex_token
 
 from shibaclaw.thinkers.base import LLMResponse, Thinker, ToolCallRequest
 
 DEFAULT_CODEX_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_ORIGINATOR = "shibaclaw"
+
+
+def _get_codex_token():
+    from oauth_cli_kit import get_token
+
+    return get_token()
 
 
 class OpenAICodexThinker(Thinker):
@@ -37,7 +42,7 @@ class OpenAICodexThinker(Thinker):
         model = model or self.default_model
         system_prompt, input_items = _convert_messages(messages)
 
-        token = await asyncio.to_thread(get_codex_token)
+        token = await asyncio.to_thread(_get_codex_token)
         headers = _build_headers(token.account_id, token.access)
 
         body: dict[str, Any] = {
@@ -100,7 +105,7 @@ class OpenAICodexThinker(Thinker):
         model = model or self.default_model
         system_prompt, input_items = _convert_messages(messages)
 
-        token = await asyncio.to_thread(get_codex_token)
+        token = await asyncio.to_thread(_get_codex_token)
         headers = _build_headers(token.account_id, token.access)
 
         body: dict[str, Any] = {

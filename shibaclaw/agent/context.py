@@ -44,6 +44,7 @@ class ScentBuilder:
         # Bounded image cache to avoid memory leaks: path -> (mtime_ns, mime, b64)
         self._image_cache: dict[str, tuple[float, str, str]] = {}
         self._IMAGE_CACHE_MAX = 32
+        self._IMAGE_CACHE_MAX_BYTES = 50 * 1024 * 1024
 
     def build_static_prompt(
         self,
@@ -216,9 +217,9 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
             lines.append(
                 'Use the message tool with channel="<name>" to send cross-channel messages.'
             )
-        from shibaclaw.agent.knowledge_manager import RAG_AVAILABLE
+        from shibaclaw.agent.knowledge_manager import is_rag_available
 
-        if active_kbs and RAG_AVAILABLE:
+        if active_kbs and is_rag_available():
             lines.append("Active Knowledge Bases for this session:")
             for kb in active_kbs:
                 lines.append(f"- {kb}")
@@ -233,7 +234,7 @@ You should call it directly. Only use `mcp_list_tools` and `mcp_call_tool` as fa
                     "Telegram forward origin (verified Message.forward_origin metadata; "
                     f"not user-typed text): {label}"
                 )
-            kbs = metadata.get("mentioned_kbs") if RAG_AVAILABLE else None
+            kbs = metadata.get("mentioned_kbs") if is_rag_available() else None
             mcps = metadata.get("mentioned_mcps")
             apps = metadata.get("mentioned_apps")
 
@@ -384,13 +385,14 @@ Root: {workspace_path}
         memory_max_prompt_tokens: int = 0,
         available_channels: list[str] | None = None,
         profile_id: str | None = None,
+        *,
+        defer_system: bool = False,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call.
 
-        Runtime context is now part of the system prompt (refreshed on
-        each iteration inside the agent loop) so the user message stays
-        clean.  The system prompt built here already contains the
-        initial ``## Live State`` block.
+        When ``defer_system`` is True, leave an empty system placeholder —
+        ``ShibaBrain._run_agent_loop`` fills static + live blocks once per
+        iteration (avoids building the static prompt twice).
         """
         user_content = self._build_user_content(current_message, media)
 
@@ -423,18 +425,19 @@ Root: {workspace_path}
             else:
                 cleaned_history.append(m)
 
+        if defer_system:
+            system_content = ""
+        else:
+            system_content = self.build_system_prompt(
+                skill_names,
+                channel=channel,
+                chat_id=chat_id,
+                memory_max_prompt_tokens=memory_max_prompt_tokens,
+                available_channels=available_channels,
+                profile_id=profile_id,
+            )
         return [
-            {
-                "role": "system",
-                "content": self.build_system_prompt(
-                    skill_names,
-                    channel=channel,
-                    chat_id=chat_id,
-                    memory_max_prompt_tokens=memory_max_prompt_tokens,
-                    available_channels=available_channels,
-                    profile_id=profile_id,
-                ),
-            },
+            {"role": "system", "content": system_content},
             *cleaned_history,
             {"role": current_role, "content": user_content},
         ]
@@ -480,7 +483,12 @@ Root: {workspace_path}
             try:
                 b64 = base64.b64encode(raw).decode("utf-8")
                 self._image_cache[path_key] = (mtime, mime, b64)
-                while len(self._image_cache) > self._IMAGE_CACHE_MAX:
+                while (
+                    len(self._image_cache) > self._IMAGE_CACHE_MAX
+                    or sum(len(item[2]) for item in self._image_cache.values()) > self._IMAGE_CACHE_MAX_BYTES
+                ):
+                    if not self._image_cache:
+                        break
                     self._image_cache.pop(next(iter(self._image_cache)))
                 images.append(
                     {

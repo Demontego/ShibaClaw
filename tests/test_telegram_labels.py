@@ -35,6 +35,24 @@ def test_suggest_label_owner_dm():
     assert label == "You"
 
 
+def test_suggest_label_owner_dm_topic():
+    label = suggest_label(
+        "telegram:1:topic:6780867",
+        meta={"user_id": 1, "first_name": "Owner"},
+        owner_ids={"1"},
+    )
+    assert label == "You · topic 6780867"
+
+
+def test_suggest_label_group_topic():
+    label = suggest_label(
+        "telegram:-100123:topic:42",
+        meta={"is_group": True, "chat_title": "Poker Night"},
+        owner_ids={"1"},
+    )
+    assert label == "Poker Night · topic 42"
+
+
 def test_maybe_autolabel_respects_manual_nickname():
     session = SimpleNamespace(
         key="telegram:99",

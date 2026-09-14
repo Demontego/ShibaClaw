@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
+from shibaclaw.config.paths import get_media_dir
 from shibaclaw.webui.agent_manager import agent_manager
 
 _LOCAL_HOSTS = frozenset(("0.0.0.0", "::", "", "127.0.0.1", "localhost"))
@@ -106,9 +107,12 @@ def _resolve_workspace_path(path_str: str | None) -> Path | None:
         return workspace
     raw = Path(path_str)
     resolved = (workspace / raw).resolve() if not raw.is_absolute() else raw.resolve()
-    if not resolved.is_relative_to(workspace):
-        return None
-    return resolved
+    if resolved.is_relative_to(workspace):
+        return resolved
+    media_root = get_media_dir().resolve()
+    if resolved.is_relative_to(media_root) and resolved.is_file():
+        return resolved
+    return None
 
 
 # Global caches for context
@@ -227,8 +231,6 @@ async def _gateway_request(method: str, path: str) -> dict | None:
     # Map well-known HTTP paths to WS actions
     _path_to_action = {
         "/": "status",
-        "/api/cron/list": "cron.list",
-        "/heartbeat/status": "heartbeat.status",
         "/api/automation/status": "automation.status",
         "/api/automation/jobs": "automation.list",
     }
@@ -281,18 +283,12 @@ async def _gateway_post(path: str, body: dict) -> dict | None:
     _path_to_action = {
         "/restart": "restart",
         "/reload": "reload",
-        "/heartbeat/trigger": "heartbeat.trigger",
         "/api/archive": "archive",
     }
 
     action = _path_to_action.get(path)
     if action and gateway_client.connected:
         return await gateway_client.request(action, body)
-
-    # Handle cron trigger: /api/cron/trigger/{job_id}
-    if path.startswith("/api/cron/trigger/") and gateway_client.connected:
-        job_id = path.split("/")[-1]
-        return await gateway_client.request("cron.trigger", {"job_id": job_id})
 
     if path == "/api/automation/jobs" and gateway_client.connected:
         return await gateway_client.request("automation.create", body)

@@ -31,7 +31,8 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
@@ -40,15 +41,16 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Nouveautés — v0.9.13</b> (cliquez pour déplier)</summary>
+<summary>🚀 <b>Nouveautés — Version Majeure v1.0.0</b> (cliquez pour déplier)</summary>
 
-**Dernière version (2026-08-01) :**
+**Dernière version v1.0.0 (2026-09-08) :**
 
-- **Correction de faille d'injection de commandes dans ExecTool** — Résolution d'une vulnérabilité critique d'injection de commandes (CWE-78) dans l'exécution shell via `shlex` et exécution directe des processus (`create_subprocess_exec`).
-- **Vulnérabilités de sécurité dans les dépendances** — Résolution des vulnérabilités de sécurité dans les dépendances npm du bridge en mettant à jour les substitutions pour `protobufjs` (v7.6.5) et `sharp` (v0.35.3).
-- **Stabilité de la boucle d'agent et du guidage** — Correction des plantages de la commande `/update`, du routage de session et de l'émission d'événements pour les messages actifs.
-- **Estimation des jetons WebUI** — Correction du traitement des types d'arguments sur le point de terminaison API `estimate_prompt_tokens` lors de la transmission de listes de messages.
-- **Dépendances RAG Cloud** — Correction des limites de dépendances RAG Cloud et de la configuration du modèle d'embedding par défaut.
+- **Étape Majeure 1.0.0 — Framework d'Agent Prêt pour la Production** — ShibaClaw franchit le cap de la 1.0.0 ! Un assistant IA personnel auto-hébergé conçu pour la confidentialité, la modularité et une stabilité à toute épreuve, compatible Python 3.12–3.14 avec intégration continue multiplateforme Ubuntu/Windows.
+- **Gestionnaire de Mémoire Interactif & Quarantaine en Direct** — Nouveau panneau dédié dans la WebUI (icône `psychology` dans la barre latérale) et API REST (`/api/memory`). Visualisez et modifiez en direct les connaissances à long terme (`MEMORY.md`), les préférences utilisateur (`USER.md`), l'historique chronologique (`HISTORY.md`) et le journal de rêves (`DREAM_DIARY.md`), avec suivi du budget de tokens et mise en quarantaine sécurisée des faits oubliés.
+- **Expérience Interactive Nouvelle Génération Human-in-the-Loop** — Interaction fluide pendant les tours de l'agent : questions structurées à choix multiples (`ask_user`), masquage sécurisé de clés/identifiants en coffre-fort (`request_credential`, hors du contexte LLM), cartes de progression visuelles (`update_progress`), recherche rapide d'historique (`session_search`) et modes de permission dynamiques par session (`full` | `workspace` | `readonly`).
+- **Sécurité Renforcée & Sessions Incognito Zéro Fuite** — Portée `ContextVar` par exécution d'outil pour prévenir les fuites de concurrence inter-sessions. Les sessions incognito purgent les logs JSONL du disque et ignorent la consolidation de mémoire. Listes de modèles autorisés avec rejet strict par défaut (fail-closed).
+- **Mise à Niveau Complète LangChain 1.4+ & Correction des Alertes Dependabot** — Rénovation de la pile RAG vers LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), éliminant toutes les failles de sécurité répertoriées (`pip-audit` sans avertissement).
+- **Architecture Modulaire Allégée, `uv` & Commande Doctor** — Dépendances scindées en options (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), démarrage quasi-instantané grâce au chargement différé des canaux/plugins, et suite de diagnostics CLI `shibaclaw doctor [--fix]`.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
 
@@ -69,7 +71,8 @@ ShibaClaw est un agent IA auto-hébergé que vous exécutez sur votre propre mac
 ## Fonctionnalités
 
 - **Cœur axé sur la sécurité** —— coffre de credentials chiffré, audit CVE à l'installation, encapsulation d'injection de prompts, protection SSRF/DNS-rebinding
-- **Mémoire à trois niveaux** —— mémoire de travail, sémantique (FAISS) et procédurale, avec apprentissage proactif et auto-compaction
+- **Mémoire à trois niveaux & Gestionnaire WebUI** —— mémoire de travail, sémantique (FAISS) et procédurale, avec gestion interactive dans la WebUI, édition en direct, journal de rêves et quarantaine
+- **UX interactive Human-in-the-Loop** —— requêtes structurées en cours de tour (`ask_user`), identifiants masqués en coffre-fort, cartes de progression et sandboxing dynamique
 - **28 fournisseurs, SDK natifs** —— OpenAI, Anthropic, Gemini, DeepSeek et plus, sans couche proxy LiteLLM
 - **Web et mobile** —— exposez la WebUI sur votre LAN et utilisez le même agent depuis votre téléphone
 - **Application de bureau Windows** —— lanceur natif avec intégration à la barre d'état système

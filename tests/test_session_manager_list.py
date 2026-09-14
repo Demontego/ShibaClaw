@@ -1,5 +1,8 @@
 import time
+from datetime import datetime, timedelta
+
 from shibaclaw.brain.manager import PackManager
+
 
 def test_list_sessions_updated_at(tmp_path):
     manager = PackManager(tmp_path)
@@ -17,6 +20,7 @@ def test_list_sessions_updated_at(tmp_path):
     sessions = manager.list_sessions()
     assert sessions[0]["key"] == "webui:test2"
     assert sessions[1]["key"] == "webui:test1"
+    assert datetime.fromisoformat(sessions[0]["updated_at"]).utcoffset() == timedelta(0)
 
     # Now append to s1
     time.sleep(0.1)

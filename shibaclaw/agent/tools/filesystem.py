@@ -1,6 +1,9 @@
 """File system tools: read, write, edit, list."""
 
+import asyncio
 import difflib
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -45,9 +48,33 @@ class _FsTool(Tool):
         self._workspace = workspace
         self._allowed_dir = allowed_dir
         self._extra_allowed_dirs = extra_allowed_dirs
+        self._readonly = False
+
+    def configure_sandbox(
+        self,
+        *,
+        allowed_dir: Path | None,
+        extra_allowed_dirs: list[Path] | None = None,
+        readonly: bool = False,
+    ) -> None:
+        """Rebind default workspace restriction (registration-time defaults)."""
+        self._allowed_dir = allowed_dir
+        if extra_allowed_dirs is not None:
+            self._extra_allowed_dirs = extra_allowed_dirs
+        self._readonly = readonly
+
+    def _effective_allowed(self) -> tuple[Path | None, bool]:
+        from shibaclaw.agent.sandbox_ctx import resolve_turn_sandbox
+
+        allowed, readonly, _ = resolve_turn_sandbox(
+            default_allowed_dir=self._allowed_dir,
+            default_readonly=self._readonly,
+        )
+        return allowed, readonly
 
     def _resolve(self, path: str) -> Path:
-        resolved = _resolve_path(path, self._workspace, self._allowed_dir, self._extra_allowed_dirs)
+        allowed, _ = self._effective_allowed()
+        resolved = _resolve_path(path, self._workspace, allowed, self._extra_allowed_dirs)
         secretary_dir = (self._workspace / "memory" / "secretary").resolve() if self._workspace else None
         if secretary_dir and resolved.is_relative_to(secretary_dir):
             raise PermissionError(
@@ -109,7 +136,33 @@ class ReadFileTool(_FsTool):
             if not fp.is_file():
                 return f"Error: Not a file: {path}"
 
-            all_lines = fp.read_text(encoding="utf-8").splitlines()
+            try:
+                all_lines = (await asyncio.to_thread(fp.read_text, encoding="utf-8")).splitlines()
+            except UnicodeDecodeError:
+                size = fp.stat().st_size
+                if fp.suffix.lower() != ".pdf":
+                    return f"Binary file ({size:,} bytes) at {fp}. Cannot read as UTF-8 text."
+                if not shutil.which("pdftotext"):
+                    return (
+                        f"Binary PDF ({size:,} bytes) at {fp}. "
+                        "Install poppler-utils (pdftotext) to extract text."
+                    )
+                try:
+                    result = await asyncio.to_thread(
+                        subprocess.run,
+                        ["pdftotext", "-layout", "-enc", "UTF-8", str(fp), "-"],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=120,
+                        check=False,
+                    )
+                except Exception as e:
+                    return f"Binary PDF ({size:,} bytes) at {fp}. Extract failed: {e}"
+                if result.returncode != 0 or not (result.stdout or "").strip():
+                    return f"Binary PDF ({size:,} bytes) at {fp}. pdftotext produced no text."
+                all_lines = result.stdout.splitlines()
             total = len(all_lines)
 
             if offset < 1:
@@ -173,6 +226,9 @@ class WriteFileTool(_FsTool):
         }
 
     async def execute(self, path: str, content: str, **kwargs: Any) -> str:
+        _, readonly = self._effective_allowed()
+        if readonly:
+            return "Error: session permission mode is readonly (writes disabled)"
         try:
             fp = self._resolve(path)
             fp.parent.mkdir(parents=True, exist_ok=True)
@@ -254,6 +310,9 @@ class EditFileTool(_FsTool):
         replace_all: bool = False,
         **kwargs: Any,
     ) -> str:
+        _, readonly = self._effective_allowed()
+        if readonly:
+            return "Error: session permission mode is readonly (writes disabled)"
         try:
             fp = self._resolve(path)
             if not fp.exists():
@@ -265,7 +324,7 @@ class EditFileTool(_FsTool):
             match, count = _find_match(content, old_text.replace("\r\n", "\n"))
 
             if match is None:
-                return self._not_found_msg(old_text, content, path)
+                return await asyncio.to_thread(self._not_found_msg, old_text, content, path)
             if count > 1 and not replace_all:
                 return (
                     f"Warning: old_text appears {count} times. "
@@ -295,7 +354,8 @@ class EditFileTool(_FsTool):
         window = len(old_lines)
 
         best_ratio, best_start = 0.0, 0
-        for i in range(max(1, len(lines) - window + 1)):
+        max_scan = min(len(lines) - window + 1, 1000)
+        for i in range(max(1, max_scan)):
             ratio = difflib.SequenceMatcher(None, old_lines, lines[i : i + window]).ratio()
             if ratio > best_ratio:
                 best_ratio, best_start = ratio, i

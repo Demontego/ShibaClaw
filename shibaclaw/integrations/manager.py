@@ -34,12 +34,12 @@ class ChannelManager:
 
         self._init_channels()
 
-    def _init_channels(self) -> None:
-        """Initialize channels discovered via pkgutil scan + entry_points plugins."""
-        from shibaclaw.integrations.registry import discover_all
+    def _enabled_channel_names(self) -> set[str]:
+        from shibaclaw.integrations.registry import discover_channel_names
 
-        for name, cls in discover_all().items():
-            section = getattr(self.config.channels, name, None)
+        names: set[str] = set()
+        for modname in discover_channel_names():
+            section = getattr(self.config.channels, modname, None)
             if section is None:
                 continue
             enabled = (
@@ -47,7 +47,20 @@ class ChannelManager:
                 if isinstance(section, dict)
                 else getattr(section, "enabled", False)
             )
-            if not enabled:
+            if enabled:
+                names.add(modname)
+        return names
+
+    def _init_channels(self) -> None:
+        """Initialize enabled channels (lazy-import only enabled modules)."""
+        from shibaclaw.integrations.registry import discover_enabled
+
+        enabled_names = self._enabled_channel_names()
+        for name, cls in discover_enabled(enabled_names).items():
+            if name not in enabled_names:
+                continue
+            section = getattr(self.config.channels, name, None)
+            if section is None:
                 continue
             try:
                 channel = cls(section, self.bus)
@@ -127,7 +140,7 @@ class ChannelManager:
         Channels whose config is unchanged keep running undisturbed.
         Channels that are new, removed, or have a changed config are stopped/started as needed.
         """
-        from shibaclaw.integrations.registry import discover_all
+        from shibaclaw.integrations.registry import discover_channel_names, discover_enabled
 
         old_channels_dump = {
             name: (
@@ -139,7 +152,7 @@ class ChannelManager:
         }
 
         new_channels_cfg: dict[str, Any] = {}
-        for name in discover_all():
+        for name in discover_channel_names():
             section = getattr(new_cfg.channels, name, None)
             if section is None:
                 continue
@@ -184,7 +197,7 @@ class ChannelManager:
             logger.debug("Reconfigure: stopped channel {}", name)
 
         # Start new/changed channels
-        all_channel_classes = discover_all()
+        all_channel_classes = discover_enabled(set(new_channels_cfg.keys()))
         for name, section in new_channels_cfg.items():
             if name in self.channels:
                 # Already running and unchanged — just update audio/providers refs

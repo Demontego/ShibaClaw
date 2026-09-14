@@ -3,10 +3,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from shibaclaw.agent.knowledge_manager import KnowledgeManager
 from shibaclaw.webui.agent_manager import agent_manager
 
-def _get_km() -> KnowledgeManager:
+def _get_km():
+    from shibaclaw.agent.knowledge_manager import KnowledgeManager, is_rag_available
+
+    if not is_rag_available():
+        raise RuntimeError("Knowledge Bases require RAG extras. Run: uv sync --extra rag")
     if not agent_manager.config:
         agent_manager.load_latest_config()
     if not agent_manager.config:

@@ -6,14 +6,12 @@ import asyncio
 import hashlib
 import secrets
 import urllib.parse
+
 import httpx
 from starlette.requests import Request
-from starlette.responses import JSONResponse, HTMLResponse, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-
-def _base64url_encode(raw: bytes) -> str:
-    import base64
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+from shibaclaw.webui.oauth_util import base64url_encode as _base64url_encode
 
 
 async def start_generic_oauth(request: Request, job_id: str, jobs: dict, provider_name: str, display_name: str):

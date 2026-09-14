@@ -194,7 +194,7 @@ window.runUpdateAction = async function () {
                     </div>
                 </div>`;
         } else {
-            panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(msg || "Failed to apply the update.")}<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">Retry</button></div>`;
+            panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(msg || (typeof t === "function" ? t("update.check_fail") : "Failed to apply the update."))}<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">${escapeHtml(typeof t === "function" ? t("update.retry") : "Retry")}</button></div>`;
         }
     } finally {
         _updateState.busy = false;
@@ -223,7 +223,7 @@ async function loadUpdatePanel(force = false) {
     _updateState.result = null;
     _updateState.commands = {};
 
-    panel.innerHTML = `<div class="update-checking"><span class="material-icons-round spin">progress_activity</span> Checking for updates...</div>`;
+    panel.innerHTML = `<div class="update-checking"><span class="material-icons-round spin">progress_activity</span> ${escapeHtml(typeof t === "function" ? t("update.checking") : "Checking for updates...")}</div>`;
 
     try {
         const url = "/api/update/check" + (force ? "?force=1" : "");
@@ -231,7 +231,7 @@ async function loadUpdatePanel(force = false) {
         const data = await res.json();
 
         if (data.error && !data.current) {
-            panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(data.error)}<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">Retry</button></div>`;
+            panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(data.error)}<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">${escapeHtml(typeof t === "function" ? t("update.retry") : "Retry")}</button></div>`;
             return;
         }
 
@@ -240,7 +240,9 @@ async function loadUpdatePanel(force = false) {
         const checkedAt = data.checked_at ? new Date(data.checked_at * 1000).toLocaleString() : "-";
         const displayCurrent = escapeHtml(_updateValue(data, "display_current") || _updateValue(data, "current"));
         const displayLatest = escapeHtml(_updateValue(data, "display_latest") || _updateValue(data, "latest"));
-        const summary = escapeHtml(data.summary || (data.update_available ? "Update available." : "You're up to date."));
+        const summary = escapeHtml(data.summary || (data.update_available
+            ? (typeof t === "function" ? t("update.available") : "Update available.")
+            : (typeof t === "function" ? t("update.up_to_date") : "You're up to date.")));
 
         let manifestSection = "";
         if (data.manifest_url && data.update_available) {
@@ -262,7 +264,9 @@ async function loadUpdatePanel(force = false) {
                 <div class="update-notes-body">${escapeHtml(data.error)}</div>
             </div>` : "";
 
-        const headline = data.update_available ? "Update available" : "Status checked";
+        const headline = data.update_available
+            ? (typeof t === "function" ? t("update.available") : "Update available")
+            : (typeof t === "function" ? t("update.up_to_date") : "You're up to date.");
         const icon = data.update_available ? "system_update" : "check_circle";
         const iconColor = data.update_available ? "var(--accent-orange)" : "var(--accent-green)";
         const versionRow = data.update_available ? `
@@ -278,15 +282,15 @@ async function loadUpdatePanel(force = false) {
         panel.innerHTML = `
             <div class="update-${data.update_available ? "available" : "ok"}">
                 <span class="material-icons-round" style="font-size:48px;color:${iconColor}">${icon}</span>
-                <div class="update-ok-text">${headline}</div>
+                <div class="update-ok-text">${escapeHtml(headline)}</div>
                 <div class="update-meta" style="margin-bottom:8px">${summary}</div>
                 ${versionRow}
                 ${manifestSection}
                 ${warningSection}
                 ${actionSection}
-                <div class="update-meta">Last checked: ${checkedAt}${data.stale ? " (cached)" : ""} · <button class="btn-link" onclick="loadUpdatePanel(true)">Check again</button></div>
+                <div class="update-meta">Last checked: ${checkedAt}${data.stale ? " (cached)" : ""} · <button class="btn-link" onclick="loadUpdatePanel(true)">${escapeHtml(typeof t === "function" ? t("update.check_again") : "Check again")}</button></div>
             </div>`;
     } catch (e) {
-        panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> Failed to check for updates.<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">Retry</button></div>`;
+        panel.innerHTML = `<div class="update-error"><span class="material-icons-round">error_outline</span> ${escapeHtml(typeof t === "function" ? t("update.check_fail") : "Failed to check for updates.")}<br><button class="btn-secondary" style="margin-top:12px" onclick="loadUpdatePanel(true)">${escapeHtml(typeof t === "function" ? t("update.retry") : "Retry")}</button></div>`;
     }
 }

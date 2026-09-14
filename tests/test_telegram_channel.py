@@ -1,5 +1,8 @@
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 from shibaclaw.integrations.telegram import (
     TelegramChannel,
     TelegramConfig,
@@ -76,6 +79,30 @@ def test_telegram_channel_threads_eviction():
     assert ("chat_abc", 9) not in channel._message_threads
     assert ("chat_abc", 10) in channel._message_threads
     assert ("chat_abc", 1009) in channel._message_threads
+
+
+def test_derive_topic_session_key_private_dm_topics():
+    """Bot API 9.3+ private DM topics must isolate sessions like group forums."""
+    private = MagicMock()
+    private.chat.type = "private"
+    private.chat_id = 10001
+    private.message_thread_id = 6780867
+    assert (
+        TelegramChannel._derive_topic_session_key(private)
+        == "telegram:10001:topic:6780867"
+    )
+
+    unscoped = MagicMock()
+    unscoped.chat.type = "private"
+    unscoped.chat_id = 10001
+    unscoped.message_thread_id = None
+    assert TelegramChannel._derive_topic_session_key(unscoped) is None
+
+    group = MagicMock()
+    group.chat.type = "supergroup"
+    group.chat_id = -100123
+    group.message_thread_id = 42
+    assert TelegramChannel._derive_topic_session_key(group) == "telegram:-100123:topic:42"
 
 
 @pytest.mark.asyncio
@@ -326,6 +353,84 @@ def test_telegram_config_ai_defaults():
     assert cfg.managed_bots_enabled is False
     assert cfg.rich_messages is False
     assert cfg.open_groups is False
+    assert cfg.local_api_url == ""
+    assert cfg.max_media_bytes == 500 * 1024 * 1024
+
+
+def test_local_bot_api_path_maps_container_volume(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    host_file = tmp_path / ".shibaclaw/telegram-bot-api/data/user/file.pdf"
+    host_file.parent.mkdir(parents=True)
+    host_file.write_bytes(b"%PDF")
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        resolved = channel._resolve_local_bot_api_path("/var/lib/telegram-bot-api/user/file.pdf")
+
+    assert resolved == host_file.resolve()
+
+
+def test_local_bot_api_path_rejects_host_paths_outside_data_dir(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    outside = tmp_path / "secrets.env"
+    outside.write_text("TOKEN=secret", encoding="utf-8")
+    data_root = tmp_path / ".shibaclaw/telegram-bot-api/data"
+    data_root.mkdir(parents=True)
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        assert channel._resolve_local_bot_api_path(str(outside)) is None
+        assert channel._resolve_local_bot_api_path("/etc/passwd") is None
+
+
+def test_local_bot_api_path_allows_resolved_host_data_file(tmp_path: Path):
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    host_file = tmp_path / ".shibaclaw/telegram-bot-api/data/user/file.pdf"
+    host_file.parent.mkdir(parents=True)
+    host_file.write_bytes(b"%PDF")
+
+    with patch("shibaclaw.integrations.telegram.Path.home", return_value=tmp_path):
+        resolved = channel._resolve_local_bot_api_path(str(host_file))
+
+    assert resolved == host_file.resolve()
+
+
+def test_video_note_uses_mp4_extension():
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+
+    assert channel._get_extension("video", "video/mp4") == ".mp4"
+
+
+@pytest.mark.asyncio
+async def test_cloud_bot_api_rejects_media_above_20_mib():
+    bus = MagicMock(spec=MessageBus)
+    channel = TelegramChannel(TelegramConfig(token="fake_token"), bus)
+    get_file = AsyncMock()
+    channel._app = SimpleNamespace(bot=SimpleNamespace(get_file=get_file))
+    document = SimpleNamespace(
+        file_id="file-id",
+        file_unique_id="file-unique-id",
+        file_name="large.pdf",
+        file_size=21 * 1024 * 1024,
+        mime_type="application/pdf",
+    )
+    message = SimpleNamespace(
+        photo=None,
+        voice=None,
+        audio=None,
+        document=document,
+        video=None,
+        video_note=None,
+        animation=None,
+    )
+
+    media, content = await channel._download_message_media(message, add_failure_content=True)
+
+    assert media == []
+    assert "Telegram cloud Bot API limit 20 MiB" in content[0]
+    get_file.assert_not_awaited()
 
 
 @pytest.mark.asyncio

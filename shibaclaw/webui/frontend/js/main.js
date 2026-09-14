@@ -133,7 +133,10 @@ function initListeners() {
         const clockEl = $("clock");
         if (!clockEl) return;
         const now = new Date();
-        clockEl.textContent = now.toLocaleTimeString([], {
+        const loc = (window.i18n && typeof window.i18n.clockLocale === "function")
+            ? window.i18n.clockLocale()
+            : undefined;
+        clockEl.textContent = now.toLocaleTimeString(loc, {
             hour: "2-digit",
             minute: "2-digit",
         });
@@ -156,11 +159,17 @@ function initListeners() {
     }
 
     startClock();
+    document.addEventListener("shibaclaw:localechange", updateClock);
 }
 
 
 // ── Initialize ────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
+    if (window.i18n) {
+        window.i18n.applyI18n();
+        window.i18n.initLangSwitcher();
+    }
+
     // Extract token from URL if present (desktop launcher)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get("token");
@@ -248,36 +257,41 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Can't reach server — start anyway (will show errors naturally)
         startApp();
     }
-    
-    // Defer GitHub popup initialization
-    initGithubPopup();
+    // Initialize Tally Feedback popup
+    initFeedbackPopup();
 });
 
-// ── GitHub Star Popup ─────────────────────────────────────────
-function initGithubPopup() {
-    // Check if user already dismissed or starred
-    if (localStorage.getItem('shibaclaw_gh_star_dismissed') === 'true') {
+// ── Tally Feedback Popup ──────────────────────────────────────
+function initFeedbackPopup(force = false) {
+    if (!force && localStorage.getItem('shibaclaw_feedback_v1_shown') === 'true') {
         return;
     }
 
-    // Show popup after 45 seconds to not bother the user immediately
+    // Show popup 5 seconds after start
     setTimeout(() => {
-        const popup = document.getElementById('gh-star-popup');
-        const dismissBtn = document.getElementById('gh-star-dismiss');
-        const starLink = document.getElementById('gh-star-link');
+        const popup = document.getElementById('feedback-popup');
+        const dismissBtn = document.getElementById('feedback-dismiss');
+        const feedbackLink = document.getElementById('feedback-link');
 
-        if (popup && dismissBtn && starLink) {
+        if (popup && dismissBtn) {
             popup.classList.add('show');
 
             const dismissPopup = () => {
                 popup.classList.remove('show');
-                localStorage.setItem('shibaclaw_gh_star_dismissed', 'true');
+                localStorage.setItem('shibaclaw_feedback_v1_shown', 'true');
             };
 
-            dismissBtn.addEventListener('click', dismissPopup);
-            starLink.addEventListener('click', dismissPopup);
+            dismissBtn.onclick = dismissPopup;
+            if (feedbackLink) {
+                feedbackLink.onclick = dismissPopup;
+            }
         }
-    }, 45000); // 45 seconds delay
+    }, force ? 100 : 5000); // 5 seconds delay (or immediate if forced)
 }
+
+window.initFeedbackPopup = initFeedbackPopup;
+
+
+
 
 

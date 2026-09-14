@@ -31,7 +31,8 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
@@ -40,15 +41,16 @@
 > As notas de versão estão em [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Novidades — v0.9.13</b> (clique para expandir)</summary>
+<summary>🚀 <b>Novidades — Versão Marco v1.0.0</b> (clique para expandir)</summary>
 
-**Última versão (2026-08-01):**
+**Última versão v1.0.0 (2026-09-08):**
 
-- **Correção de vulnerabilidade de injeção de comandos no ExecTool** — Resolvida uma vulnerabilidade crítica de injeção de comandos (CWE-78) na execução de shell usando análise segura de argumentos com `shlex` e execução direta de processos (`create_subprocess_exec`).
-- **Vulnerabilidades de segurança em dependências** — Resolvidas vulnerabilidades de segurança em dependências npm do bridge atualizando os overrides para `protobufjs` (v7.6.5) e `sharp` (v0.35.3).
-- **Estabilidade do loop de agente e direcionamento** — Corrigidas falhas no comando `/update`, roteamento de sessões e emissão de eventos para mensagens ativas.
-- **Estimativa de tokens na WebUI** — Corrigido o tratamento de tipos de argumentos no endpoint da API `estimate_prompt_tokens` ao passar listas de mensagens.
-- **Dependências de Cloud RAG** — Corrigidos os limites de dependência do Cloud RAG e a configuração do modelo de embedding padrão.
+- **Marco 1.0.0 — Framework de Agente Pronto para Produção** — O ShibaClaw atinge a versão 1.0.0! Um assistente de IA pessoal auto-hospedado projetado para privacidade, modularidade e estabilidade robusta, com suporte integral ao Python 3.12–3.14 e CI multiplataforma no Ubuntu e Windows.
+- **Gerenciador de Memória Interativo & Quarentena em Tempo Real** — Novo painel dedicado na WebUI (ícone `psychology` na barra lateral) e endpoints REST (`/api/memory`). Inspecione e edite em tempo real a memória de longo prazo (`MEMORY.md`), preferências do usuário (`USER.md`), linha do tempo de sessões (`HISTORY.md`) e reflexões do diário de sonhos (`DREAM_DIARY.md`), com orçamento de tokens e redação segura em quarentena.
+- **UX Interativa de Nova Geração Human-in-the-Loop** — Interação fluida durante a execução do agente: prompts estruturados de múltipla escolha (`ask_user`), isolamento de credenciais mascaradas em cofre (`request_credential`, estritamente fora do contexto do LLM), cartões visuais de progresso (`update_progress`), busca rápida no histórico (`session_search`) e permissões dinâmicas de sandbox por sessão (`full` | `workspace` | `readonly`).
+- **Segurança Reforçada & Sessões Anônimas Sem Vazamentos** — Escopo de ferramentas isolado via `ContextVar` para evitar vazamentos de concorrência entre sessões. O modo anônimo (Incognito) apaga logs JSONL do disco e ignora a consolidação de memória. Listas de modelos permitidos por perfil com proteção fail-closed.
+- **Atualização Completa para LangChain 1.4+ e Correções Dependabot** — Migração do stack RAG para LangChain 1.4+ moderno (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), eliminando todas as vulnerabilidades relatadas (`pip-audit` limpo).
+- **Arquitetura Modular Leve, `uv` & Utilitário Doctor** — Pacotes opcionais modulares (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), inicialização em sub-segundos com descoberta sob demanda de plugins/canais e suíte de diagnóstico CLI `shibaclaw doctor [--fix]`.
 
 Veja o [Changelog](./CHANGELOG.md) para o histórico completo de lançamentos.
 
@@ -69,7 +71,8 @@ ShibaClaw é um agente de IA autohospedado que você executa na sua própria má
 ## Recursos
 
 - **Núcleo com foco em segurança** —— cofre de credenciais criptografado, auditoria CVE na instalação, encapsulamento de injeção de prompts, proteção SSRF/DNS-rebinding
-- **Memória de três níveis** —— memória de trabalho, semântica (FAISS) e procedimental, com aprendizado proativo e auto-compactação
+- **Memória de três níveis & Gerenciador WebUI** —— memória de trabalho, semântica (FAISS) e procedimental, com gerenciamento interativo via WebUI, edição ao vivo, diário de sonhos e quarentena segura
+- **UX interativa Human-in-the-Loop** —— prompts estruturados durante o turno (`ask_user`), credenciais mascaradas em cofre, cartões de progresso e sandbox dinâmico
 - **28 provedores, SDKs nativos** —— OpenAI, Anthropic, Gemini, DeepSeek e mais, sem camada proxy LiteLLM
 - **Web e móvel** —— exponha a WebUI na sua LAN e use o mesmo agente pelo celular
 - **App de desktop Windows** —— lançador nativo com integração à bandeja do sistema

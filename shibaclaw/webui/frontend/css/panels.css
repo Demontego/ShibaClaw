@@ -56,15 +56,16 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    overflow: hidden;
     transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.25s ease;
     opacity: 1;
+    overflow: visible;
 }
 
 .channel-group-items.collapsed {
     max-height: 0 !important;
     opacity: 0;
+    overflow: hidden;
 }
 
 .btn-show-more {
@@ -239,6 +240,12 @@
 
 .session-actions {
     position: relative;
+    z-index: 10;
+}
+
+.history-item.has-active-dropdown {
+    position: relative;
+    z-index: 100 !important;
 }
 
 .btn-session-menu {

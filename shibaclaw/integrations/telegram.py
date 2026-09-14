@@ -1,17 +1,21 @@
 """Telegram channel implementation using python-telegram-bot."""
 
 from __future__ import annotations
+
 import asyncio
 import itertools
 import logging
-import re
-import unicodedata
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
+
 from loguru import logger
 from pydantic import Field, field_validator
 from telegram import (
     BotCommand,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     InlineQueryResultArticle,
     InputTextMessageContent,
     MenuButtonWebApp,
@@ -23,6 +27,7 @@ from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     BusinessConnectionHandler,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ManagedBotUpdatedHandler,
@@ -30,12 +35,17 @@ from telegram.ext import (
     filters,
 )
 from telegram.request import HTTPXRequest
+
 from shibaclaw.bus.events import OutboundMessage
 from shibaclaw.bus.queue import MessageBus
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.config.schema import Base
 from shibaclaw.helpers.helpers import split_message
 from shibaclaw.integrations.base import BaseChannel
+from shibaclaw.integrations.telegram_rich import (
+    _markdown_to_telegram_html,
+    build_rich_message_body,
+)
 from shibaclaw.security.network import validate_url_target
 
 _PTB_LOGGERS = (
@@ -76,357 +86,6 @@ def _restore_ptb_shutdown_logs() -> None:
 
 TELEGRAM_MAX_MESSAGE_LEN = 4000
 TELEGRAM_REPLY_CONTEXT_MAX_LEN = TELEGRAM_MAX_MESSAGE_LEN
-_RE_MD_BOLD1 = re.compile(r"\*\*(.+?)\*\*")
-_RE_MD_BOLD2 = re.compile(r"__(.+?)__")
-_RE_MD_STRIKE = re.compile(r"~~(.+?)~~")
-_RE_MD_INLINE = re.compile(r"`([^`]+)`")
-_RE_MD_BLOCK = re.compile(r"```[\w]*\n?([\s\S]*?)```")
-_RE_MD_TABLE = re.compile(r"^\s*\|.+\|")
-_RE_MD_TABLE_SEP = re.compile(r"^:?-+:?$")
-_RE_MD_HEADER = re.compile(r"^#{1,6}\s+(.+)$", flags=re.MULTILINE)
-_RE_MD_BLOCKQUOTE = re.compile(r"^>\s*(.*)$", flags=re.MULTILINE)
-_RE_MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-_RE_MD_BOLD_ITALIC = re.compile(r"\*\*\*(.+?)\*\*\*")
-_RE_MD_ITALIC = re.compile(r"(?<![^\W_])_([^_]+)_(?![^\W_])")
-_RE_MD_BULLET = re.compile(r"^[-*]\s+", flags=re.MULTILINE)
-
-# Rich Messages auto-blocks heuristics (math / GFM tables / image collages).
-_RE_RICH_DISPLAY_MATH = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
-_RE_RICH_MATH_FENCE = re.compile(r"```math\s*\n([\s\S]*?)```", re.IGNORECASE)
-_RE_RICH_IMG = re.compile(
-    r"!\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+\"([^\"]*)\")?\)"
-)
-_RE_RICH_TABLE_SEP_LINE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
-
-
-def _rich_should_use_blocks(text: str) -> bool:
-    """True when content has constructs better sent as explicit rich blocks."""
-    if not text:
-        return False
-    if _RE_RICH_DISPLAY_MATH.search(text) or _RE_RICH_MATH_FENCE.search(text):
-        return True
-    if "<tg-collage>" in text.lower() or "<tg-slideshow>" in text.lower():
-        return True
-    imgs = _RE_RICH_IMG.findall(text)
-    if len(imgs) >= 2:
-        return True
-    lines = text.splitlines()
-    for i, line in enumerate(lines[:-1]):
-        if "|" in line and _RE_RICH_TABLE_SEP_LINE.match(lines[i + 1] or ""):
-            return True
-    return False
-
-
-def _rich_parse_table_block(lines: list[str], start: int) -> tuple[dict[str, Any] | None, int]:
-    """Parse a GFM pipe-table starting at *start*. Returns (block, next_index)."""
-    if start >= len(lines) or "|" not in lines[start]:
-        return None, start
-    if start + 1 >= len(lines) or not _RE_RICH_TABLE_SEP_LINE.match(lines[start + 1]):
-        return None, start
-    rows: list[list[str]] = []
-    i = start
-    while i < len(lines) and "|" in lines[i]:
-        if i == start + 1 and _RE_RICH_TABLE_SEP_LINE.match(lines[i]):
-            i += 1
-            continue
-        cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
-        rows.append(cells)
-        i += 1
-        if i < len(lines) and not lines[i].strip():
-            break
-    if not rows:
-        return None, start
-    width = max(len(r) for r in rows)
-    sep = lines[start + 1]
-    aligns: list[str] = []
-    for raw in sep.strip().strip("|").split("|"):
-        cell = raw.strip()
-        if cell.startswith(":") and cell.endswith(":"):
-            aligns.append("center")
-        elif cell.endswith(":"):
-            aligns.append("right")
-        else:
-            aligns.append("left")
-    while len(aligns) < width:
-        aligns.append("left")
-    cells_out: list[list[dict[str, Any]]] = []
-    for r_idx, row in enumerate(rows):
-        padded = row + [""] * (width - len(row))
-        cells_out.append(
-            [
-                {
-                    "text": cell,
-                    "align": aligns[c_idx],
-                    "valign": "top",
-                    **({"is_header": True} if r_idx == 0 else {}),
-                }
-                for c_idx, cell in enumerate(padded)
-            ]
-        )
-    return {
-        "type": "table",
-        "cells": cells_out,
-        "is_bordered": True,
-    }, i
-
-
-def _rich_flush_prose(buf: list[str], blocks: list[dict[str, Any]]) -> None:
-    """Turn accumulated prose lines into heading/pre/paragraph/divider blocks."""
-    chunk = "\n".join(buf).strip("\n")
-    buf.clear()
-    if not chunk.strip():
-        return
-    for part in re.split(r"\n{2,}", chunk):
-        part = part.strip("\n")
-        if not part.strip():
-            continue
-        lines = part.splitlines()
-        if len(lines) == 1 and lines[0].strip() in ("---", "***", "___"):
-            blocks.append({"type": "divider"})
-            continue
-        m = re.match(r"^(#{1,6})\s+(.+)$", lines[0].strip())
-        if m and len(lines) == 1:
-            blocks.append(
-                {
-                    "type": "heading",
-                    "text": m.group(2).strip(),
-                    "size": min(6, len(m.group(1))),
-                }
-            )
-            continue
-        if lines[0].startswith("```"):
-            lang = lines[0][3:].strip() or None
-            body_lines = lines[1:]
-            if body_lines and body_lines[-1].strip() == "```":
-                body_lines = body_lines[:-1]
-            block: dict[str, Any] = {"type": "pre", "text": "\n".join(body_lines)}
-            if lang:
-                block["language"] = lang
-            blocks.append(block)
-            continue
-        blocks.append({"type": "paragraph", "text": part})
-
-
-def build_rich_message_body(text: str) -> dict[str, Any]:
-    """Build InputRichMessage body: markdown by default, blocks for math/table/collage.
-
-    ponytail: only switch to blocks when heuristics fire; prose stays as paragraph strings.
-    """
-    src = text or ""
-    if not _rich_should_use_blocks(src):
-        return {"markdown": src}
-
-    # Normalize math fences to $$ for one scanner.
-    normalized = _RE_RICH_MATH_FENCE.sub(lambda m: f"$${m.group(1).strip()}$$", src)
-
-    blocks: list[dict[str, Any]] = []
-    prose: list[str] = []
-    lines = normalized.splitlines(keepends=False)
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        # Display math on its own or embedded — peel $$...$$ from the line stream.
-        if "$$" in line or (line.strip().startswith("$$")):
-            # Consume a math block that may span lines.
-            joined = "\n".join(lines[i:])
-            m = _RE_RICH_DISPLAY_MATH.search(joined)
-            if m and m.start() == 0:
-                _rich_flush_prose(prose, blocks)
-                blocks.append(
-                    {
-                        "type": "mathematical_expression",
-                        "expression": m.group(1).strip(),
-                    }
-                )
-                consumed = m.end()
-                # Advance by number of lines covered.
-                covered = joined[:consumed].count("\n") + 1
-                i += covered
-                continue
-            # Math not at start of remaining text — fall through to prose with split below.
-
-        table, next_i = _rich_parse_table_block(lines, i)
-        if table is not None:
-            _rich_flush_prose(prose, blocks)
-            blocks.append(table)
-            i = next_i
-            continue
-
-        # Cluster of consecutive image markdowns → collage (need ≥2).
-        imgs: list[tuple[str, str, str]] = []
-        j = i
-        while j < len(lines):
-            im = _RE_RICH_IMG.fullmatch(lines[j].strip())
-            if not im:
-                break
-            imgs.append((im.group(1) or "", im.group(2), im.group(3) or ""))
-            j += 1
-        if len(imgs) >= 2:
-            _rich_flush_prose(prose, blocks)
-            photo_blocks: list[dict[str, Any]] = []
-            for alt, url, _title in imgs:
-                photo: dict[str, Any] = {
-                    "type": "photo",
-                    "photo": {"type": "photo", "media": url},
-                }
-                if alt:
-                    photo["caption"] = {"text": alt}
-                photo_blocks.append(photo)
-            blocks.append({"type": "collage", "blocks": photo_blocks})
-            i = j
-            continue
-
-        # Single image → photo block (only when already in blocks mode).
-        im_one = _RE_RICH_IMG.fullmatch(line.strip())
-        if im_one:
-            _rich_flush_prose(prose, blocks)
-            photo = {
-                "type": "photo",
-                "photo": {"type": "photo", "media": im_one.group(2)},
-            }
-            if im_one.group(1):
-                photo["caption"] = {"text": im_one.group(1)}
-            blocks.append(photo)
-            i += 1
-            continue
-
-        # Inline $$math$$ inside a prose line → split.
-        if "$$" in line:
-            _rich_flush_prose(prose, blocks)
-            pos = 0
-            for m in _RE_RICH_DISPLAY_MATH.finditer(line):
-                before = line[pos : m.start()]
-                if before.strip():
-                    blocks.append({"type": "paragraph", "text": before})
-                blocks.append(
-                    {
-                        "type": "mathematical_expression",
-                        "expression": m.group(1).strip(),
-                    }
-                )
-                pos = m.end()
-            after = line[pos:]
-            if after.strip():
-                prose.append(after)
-            i += 1
-            continue
-
-        prose.append(line)
-        i += 1
-
-    _rich_flush_prose(prose, blocks)
-    if not blocks:
-        return {"markdown": src}
-    return {"blocks": blocks}
-
-
-def _strip_md(s: str) -> str:
-    """Strip markdown inline formatting from text."""
-    s = _RE_MD_BOLD1.sub(r"\1", s)
-    s = _RE_MD_BOLD2.sub(r"\1", s)
-    s = _RE_MD_STRIKE.sub(r"\1", s)
-    s = _RE_MD_INLINE.sub(r"\1", s)
-    return s.strip()
-
-
-def _render_table_box(table_lines: list[str]) -> str:
-    """Convert markdown pipe-table to compact aligned text for <pre> display."""
-
-    def dw(s: str) -> int:
-        return sum(2 if unicodedata.east_asian_width(c) in ("W", "F") else 1 for c in s)
-
-    rows: list[list[str]] = []
-    has_sep = False
-    for line in table_lines:
-        cells = [_strip_md(c) for c in line.strip().strip("|").split("|")]
-        if all(_RE_MD_TABLE_SEP.match(c) for c in cells if c):
-            has_sep = True
-            continue
-        rows.append(cells)
-    if not rows or not has_sep:
-        return "\n".join(table_lines)
-    ncols = max(len(r) for r in rows)
-    for r in rows:
-        r.extend([""] * (ncols - len(r)))
-    widths = [max(dw(r[c]) for r in rows) for c in range(ncols)]
-
-    def dr(cells: list[str]) -> str:
-        return "  ".join(f"{c}{' ' * (w - dw(c))}" for c, w in zip(cells, widths))
-
-    out = [dr(rows[0])]
-    out.append("  ".join("─" * w for w in widths))
-    for row in rows[1:]:
-        out.append(dr(row))
-    return "\n".join(out)
-
-
-def _markdown_to_telegram_html(text: str) -> str:
-    """
-    Convert markdown to Telegram-safe HTML.
-    """
-    if not text:
-        return ""
-    code_blocks: list[str] = []
-
-    def save_code_block(m: re.Match) -> str:
-        code_blocks.append(m.group(1))
-        return f"\x00CB{len(code_blocks) - 1}\x00"
-
-    text = _RE_MD_BLOCK.sub(save_code_block, text)
-    lines = text.split("\n")
-    rebuilt: list[str] = []
-    li = 0
-    while li < len(lines):
-        if _RE_MD_TABLE.match(lines[li]):
-            tbl: list[str] = []
-            while li < len(lines) and _RE_MD_TABLE.match(lines[li]):
-                tbl.append(lines[li])
-                li += 1
-            box = _render_table_box(tbl)
-            if box != "\n".join(tbl):
-                code_blocks.append(box)
-                rebuilt.append(f"\x00CB{len(code_blocks) - 1}\x00")
-            else:
-                rebuilt.extend(tbl)
-        else:
-            rebuilt.append(lines[li])
-            li += 1
-    text = "\n".join(rebuilt)
-    inline_codes: list[str] = []
-
-    def save_inline_code(m: re.Match) -> str:
-        inline_codes.append(m.group(1))
-        return f"\x00IC{len(inline_codes) - 1}\x00"
-
-    text = _RE_MD_INLINE.sub(save_inline_code, text)
-    link_placeholders: list[tuple[str, str]] = []
-
-    def save_link(m: re.Match) -> str:
-        link_placeholders.append((m.group(1), m.group(2)))
-        return f"\x00LK{len(link_placeholders) - 1}\x00"
-
-    text = _RE_MD_LINK.sub(save_link, text)
-    text = _RE_MD_HEADER.sub(r"\1", text)
-    text = _RE_MD_BLOCKQUOTE.sub(r"\1", text)
-    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    for i, (link_text, url) in enumerate(link_placeholders):
-        escaped_text = link_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text = text.replace(f"\x00LK{i}\x00", f'<a href="{url}">{escaped_text}</a>')
-    text = _RE_MD_BOLD_ITALIC.sub(r"<b><i>\1</i></b>", text)
-    text = _RE_MD_BOLD1.sub(r"<b>\1</b>", text)
-    text = _RE_MD_BOLD2.sub(r"<b>\1</b>", text)
-    text = _RE_MD_ITALIC.sub(r"<i>\1</i>", text)
-    text = _RE_MD_STRIKE.sub(r"<s>\1</s>", text)
-    text = _RE_MD_BULLET.sub("• ", text)
-    for i, code in enumerate(inline_codes):
-        escaped = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text = text.replace(f"\x00IC{i}\x00", f"<code>{escaped}</code>")
-    for i, code in enumerate(code_blocks):
-        escaped = code.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        text = text.replace(f"\x00CB{i}\x00", f"<pre><code>{escaped}</code></pre>")
-    return text
-
 
 _SEND_MAX_RETRIES = 3
 _SEND_RETRY_BASE_DELAY = 0.5
@@ -489,6 +148,10 @@ class TelegramConfig(Base):
     open_groups: bool = False
     # Public HTTPS URL for Telegram Mini App (Menu Button / BotFather).
     mini_app_url: str = ""
+    # Local Bot API base, e.g. http://127.0.0.1:8081 (empty uses api.telegram.org).
+    local_api_url: str = ""
+    # Soft inbound media cap; Local Bot API supports files beyond the cloud 20 MiB limit.
+    max_media_bytes: int = 524288000
 
     @field_validator("proxy", mode="before")
     @classmethod
@@ -599,11 +262,12 @@ class TelegramChannel(BaseChannel):
 
     def _build_app(self, proxy: str | None = None) -> None:
         """Build the Telegram Application with separate HTTP pools."""
+        local_api_url = self.config.local_api_url.strip().rstrip("/")
         api_request = HTTPXRequest(
             connection_pool_size=self.config.connection_pool_size,
             pool_timeout=self.config.pool_timeout,
             connect_timeout=30.0,
-            read_timeout=30.0,
+            read_timeout=600.0 if local_api_url else 30.0,
             proxy=proxy,
         )
         poll_request = HTTPXRequest(
@@ -619,6 +283,13 @@ class TelegramChannel(BaseChannel):
             .request(api_request)
             .get_updates_request(poll_request)
         )
+        if local_api_url:
+            builder = (
+                builder.base_url(f"{local_api_url}/bot")
+                .base_file_url(f"{local_api_url}/file/bot")
+                .local_mode(True)
+            )
+            logger.info("Telegram using Local Bot API at {}", local_api_url)
         self._app = builder.build()
 
     async def start_for_sending(self) -> None:
@@ -651,7 +322,14 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(CommandHandler("restart", self._forward_command))
         self._app.add_handler(CommandHandler("help", self._on_help))
         _content_filter = (
-            filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO | filters.Document.ALL
+            filters.TEXT
+            | filters.PHOTO
+            | filters.VOICE
+            | filters.AUDIO
+            | filters.Document.ALL
+            | filters.VIDEO
+            | filters.VIDEO_NOTE
+            | filters.ANIMATION
         ) & ~filters.COMMAND
         self._app.add_handler(MessageHandler(_content_filter, self._on_message))
         self._app.add_handler(
@@ -678,6 +356,7 @@ class TelegramChannel(BaseChannel):
             self._app.add_handler(BusinessConnectionHandler(self._on_business_connection))
         if self.config.managed_bots_enabled:
             self._app.add_handler(ManagedBotUpdatedHandler(self._on_managed_bot))
+        self._app.add_handler(CallbackQueryHandler(self._on_callback_query))
         logger.info("Starting Telegram bot (polling mode)...")
         await self._app.initialize()
         await self._app.start()
@@ -691,7 +370,8 @@ class TelegramChannel(BaseChannel):
         except Exception as e:
             logger.warning("Failed to register bot commands: {}", e)
         await self._maybe_set_mini_app_menu_button()
-        allowed_updates = ["message", "edited_message"]
+        # callback_query required for inline keyboards (e.g. profile pickers).
+        allowed_updates = ["message", "edited_message", "callback_query"]
         if self.config.guest_mode:
             allowed_updates.append("guest_message")
         if self.config.business_enabled:
@@ -839,6 +519,7 @@ class TelegramChannel(BaseChannel):
                 reply_params = ReplyParameters(
                     message_id=reply_to_message_id, allow_sending_without_reply=True
                 )
+        ask_markup = self._build_ask_inline_keyboard(metadata)
         for media_path in msg.media or []:
             try:
                 media_type = self._get_media_type(media_path)
@@ -886,6 +567,25 @@ class TelegramChannel(BaseChannel):
                 )
         if msg.content and msg.content != "[empty message]":
             is_progress = bool(metadata.get("_progress", False))
+            # Structured ask: plain send with inline keyboard (skip rich/streaming).
+            if ask_markup is not None and not is_progress:
+                chunk = next(iter(split_message(msg.content, TELEGRAM_MAX_MESSAGE_LEN)), msg.content)
+                last_mid = await self._send_text(
+                    chat_id,
+                    chunk,
+                    reply_params,
+                    thread_kwargs,
+                    reply_markup=ask_markup,
+                )
+                inbound_mid = metadata.get("message_id")
+                if last_mid is not None:
+                    self._remember_inbound_reply(chat_id, inbound_mid, last_mid)
+                    if metadata.get("business_connection_id"):
+                        self._remember_secretary_outbound(chat_id, last_mid)
+                thread_id = thread_kwargs.get("message_thread_id") if thread_kwargs else None
+                await self._clear_progress_message(chat_id, thread_id)
+                self._clear_draft_id(chat_id, thread_id)
+                return
             use_draft = (
                 self.config.streaming
                 and self._is_private_chat_id(chat_id)
@@ -1113,6 +813,7 @@ class TelegramChannel(BaseChannel):
         thread_kwargs: dict | None = None,
         *,
         edit_message_id: int | None = None,
+        reply_markup=None,
     ) -> int | None:
         """Send or edit a plain text message with HTML fallback. Returns message_id."""
         tk = dict(thread_kwargs or {})
@@ -1168,6 +869,9 @@ class TelegramChannel(BaseChannel):
                         edit_message_id,
                         e,
                     )
+        send_extra: dict[str, Any] = {}
+        if reply_markup is not None:
+            send_extra["reply_markup"] = reply_markup
         try:
             html = _markdown_to_telegram_html(text)
             sent = await self._call_with_retry(
@@ -1177,6 +881,7 @@ class TelegramChannel(BaseChannel):
                 parse_mode="HTML",
                 reply_parameters=reply_params,
                 **tk,
+                **send_extra,
             )
             return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
@@ -1193,6 +898,7 @@ class TelegramChannel(BaseChannel):
                 text=text,
                 reply_parameters=reply_params,
                 **tk,
+                **send_extra,
             )
             return getattr(sent, "message_id", None)
         except (NetworkError, RetryAfter, TimedOut):
@@ -1201,6 +907,132 @@ class TelegramChannel(BaseChannel):
             logger.error("Error sending Telegram message: {}", e2)
             raise
 
+    @staticmethod
+    def _build_ask_inline_keyboard(metadata: dict[str, Any]) -> InlineKeyboardMarkup | None:
+        """Build InlineKeyboardMarkup from ask metadata, or None.
+
+        Uses compact ``ask:{request_id}:{index}`` callback_data to stay under
+        Telegram's 64-byte limit (option ids are resolved from hub meta).
+        """
+        rid = str(metadata.get("ask_request_id") or "").strip()
+        options = metadata.get("inline_keyboard")
+        if not rid or not isinstance(options, list) or not options:
+            return None
+        # Keep request_id short enough: ask: + rid + : + idx ≤ 64
+        if len(f"ask:{rid}:99".encode("utf-8")) > 64:
+            rid = rid[:12]
+        rows: list[list[InlineKeyboardButton]] = []
+        row: list[InlineKeyboardButton] = []
+        for idx, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                continue
+            oid = str(opt.get("id") or "").strip()
+            label = str(opt.get("label") or oid).strip()
+            if not oid or not label:
+                continue
+            cb = f"ask:{rid}:{idx}"
+            row.append(InlineKeyboardButton(text=label[:64], callback_data=cb))
+            if len(row) >= 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+        if not rows:
+            return None
+        return InlineKeyboardMarkup(rows)
+
+    async def _on_callback_query(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Resolve structured ask_user choices from inline keyboard taps."""
+        cq = update.callback_query
+        if not cq or not cq.data:
+            return
+        data = cq.data
+        if not data.startswith("ask:"):
+            try:
+                await cq.answer()
+            except Exception:
+                pass
+            return
+        parts = data.split(":", 2)
+        if len(parts) < 3:
+            try:
+                await cq.answer()
+            except Exception:
+                pass
+            return
+        _, request_id, option_ref = parts
+
+        from shibaclaw.agent.interactive import get_interactive_hub
+
+        hub = get_interactive_hub()
+        pending = hub.get_pending_meta(request_id) or {}
+
+        user = cq.from_user
+        uid = str(user.id) if user else ""
+        uname = getattr(user, "username", None) if user else None
+        allowed_ids = {
+            str(x)
+            for x in (pending.get("allowed_user_ids") or [])
+            if x is not None and str(x).strip()
+        }
+        initiator = str(pending.get("initiator_user_id") or "").strip()
+        if initiator:
+            allowed_ids.add(initiator)
+
+        authorized = False
+        if uid and self._sender_is_allowlisted(uid, uname):
+            authorized = True
+        elif uid and uid in allowed_ids:
+            authorized = True
+
+        if not authorized:
+            try:
+                await cq.answer(text="Not allowed to answer this prompt.", show_alert=True)
+            except Exception:
+                pass
+            logger.warning(
+                "Telegram ask callback denied for user {} on request {}",
+                uid,
+                request_id,
+            )
+            return
+
+        response: dict[str, Any] = {"ok": True}
+        # Prefer index form; fall back to option_id for older messages.
+        if option_ref.isdigit():
+            response["option_index"] = int(option_ref)
+            opts = pending.get("options") if isinstance(pending.get("options"), list) else []
+            try:
+                opt = opts[int(option_ref)]
+                if isinstance(opt, dict):
+                    response["option_id"] = opt.get("id")
+                    response["label"] = opt.get("label") or opt.get("id")
+            except (IndexError, TypeError, ValueError):
+                response["option_id"] = option_ref
+                response["label"] = option_ref
+        else:
+            response["option_id"] = option_ref
+            response["label"] = option_ref
+            try:
+                markup = getattr(cq.message, "reply_markup", None) if cq.message else None
+                for brow in getattr(markup, "inline_keyboard", None) or []:
+                    for btn in brow:
+                        if getattr(btn, "callback_data", None) == data:
+                            response["label"] = getattr(btn, "text", None) or option_ref
+                            break
+            except Exception:
+                pass
+
+        try:
+            await cq.answer(text=f"Selected: {response.get('label', '')}"[:200])
+        except Exception:
+            pass
+        try:
+            hub.resolve(request_id, response)
+        except Exception as e:
+            logger.warning("ask callback resolve failed: {}", e)
 
     @staticmethod
     def _is_private_chat_id(chat_id: int) -> bool:
@@ -1599,9 +1431,14 @@ class TelegramChannel(BaseChannel):
 
     @staticmethod
     def _derive_topic_session_key(message) -> str | None:
-        """Derive topic-scoped session key for non-private Telegram chats."""
+        """Derive topic-scoped session key for forum topics (groups and private DMs).
+
+        Bot API 9.3+ supports topics in private chats with bots. When
+        ``message_thread_id`` is present, isolate history/profile from the
+        unscoped ``telegram:{chat_id}`` session — same as group forums.
+        """
         message_thread_id = getattr(message, "message_thread_id", None)
-        if message.chat.type == "private" or message_thread_id is None:
+        if message_thread_id is None:
             return None
         return f"telegram:{message.chat_id}:topic:{message_thread_id}"
 
@@ -1686,6 +1523,39 @@ class TelegramChannel(BaseChannel):
             text = text[:TELEGRAM_REPLY_CONTEXT_MAX_LEN] + "..."
         return f"[Reply to: {text}]" if text else None
 
+    def _resolve_local_bot_api_path(self, file_path: str) -> Path | None:
+        """Map a Local Bot API path to a host file inside the bot data directory.
+
+        Only paths that resolve inside ``~/.shibaclaw/telegram-bot-api/data`` are
+        accepted — never arbitrary host files from a Local Bot API response.
+        """
+        if not file_path or not str(file_path).strip():
+            return None
+
+        data_root = (Path.home() / ".shibaclaw/telegram-bot-api/data").resolve()
+        container_root = Path("/var/lib/telegram-bot-api")
+        path = Path(file_path)
+
+        candidates: list[Path] = []
+        try:
+            candidates.append(data_root / path.relative_to(container_root))
+        except ValueError:
+            pass
+        if path.is_absolute():
+            candidates.append(path)
+        else:
+            candidates.append(data_root / path)
+
+        for candidate in candidates:
+            try:
+                resolved = candidate.resolve()
+                resolved.relative_to(data_root)
+            except (OSError, ValueError):
+                continue
+            if resolved.is_file():
+                return resolved
+        return None
+
     async def _download_message_media(
         self, msg, *, add_failure_content: bool = False
     ) -> tuple[list[str], list[str]]:
@@ -1715,17 +1585,80 @@ class TelegramChannel(BaseChannel):
             media_type = "animation"
         if not media_file or not self._app:
             return [], []
+
+        file_size = int(getattr(media_file, "file_size", 0) or 0)
+        original_name = getattr(media_file, "file_name", None)
+        local_api = bool(self.config.local_api_url.strip())
+        cloud_limit = 20 * 1024 * 1024
+        configured_limit = max(0, self.config.max_media_bytes)
+        max_download_bytes = configured_limit or (500 * 1024 * 1024 if local_api else cloud_limit)
+        if not local_api:
+            max_download_bytes = min(max_download_bytes, cloud_limit)
+
+        size_mib = file_size / (1024 * 1024) if file_size else 0
+        size_label = f" ({size_mib:.1f} MiB)" if size_mib else ""
+        limit_mib = max_download_bytes / (1024 * 1024)
+        limit_kind = "configured Local Bot API" if local_api else "Telegram cloud Bot API"
+        limit_hint = (
+            "raise channels.telegram.maxMediaBytes"
+            if local_api
+            else "configure channels.telegram.localApiUrl or send a smaller file"
+        )
+        too_large_content = (
+            f"[{media_type}: too large{size_label} — {limit_kind} limit "
+            f"{limit_mib:g} MiB; {limit_hint}]"
+        )
+        if max_download_bytes and file_size > max_download_bytes:
+            logger.warning(
+                "Skipping Telegram media above download limit (size={} limit={} name={})",
+                file_size,
+                max_download_bytes,
+                original_name,
+            )
+            return ([], [too_large_content]) if add_failure_content else ([], [])
+
         try:
-            file = await self._app.bot.get_file(media_file.file_id)
+            request_timeout = 600 if local_api else 300
+            file = await self._app.bot.get_file(
+                media_file.file_id,
+                read_timeout=request_timeout,
+                write_timeout=request_timeout,
+                connect_timeout=60,
+            )
             ext = self._get_extension(
                 media_type,
                 getattr(media_file, "mime_type", None),
-                getattr(media_file, "file_name", None),
+                original_name,
             )
             media_dir = get_media_dir("telegram")
             unique_id = getattr(media_file, "file_unique_id", media_file.file_id)
-            file_path = media_dir / f"{unique_id}{ext}"
-            await file.download_to_drive(str(file_path))
+            filename = f"{unique_id}{ext}"
+            if original_name:
+                original_basename = Path(original_name).name
+                safe_name = "".join(
+                    char if char.isalnum() or char in "-_." else "_" for char in original_basename
+                )[:120]
+                if safe_name:
+                    if not Path(safe_name).suffix and ext:
+                        safe_name += ext
+                    filename = f"{unique_id}_{safe_name}"
+            file_path = media_dir / filename
+
+            copied = False
+            remote_path = getattr(file, "file_path", None)
+            if local_api and remote_path:
+                host_path = self._resolve_local_bot_api_path(remote_path)
+                if host_path is not None:
+                    if host_path.resolve() != file_path.resolve():
+                        await asyncio.to_thread(shutil.copy2, host_path, file_path)
+                    copied = True
+            if not copied:
+                await file.download_to_drive(
+                    str(file_path),
+                    read_timeout=request_timeout,
+                    write_timeout=request_timeout,
+                )
+
             path_str = str(file_path)
             if media_type in ("voice", "audio"):
                 transcription = await self.transcribe_audio(file_path)
@@ -1733,12 +1666,26 @@ class TelegramChannel(BaseChannel):
                     logger.info("Transcribed {}: {}...", media_type, transcription[:50])
                     return [path_str], [f"[transcription: {transcription}]"]
                 return [path_str], [f"[{media_type}: {path_str}]"]
+            if media_type == "file" and original_name:
+                return [path_str], [f"[file: {original_name} → {path_str}]"]
             return [path_str], [f"[{media_type}: {path_str}]"]
         except Exception as e:
-            logger.warning("Failed to download message media: {}", e)
-            if add_failure_content:
-                return [], [f"[{media_type}: download failed]"]
-            return [], []
+            error = str(e)
+            error_lower = error.lower()
+            too_large = file_size > max_download_bytes or any(
+                marker in error_lower for marker in ("too big", "file_too_big")
+            )
+            logger.warning(
+                "Failed to download Telegram media (size={} name={}): {}",
+                file_size,
+                original_name,
+                e,
+            )
+            if not add_failure_content:
+                return [], []
+            if too_large:
+                return [], [too_large_content]
+            return [], [f"[{media_type}: download failed: {error[:120]}]"]
 
     async def _ensure_bot_identity(self) -> tuple[int | None, str | None]:
         """Load bot identity once and reuse it for mention/reply checks."""
@@ -2108,10 +2055,19 @@ class TelegramChannel(BaseChannel):
                 "audio/ogg": ".ogg",
                 "audio/mpeg": ".mp3",
                 "audio/mp4": ".m4a",
+                "video/mp4": ".mp4",
+                "video/webm": ".webm",
             }
             if mime_type in ext_map:
                 return ext_map[mime_type]
-        type_map = {"image": ".jpg", "voice": ".ogg", "audio": ".mp3", "file": ""}
+        type_map = {
+            "image": ".jpg",
+            "voice": ".ogg",
+            "audio": ".mp3",
+            "video": ".mp4",
+            "animation": ".mp4",
+            "file": "",
+        }
         if ext := type_map.get(media_type, ""):
             return ext
         if filename:

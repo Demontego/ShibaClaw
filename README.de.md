@@ -31,7 +31,8 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
@@ -40,15 +41,16 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>📢 <b>Neuigkeiten — v0.9.13</b> (zum Ausklappen klicken)</summary>
+<summary>🚀 <b>Neuigkeiten — v1.0.0 Meilenstein-Release</b> (zum Ausklappen klicken)</summary>
 
-**Neueste Version (2026-08-01):**
+**Neueste Version v1.0.0 (2026-09-08):**
 
-- **Behebung von Befehlsinjektionssicherheitslücken in ExecTool** — Kritische Befehlsinjektionslücke (CWE-78) in der Shell-Ausführung durch `shlex`-Argument-Parsing und direkte Prozessausführung behoben (`create_subprocess_exec`).
-- **Abhängigkeitssicherheitslücken** — Sicherheitslücken in Bridge-NPM-Abhängigkeiten durch Aktualisieren der Overrides für `protobufjs` (v7.6.5) und `sharp` (v0.35.3) behoben.
-- **Agenten-Schleifen- & Steering-Stabilität** — Abstürze im Befehl `/update` behoben, Sitzungsrouting und Ereignisemission für Nachrichtensteuerung während aktiver Aufgaben korrigiert.
-- **WebUI Token-Schätzung** — Argumenttypendaten im API-Endpunkt `estimate_prompt_tokens` korrigiert.
-- **Cloud-RAG-Abhängigkeiten** — Abhängigkeitsgrenzen für Cloud RAG und Standard-Embedding-Modellkonfiguration korrigiert.
+- **Meilenstein 1.0.0 — Produktionsreifes Agenten-Framework** — ShibaClaw erreicht Version 1.0.0! Ein vollständig selbstgehosteter persönlicher KI-Assistent, optimiert für Privatsphäre, Modularität und maximale Stabilität mit voller Unterstützung für Python 3.12–3.14 sowie plattformübergreifender Ubuntu/Windows-CI.
+- **Interaktiver Speicher-Manager & Live-Quarantäne** — Brandneues dediziertes WebUI-Panel (`psychology`-Icon in der Seitenleiste) und REST-Endpunkte (`/api/memory`). Langzeitwissen (`MEMORY.md`), Benutzerpräferenzen (`USER.md`), Sitzungschronik (`HISTORY.md`) und Traumtagebuch-Reflexionen (`DREAM_DIARY.md`) direkt im Browser inspizieren und editieren – inklusive Echtzeit-Token-Budgetierung und sicherer Quarantäne-Redaktion.
+- **Interaktive Next-Gen Human-in-the-Loop-UX** — Nahtlose Benutzerinteraktion während laufender Agenten-Turns: strukturierte `ask_user`-Auswahlmenüs, maskierte Tresor-Eingaben via `request_credential` (streng vom LLM-Kontext isoliert), persistente `update_progress`-Fortschrittskarten, schnelle `session_search`-Verlaufssuche und dynamische Sandbox-Berechtigungsmodi (`full` | `workspace` | `readonly`).
+- **Gehärtete Sicherheit & Leckfreie Inkognito-Sitzungen** — Tool-Isolierung per `ContextVar` verhindert Datenlecks bei gleichzeitigen Anfragen. Inkognito-Sitzungen löschen JSONL-Protokolle von der Festplatte und überspringen die Speicherkonsolidierung. Ausfallsichere (fail-closed) Modell-Erlaubnislisten pro Profil.
+- **Vollständiges LangChain 1.4+ Upgrade & Dependabot-Behebungen** — Modernisierung des gesamten RAG-Stacks auf LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`) zur Beseitigung aller bekannten Sicherheitslücken (`pip-audit` sauber).
+- **Schlanke modulare Architektur, `uv` & Diagnose-Doctor** — Modularisierte Extras (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), blitzschneller Start durch verzögerte Plugin- und Kanal-Initialisierung sowie `shibaclaw doctor [--fix]` Diagnosewerkzeuge.
 
 Vollständige Versionshistorie im [Changelog](./CHANGELOG.md).
 
@@ -69,7 +71,8 @@ ShibaClaw ist ein selbstgehosteter KI-Agent, den du auf deiner eigenen Maschine 
 ## Funktionen
 
 - **Sicherheitsorientierter Kern** —— verschlüsseltes Credential-Tresor, CVE-Audit bei Installation, Prompt-Injection-Wrapping, SSRF/DNS-Rebinding-Schutz
-- **Dreistufiger Speicher** —— Working-, Semantic- (FAISS) und Procedural-Speicher mit proaktivem Lernen und Auto-Kompaktierung
+- **Dreistufiger Speicher & WebUI-Manager** —— Working-, Semantic- (FAISS) und Procedural-Speicher mit interaktiver WebUI-Verwaltung, Live-Bearbeitung, Traumtagebuch und Quarantäne
+- **Interaktive Human-in-the-Loop-UX** —— strukturierte In-Turn-Abfragen (`ask_user`), maskierte Tresor-Eingaben, Fortschrittskarten und dynamische Sandbox-Rechte
 - **28 Anbieter, native SDKs** —— OpenAI, Anthropic, Gemini, DeepSeek und mehr, keine LiteLLM-Proxy-Schicht
 - **Web und mobil** —— WebUI im LAN bereitstellen und denselben Agenten vom Handy aus nutzen
 - **Windows-Desktop-App** —— nativer Launcher mit System-Tray-Integration

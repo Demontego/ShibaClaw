@@ -36,7 +36,7 @@ window.openSettingsView = async function () {
         }
     } catch (e) {
         if (loader) {
-            loader.innerHTML = `<span class="material-icons-round" style="color:var(--accent-red)">error</span> Failed to load settings`;
+            loader.innerHTML = `<span class="material-icons-round" style="color:var(--accent-red)">error</span> ${escapeHtml(typeof t === "function" ? t("settings.load_failed") : "Failed to load settings")}`;
         }
     }
 };
@@ -53,7 +53,7 @@ window.backToSettingsDashboard = function () {
     document.getElementById("settings-mobile-dashboard").style.display = "block";
     document.getElementById("settings-body").style.display = "none";
     const subtitleEl = document.getElementById("settings-current-tab-title");
-    if (subtitleEl) subtitleEl.textContent = "Settings Dashboard";
+    if (subtitleEl) subtitleEl.textContent = typeof t === "function" ? t("settings.dashboard") : "Settings Dashboard";
 };
 
 window.openOnboardFromSettings = function () {
@@ -77,7 +77,6 @@ window.switchSettingsTab = function (tab, options = {}) {
         const storedSubtab = localStorage.getItem("shibaclaw_extensions_subtab") || "skills";
         switchExtensionsSubTab(storedSubtab);
     }
-    if (tab === "heartbeat") loadHeartbeatSettingsPanel();
     try { localStorage.setItem("shibaclaw_settings_tab", tab); } catch (e) { }
 
     const isMobile = window.matchMedia("(max-width: 768px)").matches;
@@ -339,10 +338,10 @@ async function loadOAuthPanel() {
                 </div>
                 <div style="display:flex;gap:8px;padding:0.5rem 0">
                     <button class="btn-primary btn-sm" id="btn-oauth-login-${p.name}">
-                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> Login
+                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.login") : "Login")}
                     </button>
                     <button class="btn-secondary btn-sm" id="btn-oauth-disconnect-${p.name}" style="display:none; color: #ef4444; border-color: rgba(239, 68, 68, 0.3)">
-                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect
+                        <span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}
                     </button>
                 </div>
                 <div class="oauth-logs" id="oauth-logs-${p.name}" style="display:none;height:260px;overflow-y:scroll;overflow-x:hidden;background:var(--bg-primary);border-radius:6px;padding:12px;font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);margin-top:4px;border:1px solid var(--border-color);white-space:pre-wrap;line-height:1.6"></div>
@@ -355,7 +354,7 @@ async function loadOAuthPanel() {
             const logsEl = document.getElementById("oauth-logs-" + p.name);
             btn.disabled = true; btn.innerHTML = '<span class="material-icons-round spin" style="font-size:14px;vertical-align:middle">progress_activity</span> Contacting...';
             logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : (p.name === "google_gemini_cli" ? "Preparing Google login...\n" : "Requesting device code...\n");
-            const loginBtnHtml = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> Login';
+            const loginBtnHtml = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.login") : "Login")}`;
             try {
                 const resp = await authFetch("/api/oauth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: p.name }) });
                 const jd = await resp.json();
@@ -559,19 +558,19 @@ async function loadOAuthPanel() {
                 const jd = await resp.json();
                 if (jd.ok) {
                     logsEl.style.display = "block";
-                    logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">Disconnected successfully.</div>`;
+                    logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnected") : "Disconnected successfully.")}</div>`;
                     _refreshOAuthStatus();
                 } else {
                     logsEl.style.display = "block";
                     logsEl.textContent = "Error disconnecting: " + (jd.error || "Unknown");
                     btn.disabled = false;
-                    btn.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                    btn.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
                 }
             } catch (e) {
                 logsEl.style.display = "block";
                 logsEl.textContent = "Error: " + e;
                 btn.disabled = false;
-                btn.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                btn.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
             }
         });
     }
@@ -598,7 +597,7 @@ async function _refreshOAuthStatus() {
                     btnLogin.style.display = "none";
                     btnDisconnect.style.display = "inline-flex";
                     btnDisconnect.disabled = false;
-                    btnDisconnect.innerHTML = '<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> Disconnect';
+                    btnDisconnect.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
                 } else {
                     btnLogin.style.display = "inline-flex";
                     btnDisconnect.style.display = "none";
@@ -871,12 +870,15 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
 
     const statsEl = $("provider-stats");
     if (statsEl) {
-        statsEl.innerHTML = `<span class="stat-configured">${configuredCount} Configured</span><span class="stat-dot"></span><span>${provEntries.length} Total</span>`;
+        const statsText = typeof t === "function"
+            ? t("settings.provider.stats", { n: configuredCount, t: provEntries.length })
+            : `${configuredCount} Configured · ${provEntries.length} Total`;
+        statsEl.textContent = statsText;
     }
 
     const searchInput = document.getElementById("provider-search");
     if (searchInput) {
-        searchInput.addEventListener("input", () => {
+        searchInput.addEventListener("input", debounce(() => {
             const q = searchInput.value.toLowerCase().trim();
             for (const [name, tile] of provTiles) {
                 const matches = !q || name.toLowerCase().includes(q) || tile.dataset.displayName.includes(q);
@@ -891,7 +893,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
                     expandedProv = null;
                 }
             }
-        });
+        }, 250));
     }
 
     const tw = cfg.tools?.web || {};
@@ -911,44 +913,7 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
     $("s-gw-host").value = gw.host || "127.0.0.1";
     $("s-gw-port").value = gw.port ?? 19999;
 
-    const hb = gw.heartbeat || {};
-    $("s-hb-enabled").checked = hb.enabled !== false;
-    $("s-hb-interval").value = hb.intervalMin ?? 30;
-    $("s-hb-profile").value = hb.profileId || "";
-
     const ch = cfg.channels || {};
-
-    const targetChanSelect = $("s-hb-target-channel");
-    if (targetChanSelect) {
-        let html = '<option value="">Auto-detect</option>';
-        html += '<option value="webui">Web UI</option>';
-
-        for (const [name, cc] of Object.entries(ch)) {
-            if (["sendProgress", "sendToolHints"].includes(name) || typeof cc !== "object") continue;
-            if (cc.enabled === true) {
-                const displayName = name.charAt(0).toUpperCase() + name.slice(1);
-                html += `<option value="${name}">${displayName}</option>`;
-            }
-        }
-        targetChanSelect.innerHTML = html;
-    }
-
-    const targets = Object.keys(hb.targets || {});
-    if (targets.length > 0) {
-        const firstChan = targets[0];
-        if (targetChanSelect && targetChanSelect.querySelector(`option[value="${firstChan}"]`)) {
-            targetChanSelect.value = firstChan;
-        } else if (targetChanSelect) {
-            // Add it if it's currently selected but disabled, so it doesn't just disappear
-            targetChanSelect.innerHTML += `<option value="${firstChan}">${firstChan.charAt(0).toUpperCase() + firstChan.slice(1)} (disabled)</option>`;
-            targetChanSelect.value = firstChan;
-        }
-        $("s-hb-target-id").value = hb.targets[firstChan] || "";
-    } else {
-        if (targetChanSelect) targetChanSelect.value = "";
-        $("s-hb-target-id").value = "";
-    }
-
 
     $("s-ch-sendProgress").checked = ch.sendProgress !== false;
     $("s-ch-sendToolHints").checked = !!ch.sendToolHints;
@@ -1012,8 +977,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         verification_token: { section: "credentials", tooltip: "Webhook verification token. Validates that events originate from Feishu." },
         access_token: { section: "credentials", tooltip: "Matrix access token. Authenticate with your homeserver." },
         claw_token: { section: "credentials", tooltip: "Mochat authentication token. Stored encrypted in the vault." },
-        allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs. Adding a group ID allows all its members." },
-        group_allow_from: { section: "credentials", tooltip: "Comma-separated IDs allowed to trigger the bot in group channels." },
+        allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username). Adding a group ID allows all its members." },
+        allowFrom: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username). Adding a group ID allows all its members." },
+        group_allow_from: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username) allowed to trigger the bot in group channels." },
+        groupAllowFrom: { section: "credentials", tooltip: "Comma-separated user/group IDs or usernames (e.g. @username) allowed to trigger the bot in group channels." },
         homeserver: { section: "credentials", tooltip: "Matrix homeserver URL (e.g., https://matrix.org)." },
         user_id: { section: "credentials", tooltip: "The bot's full Matrix user ID (e.g., @bot:matrix.org)." },
         device_id: { section: "credentials", tooltip: "Matrix device identifier. Required for E2EE session management." },
@@ -1023,6 +990,8 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         reply_to_message: { section: "logic", tooltip: "Quote the original message when the bot sends its reply." },
         reply_in_thread: { section: "logic", tooltip: "Reply inside the message thread instead of the main channel." },
         streaming: { section: "logic", tooltip: "Stream the response incrementally instead of sending one final message." },
+        rich_messages: { section: "logic", tooltip: "Enable Telegram Bot API 10.1+ Rich Messages for formatted LaTeX math, GFM tables, media collages, and rich streaming." },
+        richMessages: { section: "logic", tooltip: "Enable Telegram Bot API 10.1+ Rich Messages for formatted LaTeX math, GFM tables, media collages, and rich streaming." },
         guest_mode: { section: "logic", tooltip: "Allow unauthenticated users to interact (bypasses allow_from check)." },
         allow_bot_messages: { section: "logic", tooltip: "Process messages from other bots, not just human users." },
         open_groups: { section: "logic", tooltip: "Accept messages from any group member. Private bot DMs remain restricted to allow_from." },
@@ -1068,7 +1037,10 @@ window.syncSettingsReasoningDropdown = syncSettingsReasoningDropdown;
         watch_limit: { section: "network", tooltip: "Maximum number of events returned per watch/poll cycle." },
         retry_delay_ms: { section: "network", tooltip: "Base delay between retry attempts on transient failures (ms)." },
         max_retry_attempts: { section: "network", tooltip: "Maximum retries on failure. 0 = unlimited retries." },
-        max_media_bytes: { section: "network", tooltip: "Maximum file attachment size in bytes (default: 20 MB)." },
+        max_media_bytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        maxMediaBytes: { section: "network", tooltip: "Maximum inbound media download size in bytes. Telegram cloud is capped at 20 MiB; Local Bot API default is 500 MiB (524288000)." },
+        local_api_url: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
+        localApiUrl: { section: "network", tooltip: "Telegram Local Bot API base URL (e.g. http://127.0.0.1:8081). Empty uses api.telegram.org. Required for downloads above the cloud 20 MiB limit." },
         sync_stop_grace_seconds: { section: "network", tooltip: "Seconds to wait for Matrix sync to stop cleanly on shutdown." }
     };
 
@@ -1403,20 +1375,10 @@ window.saveSettings = async function () {
         gateway: {
             host: $("s-gw-host").value,
             port: parseInt($("s-gw-port").value),
-            heartbeat: {
-                enabled: $("s-hb-enabled").checked,
-                intervalMin: parseInt($("s-hb-interval").value),
-                model: $("s-hb-model").value || null,
-                profileId: $("s-hb-profile").value || null,
-                targets: (() => {
-                    const chan = $("s-hb-target-channel").value;
-                    const tid = $("s-hb-target-id").value;
-                    if (chan) {
-                        return { [chan]: tid };
-                    }
-                    return {};
-                })()
-            }
+            // Preserve existing heartbeat config (managed via Automation panel).
+            heartbeat: (typeof lastSettingsConfig !== "undefined" && lastSettingsConfig.gateway)
+                ? JSON.parse(JSON.stringify(lastSettingsConfig.gateway.heartbeat || {}))
+                : {},
         },
         channels: {
             sendProgress: $("s-ch-sendProgress").checked,
@@ -1503,7 +1465,10 @@ window.saveSettings = async function () {
         fetchStatus();
 
         if (data.restarted) {
-            shibaDialog("alert", "Restart Required", "Gateway is restarting to apply network changes.", { confirmText: "OK" });
+            shibaDialog("alert",
+                typeof t === "function" ? t("settings.restart_required") : "Restart Required",
+                typeof t === "function" ? t("settings.restart_body") : "Gateway is restarting to apply network changes.",
+                { confirmText: typeof t === "function" ? t("common.ok") : "OK" });
         } else {
             // Hot-reloaded successfully without restarting
             let container = document.getElementById("toast-container");
@@ -1514,7 +1479,7 @@ window.saveSettings = async function () {
             }
             const toast = document.createElement("div");
             toast.className = "toast toast-success";
-            toast.innerHTML = `<span class="toast-icon material-icons-round">check_circle</span> Settings saved & hot-reloaded successfully!`;
+            toast.innerHTML = `<span class="toast-icon material-icons-round">check_circle</span> ${escapeHtml(typeof t === "function" ? t("settings.saved") : "Settings saved & hot-reloaded successfully!")}`;
             container.appendChild(toast);
             setTimeout(() => { toast.classList.add("visible"); }, 100);
             setTimeout(() => {
@@ -1524,6 +1489,8 @@ window.saveSettings = async function () {
             }, 3000);
         }
     } catch (e) {
-        shibaDialog("alert", "Error", "Error saving settings: " + e, { confirmText: "Close", danger: true });
+        shibaDialog("alert", typeof t === "function" ? t("common.error") : "Error",
+            typeof t === "function" ? t("settings.save_error", { err: e }) : "Error saving settings: " + e,
+            { confirmText: typeof t === "function" ? t("common.close") : "Close", danger: true });
     }
 };

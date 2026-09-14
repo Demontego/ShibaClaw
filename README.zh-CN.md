@@ -31,7 +31,8 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
@@ -40,15 +41,16 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>📢 <b>最新动态 — v0.9.13</b>（点击展开）</summary>
+<summary>🚀 <b>最新动态 — v1.0.0 里程碑发布</b>（点击展开）</summary>
 
-**最新发布 (2026-08-01):**
+**最新发布 v1.0.0 (2026-09-08):**
 
-- **修复 ExecTool 命令注入漏洞** — 通过将基于 shell 的执行替换为安全的 `shlex` 参数解析和直接进程执行（`create_subprocess_exec`），解决了 Shell 执行中的严重命令注入漏洞（CWE-78）。
-- **依赖项安全漏洞修复** — 通过更新 `protobufjs` (v7.6.5) 和 `sharp` (v0.35.3) 的覆盖配置，解决了 bridge npm 依赖项中的安全漏洞。
-- **智能体循环与转向稳定性** — 修复了 `/update` 命令导致的崩溃，修复了活动任务期间消息转向的会话路由和事件发射。
-- **WebUI Token 估算** — 修复了传递消息列表时 `estimate_prompt_tokens` API 端点中的参数类型处理。
-- **云端 RAG 依赖** — 纠正了云端 RAG 依赖项范围和默认嵌入模型配置。
+- **里程碑 1.0.0 — 生产就绪型智能体框架** — ShibaClaw 正式迈入 1.0.0 时代！专为隐私、模块化和极致稳定性打造的自托管个人 AI 助手框架，全面支持 Python 3.12–3.14 并配备 Ubuntu 与 Windows 跨平台自动化 CI。
+- **交互式内存管理器与实时隔离区** — 全新 WebUI 专属管理面板（侧边栏 `psychology` 图标）与 REST API（`/api/memory`）。实时查看并在线编辑长期知识（`MEMORY.md`）、用户偏好（`USER.md`）、会话时间线（`HISTORY.md`）以及梦境日记（`DREAM_DIARY.md`），内置实时 Token 预算监控与安全遗忘隔离防丢机制。
+- **下一代人机协同交互体验 (Human-in-the-Loop UX)** — 智能体运行中的无缝协同：结构化多选交互提示（`ask_user`）、隔离保密凭据输入（`request_credential`，绝密保管于保险库且绝不泄露给 LLM 上下文）、持久化进度卡片（`update_progress`）、精准会话全文搜索（`session_search`）以及每会话动态沙箱权限隔离（`full` | `workspace` | `readonly`）。
+- **强化安全性与零泄漏无痕会话** — 工具执行采用 `ContextVar` 作用域隔离，杜绝高并发跨会话数据泄漏。无痕隐身（Incognito）模式自动清理磁盘 JSONL 日志并跳过内存固化归档。各 Profile 模型白名单机制采用 fail-closed 默认拒绝保护。
+- **全面升级 LangChain 1.4+ 并彻底修复 Dependabot CVE** — RAG 依赖全线升级至现代化 LangChain 1.4+（`langchain>=1.4.0`、`langchain-core>=1.6.2`、`langchain-openai>=1.6.0`、`langchain-text-splitters>=1.1.2`），彻底解决全部已知上游安全漏洞（`pip-audit` 零风险）。
+- **轻量模块化打包、`uv` 与环境诊断 Doctor** — 精简核心引擎，提供丰富的模块化扩展组件（`[desktop]`、`[audit]`、`[rag]`、`[server]`、`[full]`），插件与通道按需延迟加载实现亚秒级冷启动，并内置 `shibaclaw doctor [--fix]` 命令行诊断排错套件。
 
 完整版本历史请查看 [CHANGELOG.md](./CHANGELOG.md)。
 
@@ -69,7 +71,8 @@ ShibaClaw 是一个自托管的 AI 智能体，可在你自己的机器或服务
 ## 功能
 
 - **安全优先核心** —— 加密凭据保险库、安装时 CVE 审计、提示注入包裹、SSRF/DNS 重绑定防护
-- **三级记忆** —— 工作记忆、语义记忆（FAISS）和程序性记忆，具备主动学习与自动压缩
+- **三级记忆与 WebUI 管理器** —— 工作记忆、语义记忆（FAISS）和程序性记忆，支持 WebUI 交互式管理、在线编辑、梦境日记与安全隔离区
+- **人机协同交互体验 (Human-in-the-Loop)** —— 运行中结构化提问 (`ask_user`)、隔离加密凭据、进度状态卡片及动态权限沙箱
 - **28 家提供商，原生 SDK** —— OpenAI、Anthropic、Gemini、DeepSeek 等，无 LiteLLM 代理层
 - **Web 与移动端** —— 将 WebUI 暴露到局域网，即可在手机上使用同一个智能体
 - **Windows 桌面应用** —— 带系统托盘集成的原生启动器

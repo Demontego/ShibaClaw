@@ -31,22 +31,23 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
 
 <details open>
-<summary>📢 <b>What's new — v0.9.13</b> (click to expand)</summary>
+<summary>🚀 <b>What's new — v1.0.0 Milestone Release</b> (click to expand)</summary>
 
-**Latest release (2026-08-01):**
+**Latest release v1.0.0 (2026-09-08):**
 
-- **Telegram Secretary, Archives & Owner Tools** — Chat Automation peer DM archiving (`businessAutoReply`), owner-only secretary search & send tools, secretary summons via trigger words or replies, guest/secretary safety preambles, and Telegram session history age trimming.
-- **Telegram Mini App & Profile Controls** — Telegram Mini App initData authentication, per-profile tool allow/deny lists with fail-closed security, profile temperature overrides, default KB pinning, and WebUI Telegram session grouping with speaker autolabeling.
-- **Model Context Window Auto-Detection** — WebUI token usage tracking and agent context estimation now dynamically resolve the active LLM model's maximum input context window.
-- **Agent Loop & Steering Stability** — Resolved crashes in `/update` command caused by missing methods/attributes, fixed session routing and event emission for message steering during active tasks.
-- **WebUI Token Estimation** — Fixed argument type handling in `estimate_prompt_tokens` API endpoint when passing message lists.
-- **Cloud RAG Dependencies** — Corrected Cloud RAG dependency bounds and default embedding model configuration.
+- **Milestone 1.0.0 — Production-Ready Agent Framework** — ShibaClaw hits 1.0.0! A complete, self-hosted personal AI assistant built for privacy, modularity, and rock-solid stability with full Python 3.12–3.14 and cross-platform Ubuntu/Windows CI.
+- **Interactive Memory Manager & Live Quarantine** — Brand-new dedicated WebUI panel (`psychology` sidebar icon) and REST endpoints (`/api/memory`). Inspect and live-edit long-term knowledge (`MEMORY.md`), user preferences (`USER.md`), session timeline (`HISTORY.md`), and dream diary reflections (`DREAM_DIARY.md`) with real-time token budgeting and safe quarantine redaction.
+- **Next-Gen In-Turn Interactive UX & Human-in-the-Loop** — Seamless interaction during agent turns: structured `ask_user` multi-choice prompts, masked `request_credential` vault isolation (kept strictly outside LLM context), durable `update_progress` visual cards, fast `session_search`, and dynamic per-session sandbox permissions (`full` | `workspace` | `readonly`).
+- **Hardened Security & Zero-Leak Incognito Sessions** — Per-execution `ContextVar` tool scoping prevents cross-session concurrency leaks. Incognito sessions strictly purge JSONL logs from disk and bypass memory consolidation. Automated fail-closed profile model allowlists prevent unauthorized model fallbacks.
+- **Complete LangChain 1.4+ Upgrade & Dependabot Fixes** — Upgraded the entire RAG stack to modern LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), resolving all known upstream security advisories (`pip-audit` clean).
+- **Modular Packaging, `uv` & Diagnostic Doctor** — Slim core engine with modular extras (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), sub-second startup with lazy plugin/channel discovery, and `shibaclaw doctor [--fix]` diagnostics.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 
@@ -67,7 +68,8 @@ ShibaClaw is a self-hosted AI agent you run on your own machine or server: a Pyt
 ## Features
 
 - **Security-first core** — encrypted credentials vault, install-time CVE audit, prompt-injection wrapping, SSRF/DNS-rebinding guard
-- **Three-tier memory** — working, semantic (FAISS), and procedural memory with proactive learning and auto-compaction
+- **Three-tier memory & WebUI Manager** — working, semantic (FAISS), and procedural memory with interactive WebUI management, live editing, dream diary, and safe quarantine
+- **Human-in-the-loop interactive UX** — structured in-turn prompts (`ask_user`), masked vault credentials, progress cards, and dynamic permission sandboxing
 - **28 providers, native SDKs** — OpenAI, Anthropic, Gemini, DeepSeek, and more, no LiteLLM proxy layer
 - **Web and mobile** — expose the WebUI on your LAN and use the same agent from your phone
 - **Windows desktop app** — native launcher with system tray integration

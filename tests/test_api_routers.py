@@ -97,9 +97,18 @@ def test_api_gateway_health(client):
     assert "reachable" in data
 
 
-def test_api_cron_list(client):
-    response = client.get("/api/cron/jobs")
-    # Will likely return 503 since gateway is not mocked
+def test_api_automation_status(client):
+    response = client.get("/api/automation/status")
+    assert response.status_code in (200, 503)
+    data = response.json()
+    if response.status_code == 200:
+        assert "reachable" in data or "running" in data
+    else:
+        assert "error" in data
+
+
+def test_api_automation_jobs_list(client):
+    response = client.get("/api/automation/jobs")
     assert response.status_code in (200, 503)
     data = response.json()
     if response.status_code == 200:
@@ -108,12 +117,9 @@ def test_api_cron_list(client):
         assert "error" in data
 
 
-def test_api_heartbeat_status(client):
-    response = client.get("/api/heartbeat/status")
-    # Will likely return 200 with unreachable=False if gateway isn't reached
-    assert response.status_code == 200
-    data = response.json()
-    assert "reachable" in data
+def test_legacy_cron_heartbeat_routes_removed(client):
+    assert client.get("/api/cron/jobs").status_code == 404
+    assert client.get("/api/heartbeat/status").status_code == 404
 
 
 def test_api_skills_list(client):

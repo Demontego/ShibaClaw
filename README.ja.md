@@ -31,7 +31,8 @@
   <a href="./README.pt-BR.md">Português (BR)</a> ·
   <a href="./README.ja.md">日本語</a> ·
   <a href="./README.de.md">Deutsch</a> ·
-  <a href="./README.fr.md">Français</a>
+  <a href="./README.fr.md">Français</a> ·
+  <a href="./README.it.md">Italiano</a>
 </p>
 
 ---
@@ -40,15 +41,16 @@
 > リリースノートは [CHANGELOG.md](./CHANGELOG.md) にあります。
 
 <details open>
-<summary>📢 <b>最新情報 — v0.9.13</b>（クリックで展開）</summary>
+<summary>🚀 <b>最新情報 — v1.0.0 メジャーマイルストーン</b>（クリックで展開）</summary>
 
-**最新リリース（2026-08-01）：**
+**最新リリース v1.0.0（2026-09-08）：**
 
-- **ExecTool のコマンドインジェクション脆弱性の修正** — シェル実行における重大なコマンドインジェクション脆弱性（CWE-78）を、`shlex` による引数解析と直接プロセス実行（`create_subprocess_exec`）に置き換えて解決しました。
-- **依存関係のセキュリティ脆弱性の修正** — `protobufjs`（v7.6.5）および `sharp`（v0.35.3）のオーバーライドを更新し、bridge npm 依存関係の脆弱性を解決しました。
-- **エージェントループとステアリングの安定化** — `/update` コマンドのクラッシュを解消し、アクティブタスク中のメッセージステアリングにおけるセッションルーティングとイベント発行を修正しました。
-- **WebUI トークン見積もり** — メッセージリスト渡す際の API エンドポイント `estimate_prompt_tokens` の引数型処理を修正しました。
-- **Cloud RAG 依存関係** — Cloud RAG の依存範囲とデフォルト埋め込みモデル構成を修正しました。
+- **マイルストーン 1.0.0 — 本番対応エージェントフレームワーク** — ShibaClaw がついにバージョン 1.0.0 に到達！プライバシー、モジュール設計、高信頼性を追求したセルフホスト型パーソナル AI アシスタント。Python 3.12〜3.14 のフルサポートと Ubuntu/Windows のクロスプラットフォーム CI を完備。
+- **インタラクティブ・メモリマネージャーと隔離機能** — WebUI サイドバーに専用管理パネル（`psychology` アイコン）と REST API（`/api/memory`）を新設。長期記憶（`MEMORY.md`）、ユーザー設定（`USER.md`）、セッション履歴タイムライン（`HISTORY.md`）、ドリームダイアリー（`DREAM_DIARY.md`）のリアルタイム閲覧・ライブ編集が可能に。トークン使用量予算管理と安全な隔離（quarantine）機能を搭載。
+- **次世代 Human-in-the-Loop インタラクティブ UX** — エージェント実行中の対話的サポート：構造化された選択肢プロンプト（`ask_user`）、LLM コンテキストから完全隔離されたシークレット入力（`request_credential`）、進捗状況カード（`update_progress`）、高速セッション履歴検索（`session_search`）、セッション単位の動的サンドボックス権限モード（`full` | `workspace` | `readonly`）。
+- **セキュリティ強化と完全分離インコグニートセッション** — `ContextVar` によるツール実行スコープ分離で並行セッション間のデータ漏洩を防止。シークレット（Incognito）モードではディスク上の JSONL 履歴を完全消去しメモリ統合をスキップ。プロファイル単位のモデル許可リストによるフェイルクローズド保護。
+- **LangChain 1.4+ への全面移行と Dependabot 脆弱性解消** — RAG スタック全体を最新の LangChain 1.4+（`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`）へ刷新し、報告されていた Dependabot セキュリティ脆弱性を完全解消（`pip-audit` クリーン）。
+- **軽量モジュラー構成、`uv` 採用と診断 Doctor コマンド** — 必要に応じたオプショナル依存関係（`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`）、プラグインとチャネルの遅延ロードによる超高速起動、CLI 診断コマンド `shibaclaw doctor [--fix]` を提供。
 
 完全なリリース履歴は [Changelog](./CHANGELOG.md) を参照してください。
 
@@ -69,7 +71,8 @@ ShibaClaw は、自分のマシンやサーバーで動かすセルフホスト�
 ## 機能
 
 - **セキュリティ最優先のコア** —— 暗号化された認証情報保管庫、インストール時 CVE 監査、プロンプトインジェクションのラップ、SSRF/DNS リバインディング保護
-- **3 層メモリ** —— ワーキング・セマンティック（FAISS）・プロシージャル。プロアクティブ学習と自動圧縮付き
+- **3 層メモリ & WebUI マネージャー** —— ワーキング・セマンティック（FAISS）・プロシージャル。WebUI による対話的管理、ライブ編集、ドリームダイアリー、安全な隔離機能付き
+- **Human-in-the-Loop インタラクティブ UX** —— 実行中の構造化プロンプト（`ask_user`）、保管庫保護シークレット、進捗カード、動的権限サンドボックス
 - **28 プロバイダ、ネイティブ SDK** —— OpenAI、Anthropic、Gemini、DeepSeek など。LiteLLM プロキシ層なし
 - **Web とモバイル** —— WebUI を LAN に公開すれば、スマホから同じエージェントを利用可能
 - **Windows デスクトップアプリ** —— システムトレイ統合付きのネイティブランチャー

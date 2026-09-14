@@ -1,3 +1,46 @@
+## [1.0.0] - 2026-09-08
+
+### Added
+- **OpenClaw-Inspired Interactive UX (Batch 1)** — Introduced in-turn interactive tools: `ask_user` for structured multi-choice prompts, `request_credential` for masked sensitive secrets isolated in vault (`runtime/` namespace, strictly withheld from LLM context), `update_progress` for durable progress cards in WebUI, and `session_search` for exact-phrase session history scanning. Added gateway event `chat.interactive`, action `interactive_reply`, and per-session `permission_mode` (`full` | `workspace` | `readonly`) dynamically rebinding filesystem and execution sandboxes.
+- **OpenClaw-Inspired Governance, Memory & Operations (Batch 2)** — Automation approve-once grants (`requireApproval` flag with fingerprint invalidation on command changes; `automation.approve` / `automation.revoke`); memory ownership tools (`memory_forget`, Dream Diary `DREAM_DIARY.md`, provenance tracking); Skill Workshop staging (up to 3 pending proposals with approve/reject API); plugin installation trust confirmation with skill `trust` metadata; configuration audit history (`~/.shibaclaw/config_history.jsonl`, `GET /api/config-history`); Telegram structured ask via inline keyboard callbacks resolving through `InteractiveHub`; per-profile `allowed_models` restrictions; conversation fork and rewind REST APIs; `shibaclaw doctor [--fix]` CLI diagnostic command; unconstrained Telegram Mini App full chat for non-admin users; and ephemeral incognito sessions (RAM-only execution skipping memory consolidation).
+- **Memory Manager WebUI Panel & REST API** — Added a dedicated interactive Memory Manager tool to the sidebar (`psychology` icon) and REST endpoints (`/api/memory`, `/api/memory/save`, `/api/memory/forget`). Allows exploring and editing long-term facts (`MEMORY.md`), user preferences (`USER.md`), session history timeline (`HISTORY.md`), and dream reflections / quarantine (`DREAM_DIARY.md`). Includes real-time memory token budgeting and interactive keyword redaction/forget with preview and quarantine protection.
+- **Cross-Platform CI & Python 3.14 Support** — Added comprehensive GitHub Actions workflow testing matrix across Ubuntu and Windows, Python 3.12, 3.13, and 3.14, verifying cross-platform installation and Windows desktop packaging.
+
+### Security & Fixed
+- **Dependabot Security Vulnerabilities & LangChain Advisory Fixes** — Resolved 5 open Dependabot security advisories across `langchain-core` (path traversal in legacy `load_prompt` - CVE-2026-34070, and SSRF in `image_url` token counting in `ChatOpenAI`), `langchain-text-splitters` (SSRF redirect bypass in `split_text_from_url` - CVE-2026-41481), `langchain` (path traversal and sandbox escape in loaders/middleware), and `langchain-openai` (DNS rebinding SSRF in image token counting). Upgraded packages eliminate all known vulnerabilities (`pip-audit` clean).
+- **Interactive Tool Concurrency Isolation** — Refactored interactive tools (`shibaclaw/agent/interactive_ctx.py`) to use per-execution `ContextVar` scoping instead of shared mutable state on singleton tool instances, preventing cross-session message and credential leaks under concurrent load.
+- **Incognito Session Privacy & Memory Isolation** — Toggling a previously saved session into incognito mode now purges existing JSONL session logs from disk and clears active memory caches. Incognito sessions strictly bypass memory consolidation on `/new` resets and WebUI archive operations to prevent long-term memory leakage.
+- **Session Search Authorization Scoping** — Restricted global transcript search via `session_search` exclusively to WebUI/CLI/system sessions, denying non-admin Telegram Mini App access to protect transcript privacy.
+- **Fail-Closed Profile Model Allowlist** — Profile `allowed_models` enforcement now strictly fails closed upon evaluation errors, preventing unauthorized fallback execution.
+- **Memory Forget Quarantine & Confirmation** — `memory_forget` now requires explicit user confirmation, routes pruned entries into quarantine rather than destructive immediate deletion, and logs redacted audit trails.
+
+### Changed
+- **LangChain 1.4+ Ecosystem Migration** — Migrated the RAG stack to modern LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-text-splitters>=1.1.2`, `langchain-openai>=1.6.0`, `langchain-community>=0.4.2`, `langchain-huggingface>=1.2.2`, `langchain-classic>=1.0.8`). Directly added `langchain-core` and `langchain-text-splitters` to `[project.optional-dependencies.rag]` for explicit security tracking.
+- **Slim Core Dependencies & uv Packaging (PR #167)** — Modularized dependencies with new optional extras (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`) for lean VPS and headless server deployments. Standardized development, packaging, and CI workflows on `uv` (`astral-sh/setup-uv@v5` with frozen `uv.lock`).
+- **Lazy Loading & Startup Optimization** — Lazy discovery and import of only enabled built-in channels and plugins at gateway startup; deferred LangChain, RAG vectorstores, and OpenAI Codex OAuth imports until explicitly invoked.
+- **Dynamic RAG Availability & Clean Errors** — Replaced static `RAG_AVAILABLE` state with dynamic module-level resolution to eliminate import-order race conditions and ensure accurate test suite evaluation; aligned missing extra error messages to `uv sync --extra ...`.
+- **Platform-Specific Dependency Markers** — Restricted Linux-only packages (e.g. `cuda-pathfinder`) and macOS/Unix platform-specific packages (`pyobjc-*`, `python-xlib`) with explicit platform markers in `uv.lock`, eliminating unnecessary compilation on Windows.
+
+## [0.9.20] - 2026-08-07
+
+### Added
+- **Redesigned WebUI Sidebar & Telegram UI Enhancements** — Telegram and WebUI received extra love! Implemented tactile Shiba Gold design tokens, high-contrast dark charcoal surface hierarchy (`#111113`), info tooltips for Telegram **Rich Messages**, `@username` guidance in `allow_from` mouseover tooltips, compact tool action rail, and handcrafted command search bar.
+- **Telegram Bot API 10.1 Rich Messages (PR #152)** — Opt-in Telegram Bot API 10.1 Rich Messages support (`sendRichMessage` via direct `do_api_request`), featuring automatic layout block generation (`auto-build rich blocks`) for mathematical expressions, formatted tables, and media collages.
+- **Telegram Secretary Automation, Mini App Auth & Profile Access Control Integration (Commit 0b7db89)** — Consolidated Telegram secretary automation, Mini App auth, and profile-based tool access control into core metadata, manifest updates, and build assets.
+
+### Fixed
+- **Session Dropdown Menu Clipping & Z-Index Elevation** — Resolved dropdown clipping caused by `.channel-group-items` overflow containment. Added `.has-active-dropdown` z-index elevation (`z-index: 100`) and smart bottom boundary flip detection.
+- **Agent Avatar Rendering & Dynamic Fallbacks** — Fixed agent avatar sizing (30px × 30px circular badge), display properties, and dynamic `onerror` fallback resolution (`/static/shibaclaw_logo.webp` <-> `/shibaclaw_logo.webp`).
+- **Version Alignment** — Bumped version to `v0.9.20` across all package manifests, build scripts, configuration, and documentation files.
+- **Gateway Client WebSocket Exception Handling (PR #150)** — Resolved `AttributeError` by referencing the correct `websockets.exceptions` namespace in Gateway client reconnect/disconnect loop (`fix(cli): use correct websockets.exceptions namespace`).
+- **Private DM Forum Topics Session Isolation** — Bot API 9.3+ topics in private chats with the bot no longer share one `telegram:{chat_id}` session. When `message_thread_id` is present, history and per-session profile follow `telegram:{chat_id}:topic:{thread_id}` (same as group forums). WebUI autolabels append `· topic {id}` so owner DM topics stay distinguishable.
+- **Telegram Polling Missing `callback_query` Update Type** — `allowed_updates` only requested `message` / `edited_message`, so inline keyboard callbacks never reached the bot. Included `callback_query` so button handlers (e.g. profile pickers) work properly.
+
+### Changed
+- **Runtime Simplification & Dead-Code Cleanup** — Removed unused browser tool, root WhatsApp `bridge/` duplicate, vendored socket.io copies, legacy WebUI `static/js/` tree, cron/heartbeat polling aliases, and unused direct deps (`websocket-client`, `questionary`, `chardet`, empty `telegram` / `langsmith` extras). Thin `CustomThinker`, route agent session KB updates through `PackManager` (no `webui` import), extract gateway HTTP/WS helpers + streaming token coalescing, defer system-prompt rebuild work, async session save, and skip secretary qmd reindex when digests are unchanged. Characterization tests cover agent turn, gateway actions/protocol, and secretary sync.
+- **Follow-up Deduplication & Router Extraction** — Split remnant `webui/api.py` into routers; extract `telegram_rich` + shared `oauth_util`; unify automation schedule-kind parsing; drop duplicate wheel `static/css/` (bundle-only), legacy thinking CSS, heartbeat hidden settings fields (preserve `gateway.heartbeat` on save), `get_cron_dir` alias, analysis artifact `logic_lens_scope.json`, and obsolete skipped heartbeat tests.
+
+
 ## [0.9.13] - 2026-08-01
 
 ### Added
