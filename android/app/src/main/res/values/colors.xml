@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="shiba_gold">#E8A317</color>
+    <color name="shiba_gold_light">#F5C94A</color>
+    <color name="bg">#111113</color>
+    <color name="bg_card">#1A1A1D</color>
+    <color name="text">#F5F0E8</color>
+    <color name="text_muted">#9A958C</color>
+    <color name="bubble">#E8A317</color>
+    <color name="bubble_text">#111113</color>
+</resources>

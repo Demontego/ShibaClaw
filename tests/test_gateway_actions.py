@@ -37,6 +37,8 @@ def test_gateway_ws_exposes_core_chat_and_automation_actions():
         "automation.create",
         "automation.get",
         "automation.update",
+        "device.register",
+        "device.tools.result",
     }
     missing = required - actions
     assert not missing, f"missing gateway actions: {sorted(missing)}"
