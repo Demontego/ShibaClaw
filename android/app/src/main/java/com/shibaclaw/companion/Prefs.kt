@@ -2,6 +2,7 @@ package com.shibaclaw.companion
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import java.util.UUID
 
 object Prefs {
@@ -21,22 +22,28 @@ object Prefs {
         return p
     }
 
-    fun host(ctx: Context? = null): String = prefs(ctx).getString("host", "") ?: ""
-    fun port(ctx: Context? = null): Int = prefs(ctx).getInt("port", 19998)
+    fun baseUrl(ctx: Context? = null): String = prefs(ctx).getString("base_url", "") ?: ""
+    fun username(ctx: Context? = null): String = prefs(ctx).getString("username", "") ?: ""
+    fun password(ctx: Context? = null): String = prefs(ctx).getString("password", "") ?: ""
     fun token(ctx: Context? = null): String = prefs(ctx).getString("token", "") ?: ""
     fun deviceId(ctx: Context? = null): String = prefs(ctx).getString("device_id", "") ?: ""
-    fun label(ctx: Context? = null): String = prefs(ctx).getString("label", android.os.Build.MODEL) ?: "Android"
+    fun label(ctx: Context? = null): String =
+        prefs(ctx).getString("label", Build.MODEL) ?: "Android"
     fun lastBubble(ctx: Context? = null): String = prefs(ctx).getString("bubble", "") ?: ""
     fun mood(ctx: Context? = null): String = prefs(ctx).getString("mood", Mood.SLEEP.name) ?: Mood.SLEEP.name
     fun lastTapAt(ctx: Context? = null): Long = prefs(ctx).getLong("last_tap", 0L)
-    fun isPaired(ctx: Context? = null): Boolean = host(ctx).isNotBlank()
+    fun isPaired(ctx: Context? = null): Boolean = baseUrl(ctx).isNotBlank()
 
-    fun savePair(ctx: Context, host: String, port: Int, token: String) {
+    fun savePair(ctx: Context, baseUrl: String, username: String, password: String) {
         prefs(ctx).edit()
-            .putString("host", host.trim())
-            .putInt("port", port)
-            .putString("token", token)
+            .putString("base_url", Endpoints.baseUrl(baseUrl))
+            .putString("username", username.trim())
+            .putString("password", password)
             .apply()
+    }
+
+    fun setToken(ctx: Context, token: String) {
+        prefs(ctx).edit().putString("token", token).apply()
     }
 
     fun setMood(ctx: Context, mood: Mood) {

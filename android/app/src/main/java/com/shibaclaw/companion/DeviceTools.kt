@@ -82,3 +82,5 @@ class DeviceTools(private val ctx: Context) {
         return ToolOutcome(true, result = "opened $which")
     }
 }
+
+data class ToolOutcome(val ok: Boolean, val result: String = "", val error: String = "")

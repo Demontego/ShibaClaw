@@ -15,13 +15,13 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 
-class ShibaService : Service(), GatewayClient.Listener {
-    private lateinit var client: GatewayClient
+class ShibaService : Service(), ShibaClient.Listener {
+    private lateinit var client: ShibaClient
 
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
-        client = GatewayClient(DeviceTools(this), this)
+        client = ShibaClient(DeviceTools(this), this)
         Companion.instance = this
     }
 
@@ -73,8 +73,9 @@ class ShibaService : Service(), GatewayClient.Listener {
             return
         }
         client.connect(
-            Prefs.host(this),
-            Prefs.port(this),
+            Prefs.baseUrl(this),
+            Prefs.username(this),
+            Prefs.password(this),
             Prefs.token(this),
             Prefs.deviceId(this),
             Prefs.label(this),
@@ -112,6 +113,10 @@ class ShibaService : Service(), GatewayClient.Listener {
             onMood(Mood.ERROR)
             ChatBus.emitStatus(error ?: getString(R.string.status_offline))
         }
+    }
+
+    override fun onToken(token: String) {
+        Prefs.setToken(this, token)
     }
 
     override fun onMood(mood: Mood) {
