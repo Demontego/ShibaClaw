@@ -1,3 +1,8 @@
+## [1.0.1] - 2026-09-17
+
+### Security & Fixed
+- **Dependabot Security Alert #23 & Sharp Upgrade** — Upgraded `sharp` to `^0.35.4` in the WhatsApp bridge plugin (`plugins/shibaclaw-channel-whatsapp/shibaclaw_channel_whatsapp/bridge`), resolving high-severity advisory GHSA-rgj7-g3m4-5g8c in upstream `libheif` via `@img/sharp-libvips-*` 1.3.3.
+
 ## [1.0.0] - 2026-09-08
 
 ### Added

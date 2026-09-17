@@ -41,10 +41,11 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Neuigkeiten — v1.0.0 Meilenstein-Release</b> (zum Ausklappen klicken)</summary>
+<summary>🚀 <b>Neuigkeiten — v1.0.1 Sicherheitsrelease</b> (zum Ausklappen klicken)</summary>
 
-**Neueste Version v1.0.0 (2026-09-08):**
+**Neueste Version v1.0.1 (2026-09-17):**
 
+- **Sicherheit & Dependabot-Alert #23 Behebung** — Upgrade von `sharp` auf `0.35.4` im WhatsApp-Bridge-Plugin zur Behebung der Sicherheitslücke GHSA-rgj7-g3m4-5g8c in `libheif`.
 - **Meilenstein 1.0.0 — Produktionsreifes Agenten-Framework** — ShibaClaw erreicht Version 1.0.0! Ein vollständig selbstgehosteter persönlicher KI-Assistent, optimiert für Privatsphäre, Modularität und maximale Stabilität mit voller Unterstützung für Python 3.12–3.14 sowie plattformübergreifender Ubuntu/Windows-CI.
 - **Interaktiver Speicher-Manager & Live-Quarantäne** — Brandneues dediziertes WebUI-Panel (`psychology`-Icon in der Seitenleiste) und REST-Endpunkte (`/api/memory`). Langzeitwissen (`MEMORY.md`), Benutzerpräferenzen (`USER.md`), Sitzungschronik (`HISTORY.md`) und Traumtagebuch-Reflexionen (`DREAM_DIARY.md`) direkt im Browser inspizieren und editieren – inklusive Echtzeit-Token-Budgetierung und sicherer Quarantäne-Redaktion.
 - **Interaktive Next-Gen Human-in-the-Loop-UX** — Nahtlose Benutzerinteraktion während laufender Agenten-Turns: strukturierte `ask_user`-Auswahlmenüs, maskierte Tresor-Eingaben via `request_credential` (streng vom LLM-Kontext isoliert), persistente `update_progress`-Fortschrittskarten, schnelle `session_search`-Verlaufssuche und dynamische Sandbox-Berechtigungsmodi (`full` | `workspace` | `readonly`).

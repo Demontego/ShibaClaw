@@ -1,26 +1,31 @@
 {
-    "version": "1.0.0",
-    "release_notes": "Milestone v1.0.0 release featuring the interactive WebUI Memory Manager, OpenClaw-inspired in-turn interactive UX (ask_user, request_credential, update_progress), zero-leak incognito mode, LangChain 1.4+ security upgrades, and modular packaging.",
+    "version": "1.0.1",
+    "release_notes": "Security release v1.0.1 upgrading sharp to 0.35.4 in the WhatsApp bridge to resolve Dependabot security alert #23 (GHSA-rgj7-g3m4-5g8c / libheif vulnerabilities).",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped version to 1.0.0."
+            "note": "Bumped version to 1.0.1."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v1.0.0 release notes."
+            "note": "Added v1.0.1 release notes."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated documentation version to 1.0.0."
+            "note": "Updated documentation version to 1.0.1."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Bumped packaged update manifest to v1.0.0."
+            "note": "Bumped packaged update manifest to v1.0.1."
+        },
+        {
+            "path": "plugins/shibaclaw-channel-whatsapp/shibaclaw_channel_whatsapp/bridge/package.json",
+            "overwrite": true,
+            "note": "Upgraded sharp override to ^0.35.4."
         }
     ]
 }

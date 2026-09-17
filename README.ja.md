@@ -41,10 +41,11 @@
 > リリースノートは [CHANGELOG.md](./CHANGELOG.md) にあります。
 
 <details open>
-<summary>🚀 <b>最新情報 — v1.0.0 メジャーマイルストーン</b>（クリックで展開）</summary>
+<summary>🚀 <b>最新情報 — v1.0.1 セキュリティリリース</b>（クリックで展開）</summary>
 
-**最新リリース v1.0.0（2026-09-08）：**
+**最新リリース v1.0.1（2026-09-17）：**
 
+- **セキュリティ対応 & Dependabot アラート #23 の修正** — WhatsApp ブリッジプラグイン内の `sharp` を `0.35.4` にアップグレードし、アップストリーム `libheif` の高深刻度脆弱性 GHSA-rgj7-g3m4-5g8c を解消しました。
 - **マイルストーン 1.0.0 — 本番対応エージェントフレームワーク** — ShibaClaw がついにバージョン 1.0.0 に到達！プライバシー、モジュール設計、高信頼性を追求したセルフホスト型パーソナル AI アシスタント。Python 3.12〜3.14 のフルサポートと Ubuntu/Windows のクロスプラットフォーム CI を完備。
 - **インタラクティブ・メモリマネージャーと隔離機能** — WebUI サイドバーに専用管理パネル（`psychology` アイコン）と REST API（`/api/memory`）を新設。長期記憶（`MEMORY.md`）、ユーザー設定（`USER.md`）、セッション履歴タイムライン（`HISTORY.md`）、ドリームダイアリー（`DREAM_DIARY.md`）のリアルタイム閲覧・ライブ編集が可能に。トークン使用量予算管理と安全な隔離（quarantine）機能を搭載。
 - **次世代 Human-in-the-Loop インタラクティブ UX** — エージェント実行中の対話的サポート：構造化された選択肢プロンプト（`ask_user`）、LLM コンテキストから完全隔離されたシークレット入力（`request_credential`）、進捗状況カード（`update_progress`）、高速セッション履歴検索（`session_search`）、セッション単位の動的サンドボックス権限モード（`full` | `workspace` | `readonly`）。

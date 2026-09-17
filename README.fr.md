@@ -41,10 +41,11 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Nouveautés — Version Majeure v1.0.0</b> (cliquez pour déplier)</summary>
+<summary>🚀 <b>Nouveautés — Version de Sécurité v1.0.1</b> (cliquez pour déplier)</summary>
 
-**Dernière version v1.0.0 (2026-09-08) :**
+**Dernière version v1.0.1 (2026-09-17) :**
 
+- **Sécurité & Correction de l'Alerte Dependabot #23** — Mise à niveau de `sharp` vers la version `0.35.4` dans le plugin bridge WhatsApp, corrigeant la vulnérabilité de gravité élevée GHSA-rgj7-g3m4-5g8c dans `libheif`.
 - **Étape Majeure 1.0.0 — Framework d'Agent Prêt pour la Production** — ShibaClaw franchit le cap de la 1.0.0 ! Un assistant IA personnel auto-hébergé conçu pour la confidentialité, la modularité et une stabilité à toute épreuve, compatible Python 3.12–3.14 avec intégration continue multiplateforme Ubuntu/Windows.
 - **Gestionnaire de Mémoire Interactif & Quarantaine en Direct** — Nouveau panneau dédié dans la WebUI (icône `psychology` dans la barre latérale) et API REST (`/api/memory`). Visualisez et modifiez en direct les connaissances à long terme (`MEMORY.md`), les préférences utilisateur (`USER.md`), l'historique chronologique (`HISTORY.md`) et le journal de rêves (`DREAM_DIARY.md`), avec suivi du budget de tokens et mise en quarantaine sécurisée des faits oubliés.
 - **Expérience Interactive Nouvelle Génération Human-in-the-Loop** — Interaction fluide pendant les tours de l'agent : questions structurées à choix multiples (`ask_user`), masquage sécurisé de clés/identifiants en coffre-fort (`request_credential`, hors du contexte LLM), cartes de progression visuelles (`update_progress`), recherche rapide d'historique (`session_search`) et modes de permission dynamiques par session (`full` | `workspace` | `readonly`).

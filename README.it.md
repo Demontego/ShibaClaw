@@ -38,10 +38,11 @@
 ---
 
 <details open>
-<summary>🚀 <b>Novità — Release cardine v1.0.0</b> (fai clic per espandere)</summary>
+<summary>🚀 <b>Novità — Release di sicurezza v1.0.1</b> (fai clic per espandere)</summary>
 
-**Ultima release v1.0.0 (2026-09-08):**
+**Ultima release v1.0.1 (2026-09-17):**
 
+- **Sicurezza e risoluzione Dependabot #23** — Aggiornato `sharp` a `0.35.4` nel plugin bridge di WhatsApp, risolvendo la vulnerabilità ad alta gravità GHSA-rgj7-g3m4-5g8c nella libreria upstream `libheif`.
 - **Traguardo 1.0.0 — Framework di agenti pronto per la produzione** — ShibaClaw raggiunge la 1.0.0! Un assistente IA personale completo e self-hosted, progettato per privacy, modularità e massima stabilità, con pieno supporto a Python 3.12–3.14 e CI multipiattaforma Ubuntu/Windows.
 - **Gestore memoria interattivo e quarantena in tempo reale** — Nuovo pannello dedicato nella WebUI (icona `psychology` nella barra laterale) ed endpoint REST (`/api/memory`). Ispeziona e modifica in tempo reale le conoscenze a lungo termine (`MEMORY.md`), le preferenze utente (`USER.md`), la cronologia della sessione (`HISTORY.md`) e le riflessioni del diario dei sogni (`DREAM_DIARY.md`), con monitoraggio in tempo reale del budget di token e redazione sicura degli elementi in quarantena.
 - **UX interattiva durante il turno e Human-in-the-Loop di nuova generazione** — Interazione fluida durante i turni dell'agente: prompt strutturati a scelta multipla (`ask_user`), isolamento sicuro delle credenziali nel vault mascherato (`request_credential`, tenute rigorosamente fuori dal contesto LLM), schede di avanzamento visive persistenti (`update_progress`), ricerca rapida nelle sessioni (`session_search`) e permessi di sandbox dinamici per sessione (`full` | `workspace` | `readonly`).

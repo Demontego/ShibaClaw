@@ -41,10 +41,11 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>🚀 <b>最新动态 — v1.0.0 里程碑发布</b>（点击展开）</summary>
+<summary>🚀 <b>最新动态 — v1.0.1 安全发布</b>（点击展开）</summary>
 
-**最新发布 v1.0.0 (2026-09-08):**
+**最新发布 v1.0.1 (2026-09-17):**
 
+- **安全更新与 Dependabot 告警 #23 修复** — 升级 WhatsApp 桥接插件中的 `sharp` 至 `0.35.4`，修复上游 `libheif` 的高危漏洞 GHSA-rgj7-g3m4-5g8c。
 - **里程碑 1.0.0 — 生产就绪型智能体框架** — ShibaClaw 正式迈入 1.0.0 时代！专为隐私、模块化和极致稳定性打造的自托管个人 AI 助手框架，全面支持 Python 3.12–3.14 并配备 Ubuntu 与 Windows 跨平台自动化 CI。
 - **交互式内存管理器与实时隔离区** — 全新 WebUI 专属管理面板（侧边栏 `psychology` 图标）与 REST API（`/api/memory`）。实时查看并在线编辑长期知识（`MEMORY.md`）、用户偏好（`USER.md`）、会话时间线（`HISTORY.md`）以及梦境日记（`DREAM_DIARY.md`），内置实时 Token 预算监控与安全遗忘隔离防丢机制。
 - **下一代人机协同交互体验 (Human-in-the-Loop UX)** — 智能体运行中的无缝协同：结构化多选交互提示（`ask_user`）、隔离保密凭据输入（`request_credential`，绝密保管于保险库且绝不泄露给 LLM 上下文）、持久化进度卡片（`update_progress`）、精准会话全文搜索（`session_search`）以及每会话动态沙箱权限隔离（`full` | `workspace` | `readonly`）。
