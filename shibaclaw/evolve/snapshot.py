@@ -137,5 +137,6 @@ def snapshot(
         "chronicle": _tail(workspace / "memory" / "evolution" / "LOG.md"),
         "backlog": _tail(knowledge / "improvement-backlog.md"),
         "patterns": _tail(knowledge / "patterns.md"),
+        "world": _tail(workspace / "memory" / "evolution" / "WORLD.md"),
         "repo": _repo_view(repo) if repo else None,
     }

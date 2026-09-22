@@ -12,6 +12,7 @@
         chronicle: "Chronicle",
         backlog: "Backlog",
         patterns: "Patterns",
+        world: "World",
         commits: "Recent commits",
         empty: "Nothing here yet.",
         branch: "branch",
@@ -35,6 +36,7 @@
         chronicle: "Хроника",
         backlog: "Бэклог",
         patterns: "Классы",
+        world: "Мир",
         commits: "Последние коммиты",
         empty: "Пока пусто.",
         branch: "ветка",
@@ -110,6 +112,7 @@
             ${pre(L("chronicle"), data.chronicle)}
             ${pre(L("backlog"), data.backlog)}
             ${pre(L("patterns"), data.patterns)}
+            ${pre(L("world"), data.world)}
             <section class="evolve-block"><h3>${esc(L("commits"))}</h3><ul class="evolve-commits">${commitHtml}</ul></section>`;
     }
 

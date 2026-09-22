@@ -25,7 +25,7 @@ Read `memory/knowledge/patterns.md`, `memory/knowledge/improvement-backlog.md`, 
 The same failure twice, and the class is not in patterns yet → append the class and one Open backlog item. Then `shibaclaw evolve end`. Tell the owner one line. Stop.
 
 An Open item exists → take the top one through review or FAIL.
-Nothing open and no new class → `shibaclaw evolve end`, reply exactly `EVOLVE_SKIP`.
+Nothing open and no new class → do not stop. One world topic, section 5.
 
 ## 2. Branch
 
@@ -57,3 +57,11 @@ Non-zero → `shibaclaw evolve end` and send the reason to the owner. Do not ins
 This package does not restart itself. Installing the reviewed commit is the operator's deploy step. After that deploy, `shibaclaw evolve note-apply` counts it against the daily budget (3 applies, 45 minutes between them).
 
 Success of this tick with no deploy → `shibaclaw evolve end`. Reply exactly `EVOLVE_QUIET` when a later deploy step will report. Otherwise one line to the owner.
+
+## 5. World
+
+No code class, or the apply budget is closed. One topic from `USER.md` and `memory/people/` (interests and friction, not raw chats). Do not open a private message archive. Do not message other chats.
+
+Search, then fetch two or three pages. Append `memory/evolution/WORLD.md`: date, whose interest, topic, a few facts, links. Do not rewrite `USER.md` or friend profiles.
+
+At most 16 topics a day, and not again within 30 minutes. Then `shibaclaw evolve end`. One line to the owner if something is new. Otherwise reply exactly `EVOLVE_SKIP`.

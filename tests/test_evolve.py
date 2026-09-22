@@ -63,7 +63,7 @@ def test_alarm_job_is_every_thirty_minutes(tmp_path, monkeypatch):
     job = next(j for j in service.list_jobs() if j.name == "Shiba evolve")
     assert job.enabled is True
     assert job.schedule.kind == "every"
-    assert job.schedule.every_ms == 30 * 60 * 1000
+    assert job.schedule.every_ms == 10 * 60 * 1000
     assert job.payload.to == "1"
     assert "EVOLVE_SKIP" in job.payload.message
 
@@ -118,6 +118,7 @@ def test_snapshot_reads_gate_and_job(tmp_path, monkeypatch):
     handle("on", workspace=tmp_path, tz=UTC)
     (tmp_path / "memory" / "evolution").mkdir(parents=True)
     (tmp_path / "memory" / "evolution" / "LOG.md").write_text("встала demo\n", encoding="utf-8")
+    (tmp_path / "memory" / "evolution" / "WORLD.md").write_text("topic cinema\n", encoding="utf-8")
     auto = tmp_path / "automation.json"
     auto.write_text(
         '{"jobs":[{"name":"Shiba evolve","enabled":true,"schedule":{"kind":"every","everyMs":1800000},"state":{"nextRunAtMs":10,"lastStatus":"ok","lastRunAtMs":1}}]}',
@@ -129,6 +130,7 @@ def test_snapshot_reads_gate_and_job(tmp_path, monkeypatch):
     assert view["code"] == 0
     assert view["enabled"] is True
     assert "встала demo" in view["chronicle"]
+    assert "topic cinema" in view["world"]
     assert view["job"]["every_ms"] == 1800000
     assert view["job"]["last_status"] == "ok"
     assert view["repo"] is None
