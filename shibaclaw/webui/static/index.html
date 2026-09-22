@@ -120,6 +120,10 @@
                         aria-label="Memory">
                         <span class="material-icons-round">psychology</span>
                     </button>
+                    <button class="btn-command" id="btn-evolve" onclick="openModal('evolve-modal')"
+                        title="Evolution" aria-label="Evolution">
+                        <span class="material-icons-round">auto_awesome</span>
+                    </button>
                     <button class="btn-command" onclick="openModal('connected-apps-modal')" data-i18n-title="nav.apps"
                         data-i18n-aria="nav.apps" title="Apps" aria-label="Apps">
                         <span class="material-icons-round">apps</span>
@@ -1208,6 +1212,39 @@
         </div>
     </div>
 
+    <!-- ══ Evolution ══════════════════════════════════════════════════════ -->
+    <div id="evolve-modal" class="modal-backdrop">
+        <div class="modal" style="width: 860px; max-width: 95vw; height: 85vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="material-icons-round" style="color: var(--shiba-gold);">auto_awesome</span>
+                    <h2 id="evolve-title">Evolution</h2>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button class="btn-icon" aria-label="Refresh" title="Refresh" onclick="loadEvolve()">
+                        <span class="material-icons-round">refresh</span>
+                    </button>
+                    <button class="btn-icon" aria-label="Close" title="Close" onclick="closeModal('evolve-modal')">
+                        <span class="material-icons-round">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body" id="evolve-content" style="flex: 1; overflow-y: auto; padding: 16px;"></div>
+        </div>
+    </div>
+    <style>
+        .evolve-status { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; margin-bottom: 8px; }
+        .evolve-chip { padding: 2px 8px; border-radius: 12px; background: rgba(212, 175, 55, 0.15); color: var(--shiba-gold, #d4af37); }
+        .evolve-repo { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+        .evolve-block { margin: 0 0 14px; }
+        .evolve-block h3 { margin: 0 0 6px; font-size: 13px; }
+        .evolve-block pre { white-space: pre-wrap; margin: 0; font-size: 12px; line-height: 1.45; max-height: 220px; overflow: auto; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+        .evolve-commits { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+        .evolve-commits li { padding: 4px 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+        .evolve-commits span { color: var(--text-muted); margin-left: 6px; }
+        .evolve-loading, .evolve-error { padding: 2rem; text-align: center; }
+    </style>
+
     <!-- ══ Memory Manager Modal ══════════════════════════════════════════ -->
     <div id="memory-modal" class="modal-backdrop">
         <div class="modal" style="width: 800px; max-width: 95vw; height: 85vh; display: flex; flex-direction: column;">
@@ -1583,6 +1620,7 @@
     </div>
 
     <script src="/static/bundle.js?v=1788852433962"></script>
+    <script src="/static/js/evolve.js?v=1788852433962"></script>
     <script src="/static/js/chat_history_window.js?v=1788852433962"></script>
 </body>
 

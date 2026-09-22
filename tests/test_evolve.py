@@ -111,3 +111,24 @@ def test_check_refuses_default_branch_and_env(tmp_path):
     git("add", "ok.py")
     git("commit", "-m", "fix")
     assert check_repo(repo) is None
+
+
+def test_snapshot_reads_gate_and_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
+    handle("on", workspace=tmp_path, tz=UTC)
+    (tmp_path / "memory" / "evolution").mkdir(parents=True)
+    (tmp_path / "memory" / "evolution" / "LOG.md").write_text("встала demo\n", encoding="utf-8")
+    auto = tmp_path / "automation.json"
+    auto.write_text(
+        '{"jobs":[{"name":"Shiba evolve","enabled":true,"schedule":{"kind":"every","everyMs":1800000},"state":{"nextRunAtMs":10,"lastStatus":"ok","lastRunAtMs":1}}]}',
+        encoding="utf-8",
+    )
+    from shibaclaw.evolve.snapshot import snapshot
+
+    view = snapshot(tmp_path, auto, tz=UTC)
+    assert view["code"] == 0
+    assert view["enabled"] is True
+    assert "встала demo" in view["chronicle"]
+    assert view["job"]["every_ms"] == 1800000
+    assert view["job"]["last_status"] == "ok"
+    assert view["repo"] is None
