@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Opt-in self-evolution** — `/evolve on|off` and `/panic` (owner DM or WebUI). A 30-minute alarm asks the agent to take one backlog class on an `evolve/*` branch. A separate `shibaclaw agent --model` session reviews it. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself and does not change the saved provider. Budget: 3 applies per day, 45 minutes between them.
+
 ## [1.0.1] - 2026-09-17
 
 ### Security & Fixed

@@ -112,6 +112,7 @@ def agent_command(
     config_obj: Optional[Any] = None,
     markdown: bool = True,
     logs: bool = False,
+    model: str | None = None,
 ):
     """Interact with the agent directly."""
     from loguru import logger
@@ -120,6 +121,9 @@ def agent_command(
     from shibaclaw.bus.queue import MessageBus
     from shibaclaw.config.paths import get_automation_dir
     from shibaclaw.automation.service import AutomationService
+
+    if model and config_obj is not None:
+        config_obj.agents.defaults.model = model
 
     if logs:
         logger.enable("shibaclaw")

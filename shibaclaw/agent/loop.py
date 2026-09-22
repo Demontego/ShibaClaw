@@ -38,6 +38,9 @@ from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
+from shibaclaw.evolve.switch import handle as evolve_handle
+from shibaclaw.evolve.switch import is_owner_surface, owner_chat
+from shibaclaw.integrations.telegram_labels import telegram_owner_ids
 from shibaclaw.bus.queue import MessageBus
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
@@ -1057,7 +1060,10 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
-            if cmd == "/stop":
+            head = cmd.split()[0].split("@", 1)[0] if cmd else ""
+            if head in {"/evolve", "/panic"}:
+                await self.bus.publish_outbound(await self._handle_evolve_cmd(msg))
+            elif cmd == "/stop":
                 await self._handle_stop(msg)
             elif cmd == "/restart":
                 await self._handle_restart(msg)
@@ -1077,6 +1083,51 @@ class ShibaBrain:
                 lock = self._session_locks.get(session_key)
                 if lock and not lock.locked():
                     self._session_locks.pop(session_key, None)
+
+    async def _evolve_reply(self, msg: InboundMessage) -> OutboundMessage | None:
+        cmd = msg.content.strip().lower()
+        head = cmd.split()[0].split("@", 1)[0] if cmd else ""
+        if head not in {"/evolve", "/panic"}:
+            return None
+        return await self._handle_evolve_cmd(msg)
+
+    async def _handle_evolve_cmd(self, msg: InboundMessage) -> OutboundMessage:
+        """Owner /evolve and /panic. Does not restart the process."""
+        parts = msg.content.strip().split()
+        head = parts[0].lower().split("@", 1)[0] if parts else ""
+        owners = telegram_owner_ids(self.channels_config)
+        if not is_owner_surface(msg.channel, str(msg.sender_id), msg.metadata, owners):
+            content = "Evolution commands are owner-only."
+        else:
+            if head == "/panic":
+                tasks = self._active_tasks.pop(msg.session_key, [])
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                for task in tasks:
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                try:
+                    await self.subagents.cancel_by_session(msg.session_key)
+                except Exception:
+                    pass
+                action = "panic"
+            else:
+                action = parts[1].lower() if len(parts) > 1 else "status"
+                if action not in {"on", "off", "status"}:
+                    action = "status"
+            content, _code = evolve_handle(
+                action,
+                workspace=self.workspace,
+                automation=self.automation_service,
+                owner=self._evolve_owner_chat(),
+            )
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+
+    def _evolve_owner_chat(self) -> str | None:
+        return owner_chat(self.channels_config)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""
@@ -1214,12 +1265,17 @@ class ShibaBrain:
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
     ) -> OutboundMessage | None:
+        evolve_reply = await self._evolve_reply(msg)
+        if evolve_reply is not None:
+            return evolve_reply
+
         if self.provider is None:
             return OutboundMessage(
                 channel=msg.channel,
                 chat_id=msg.chat_id,
                 content="🐕 Shiba is idle. Please configure an AI provider in the WebUI to start hunting!",
             )
+
         if msg.channel == "system":
             channel, chat_id = (
                 msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id)
@@ -1379,6 +1435,8 @@ class ShibaBrain:
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
                 "/help — Show available commands",
+                "/evolve on|off — Self-evolution alarm (owner)",
+                "/panic — Stop evolution, no restart",
             ]
             return OutboundMessage(
                 channel=msg.channel,

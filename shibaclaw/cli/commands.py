@@ -307,14 +307,55 @@ def agent(
         True, "--markdown/--no-markdown", help="Render output as Markdown"
     ),
     logs: bool = typer.Option(False, "--logs/--no-logs", help="Show runtime logs"),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        help="Model for this process only. Does not write config.",
+    ),
 ):
     """Interact with the agent directly."""
     from .agent import agent_command
 
     cfg = _load_runtime_config(config, workspace)
     agent_command(
-        message=message, session_id=session_id, config_obj=cfg, markdown=markdown, logs=logs
+        message=message,
+        session_id=session_id,
+        config_obj=cfg,
+        markdown=markdown,
+        logs=logs,
+        model=model,
     )
+
+
+@app.command()
+def evolve(
+    action: str = typer.Argument("status", help="on|off|status|panic|gate|end|note-apply|check"),
+    repo: str | None = typer.Option(None, "--repo", help="Git repo for check"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
+):
+    """Opt-in self-evolution switch. Off until `on`. Does not restart the process."""
+    from pathlib import Path
+
+    from shibaclaw.automation.service import AutomationService
+    from shibaclaw.config.paths import get_automation_dir
+    from shibaclaw.evolve.switch import handle, owner_chat
+
+    cfg = _load_runtime_config(config, workspace)
+    service = AutomationService(
+        store_path=get_automation_dir() / "automation.json",
+        workspace=cfg.workspace_path,
+    )
+    text, code = handle(
+        action,
+        workspace=cfg.workspace_path,
+        automation=service,
+        owner=owner_chat(cfg.channels),
+        repo=Path(repo) if repo else None,
+    )
+    print(text)
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command()

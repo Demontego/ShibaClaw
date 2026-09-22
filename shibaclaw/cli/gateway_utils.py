@@ -52,6 +52,11 @@ async def deliver_scheduled_job_result(
     """Deliver a scheduled automation result to its configured target."""
     from shibaclaw.bus.events import OutboundMessage
 
+    text = (response or "").strip()
+    if text in {"EVOLVE_QUIET", "EVOLVE_SKIP"}:
+        logger.info("Automation: silent skip deliver ({})", text)
+        return
+
     target = resolve_automation_target(job)
     payload = {
         "content": response,
