@@ -5,7 +5,7 @@ description: "Opt-in self-evolution. One backlog class per alarm, evolve/* branc
 
 # Evolve
 
-One alarm tick. Do not edit this skill to skip the gate. Do not commit the default branch. Do not change the model provider. Do not ask the owner between steps. Push the branch only to the fork remote and open the pull request on the fork. Never open a pull request against upstream.
+One alarm tick. Do not edit this skill to skip the gate. Do not commit the default branch. Do not change the model provider. Do not ask the owner between steps. Push the branch only to the fork remote and open the pull request on the fork. After `VERDICT: PASS`, merge that pull request on the fork. Never open or merge a pull request against upstream.
 
 State: `shibaclaw evolve` (`on|off|status|panic|gate|end|note-apply|check`).
 Review checklist: the evolve `CHECKLIST.md` next to this file.
