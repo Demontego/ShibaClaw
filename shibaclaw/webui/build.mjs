@@ -95,6 +95,7 @@ async function build() {
     }
     fs.mkdirSync('static/js', { recursive: true });
     fs.copyFileSync('frontend/js/chat_history_window.js', 'static/js/chat_history_window.js');
+    fs.copyFileSync('frontend/js/evolve.js', 'static/js/evolve.js');
     fs.mkdirSync('static/css', { recursive: true });
     fs.copyFileSync('frontend/css/sidebar_modern.css', 'static/css/sidebar_modern.css');
 
@@ -140,8 +141,13 @@ async function build() {
         ''
     );
     html = html.replace(
+        /^[ \t]*<script src="\/static\/js\/evolve\.js(?:\?v=[^"]*)?"><\/script>[ \t]*\r?\n/gm,
+        ''
+    );
+    html = html.replace(
         '</body>',
         `    <script src="/static/bundle.js?v=${buildVer}"></script>\n` +
+        `    <script src="/static/js/evolve.js?v=${buildVer}"></script>\n` +
         `    <script src="/static/js/chat_history_window.js?v=${buildVer}"></script>\n` +
         '</body>'
     );

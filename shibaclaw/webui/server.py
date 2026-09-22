@@ -72,6 +72,7 @@ from .routers.mcp_manager import (
     test_mcp_server,
     upsert_mcp_server,
 )
+from .routers.evolve import api_evolve_get
 from .routers.memory import api_memory_forget, api_memory_get, api_memory_save
 from .routers.oauth import (
     api_oauth_code,
@@ -197,6 +198,7 @@ def create_app(
         Route("/api/memory", api_memory_get, methods=["GET"]),
         Route("/api/memory/save", api_memory_save, methods=["POST"]),
         Route("/api/memory/forget", api_memory_forget, methods=["POST"]),
+        Route("/api/evolve", api_evolve_get, methods=["GET"]),
         Route("/api/gateway-health", api_gateway_health),
         Route("/api/gateway-restart", api_gateway_restart, methods=["POST"]),
         # ── Automation (unified) ─────────────────────────────────────────────

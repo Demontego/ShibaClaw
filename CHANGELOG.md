@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Opt-in self-evolution** — `/evolve on|off` and `/panic` (owner DM or WebUI). A 10-minute alarm takes one backlog class on an `evolve/*` branch, or one world topic from `USER.md` and `memory/people/` into `memory/evolution/WORLD.md`. A separate `shibaclaw agent --model` session reviews code. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself and does not change the saved provider. Code budget: 3 applies per day, 45 minutes between them. World notes: 16 a day, 30 minutes apart. WebUI tool **Evolution** (`GET /api/evolve`) shows the gate, chronicle, backlog, patterns, world notes, and recent commits.
+
 ## [1.0.1] - 2026-09-17
 
 ### Security & Fixed

@@ -174,6 +174,8 @@ class TelegramChannel(BaseChannel):
         BotCommand("new", "Start a new conversation"),
         BotCommand("stop", "Stop the current task"),
         BotCommand("help", "Show available commands"),
+        BotCommand("evolve", "Evolution on/off (owner)"),
+        BotCommand("panic", "Stop evolution, no restart"),
         BotCommand("restart", "Restart the bot"),
     ]
 
@@ -321,6 +323,8 @@ class TelegramChannel(BaseChannel):
         self._app.add_handler(CommandHandler("stop", self._forward_command))
         self._app.add_handler(CommandHandler("restart", self._forward_command))
         self._app.add_handler(CommandHandler("help", self._on_help))
+        self._app.add_handler(CommandHandler("evolve", self._forward_command))
+        self._app.add_handler(CommandHandler("panic", self._forward_command))
         _content_filter = (
             filters.TEXT
             | filters.PHOTO
@@ -1784,6 +1788,9 @@ class TelegramChannel(BaseChannel):
         ):
             return
         cmd = (message.text or "").strip().split()[0].lower().split("@", 1)[0]
+        if cmd in ("/evolve", "/panic") and (is_group or has_business):
+            await message.reply_text("Evolution commands are owner DMs only.")
+            return
         if is_group and cmd in ("/new", "/stop", "/restart") and not self._is_allowlisted(
             sender_id, user.username
         ):
