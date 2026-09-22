@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import os
 import subprocess
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 from shibaclaw.automation.service import AutomationService
 from shibaclaw.evolve.diffcheck import check_repo
 from shibaclaw.evolve.gate import MAX_APPLIES, gate, load
 from shibaclaw.evolve.switch import handle, is_owner_surface, owner_chat
 
-UTC = ZoneInfo("UTC")
+UTC = timezone.utc
 
 
 def test_gate_budget_and_panic(tmp_path, monkeypatch):

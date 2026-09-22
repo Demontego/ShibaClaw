@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import timezone, tzinfo
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from shibaclaw.evolve.gate import JOB_NAME, MAX_APPLIES, applies_today, gate, load
 
-UTC = ZoneInfo("UTC")
+UTC = timezone.utc
 _TEXT_CAP = 12000
 
 
@@ -116,7 +116,7 @@ def _body(workspace: Path) -> dict | None:
 def snapshot(
     workspace: Path,
     automation_file: Path | None = None,
-    tz: ZoneInfo | None = None,
+    tz: tzinfo | None = None,
 ) -> dict:
     zone = tz or UTC
     data = load(workspace)

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import timezone, tzinfo
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from shibaclaw.automation.types import AutomationPayload, AutomationSchedule
 from shibaclaw.evolve.gate import (
@@ -20,7 +20,7 @@ from shibaclaw.evolve.gate import (
     status_line,
 )
 
-UTC = ZoneInfo("UTC")
+UTC = timezone.utc
 
 
 def owner_chat(channels_config: Any | None) -> str | None:
@@ -123,7 +123,7 @@ def handle(
     workspace: Path,
     automation: Any | None = None,
     owner: str | None = None,
-    tz: ZoneInfo | None = None,
+    tz: tzinfo | None = None,
     repo: Path | None = None,
 ) -> tuple[str, int]:
     zone = tz or UTC
