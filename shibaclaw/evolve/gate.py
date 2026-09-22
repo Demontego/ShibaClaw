@@ -17,7 +17,7 @@ COOLDOWN_MIN = 45
 CAMPAIGN = """Shiba evolve alarm. Read the evolve skill and follow it exactly.
 This wake is one consciousness tick. Decide. Do not ask the owner between steps.
 One class this wake. Do not message other chats.
-Do not push. Do not commit to the default branch. Do not change the model provider.
+Do not push the upstream remote. Open the pull request on the fork only. Do not commit to the default branch. Do not change the model provider.
 If `shibaclaw evolve gate` exits 2, 3, or 5, reply exactly EVOLVE_SKIP and stop.
 If the code backlog is empty, study one world topic from USER.md and memory/people. Do not EVOLVE_SKIP just because there is no code class.
 """
