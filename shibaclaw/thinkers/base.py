@@ -99,6 +99,24 @@ class Thinker(ABC):
         "json error",
         "empty choices",
     )
+    _PERMANENT_ERROR_MARKERS = (
+        "400",
+        "401",
+        "403",
+        "invalid_api_key",
+        "api_key_invalid",
+        "unauthorized",
+        "forbidden",
+        "permission_denied",
+        "model_not_found",
+        "unknown_model",
+        "invalid_model",
+        "context_length_exceeded",
+        "max_context_length",
+        "token_limit_exceeded",
+        "invalid_request_error",
+        "bad_request",
+    )
 
     _SENTINEL = object()
     _RESPONSE_CACHE: dict[str, LLMResponse] = {}
@@ -252,7 +270,14 @@ class Thinker(ABC):
         return response
 
     @classmethod
+    def _is_permanent_error(cls, content: str | None) -> bool:
+        err = (content or "").lower()
+        return any(marker in err for marker in cls._PERMANENT_ERROR_MARKERS)
+
+    @classmethod
     def _is_transient_error(cls, content: str | None) -> bool:
+        if cls._is_permanent_error(content):
+            return False
         err = (content or "").lower()
         return any(marker in err for marker in cls._TRANSIENT_ERROR_MARKERS)
 
