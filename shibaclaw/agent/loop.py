@@ -823,6 +823,7 @@ class ShibaBrain:
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
+        response_content_history: list[str] = []
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
@@ -949,6 +950,21 @@ class ShibaBrain:
                     f"Try breaking the task into smaller steps."
                 )
                 break
+
+            # Stuck Detector: check if the last 3 iterations had the exact same response content
+            if response.content:
+                response_content_history.append(response.content.strip())
+                if len(response_content_history) >= 3:
+                    last_three = response_content_history[-3:]
+                    if last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0:
+                        logger.warning("Stuck detector triggered: repeating response content")
+                        messages.append({
+                            "role": "system",
+                            "content": (
+                                "WARNING: You appear to be stuck in a loop of repeating the same response. "
+                                "Please stop, reassess your current goal, and try a different strategy or action."
+                            )
+                        })
 
             if response.has_tool_calls:
                 if on_progress:
