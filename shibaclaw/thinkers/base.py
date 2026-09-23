@@ -101,6 +101,13 @@ class Thinker(ABC):
     )
 
     _SENTINEL = object()
+    _RESPONSE_CACHE: dict[str, LLMResponse] = {}
+
+    @classmethod
+    def _get_cache_key(cls, messages: list[dict[str, Any]], model: str | None) -> str:
+        # Serialize messages to a stable string
+        clean_msgs = [{"role": m["role"], "content": m.get("content")} for m in messages if "role" in m]
+        return f"{model}:{json.dumps(clean_msgs, sort_keys=True, ensure_ascii=False)}"
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self.api_key = api_key
@@ -366,6 +373,22 @@ class Thinker(ABC):
                 kw_fallback["model"] = fallback
                 kw_fallback["fallback_models"] = fallbacks[1:]
                 return await self.chat_with_retry(**kw_fallback)
+
+            # If all fallbacks failed, try to return a cached response
+            cache_key = self._get_cache_key(messages, model)
+            if cache_key in self._RESPONSE_CACHE:
+                logger.warning("LLM call failed completely. Falling back to cached response.")
+                import copy
+                cached = self._RESPONSE_CACHE[cache_key]
+                if cached.content:
+                    cached = copy.deepcopy(cached)
+                    cached.content += "\n\n[WARNING: This is a cached response returned due to LLM provider outage.]"
+                return cached
+        else:
+            # Save successful response to cache
+            cache_key = self._get_cache_key(messages, model)
+            self._RESPONSE_CACHE[cache_key] = response
+
         return response
 
     async def chat_with_retry_streaming(
@@ -472,6 +495,22 @@ class Thinker(ABC):
                 kw_fallback["model"] = fallback
                 kw_fallback["fallback_models"] = fallbacks[1:]
                 return await self.chat_with_retry_streaming(**kw_fallback)
+
+            # If all fallbacks failed, try to return a cached response
+            cache_key = self._get_cache_key(messages, model)
+            if cache_key in self._RESPONSE_CACHE:
+                logger.warning("LLM call failed completely during streaming. Falling back to cached response.")
+                import copy
+                cached = self._RESPONSE_CACHE[cache_key]
+                if cached.content:
+                    cached = copy.deepcopy(cached)
+                    cached.content += "\n\n[WARNING: This is a cached response returned due to LLM provider outage.]"
+                return cached
+        else:
+            # Save successful response to cache
+            cache_key = self._get_cache_key(messages, model)
+            self._RESPONSE_CACHE[cache_key] = response
+
         return response
 
     @abstractmethod
