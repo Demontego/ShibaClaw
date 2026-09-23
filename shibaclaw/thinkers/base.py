@@ -321,7 +321,9 @@ class Thinker(ABC):
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
         )
 
-        for attempt, delay in enumerate(self._CHAT_RETRY_DELAYS, start=1):
+        import random
+        max_retries = len(self._CHAT_RETRY_DELAYS)
+        for attempt in range(1, max_retries + 1):
             response = await self._safe_chat(**kw)
 
             if response.finish_reason != "error":
@@ -338,10 +340,17 @@ class Thinker(ABC):
                     return await self._safe_chat(**{**kw, "messages": stripped})
                 return response
 
+            if attempt == max_retries:
+                break
+
+            # Exponential backoff with jitter (±25% of base delay)
+            base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
+            delay = base_delay * random.uniform(0.75, 1.25)
+
             if log_transient_errors:
                 logger.warning(
-                    "LLM transient error (attempt {}/{}), retrying in {}s: {}",
-                    attempt, len(self._CHAT_RETRY_DELAYS), delay,
+                    "LLM transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                    attempt, max_retries, delay,
                     (response.content or "")[:120].lower(),
                 )
             await asyncio.sleep(delay)
@@ -373,7 +382,9 @@ class Thinker(ABC):
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
         )
 
-        for attempt, delay in enumerate(self._CHAT_RETRY_DELAYS, start=1):
+        import random
+        max_retries = len(self._CHAT_RETRY_DELAYS)
+        for attempt in range(1, max_retries + 1):
             try:
                 response = await asyncio.wait_for(
                     self.chat_streaming(**kw), timeout=self._CHAT_TIMEOUT,
@@ -399,9 +410,16 @@ class Thinker(ABC):
                     continue
                 return response
 
+            if attempt == max_retries:
+                break
+
+            # Exponential backoff with jitter (±25% of base delay)
+            base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
+            delay = base_delay * random.uniform(0.75, 1.25)
+
             logger.warning(
-                "LLM streaming transient error (attempt {}/{}), retrying in {}s: {}",
-                attempt, len(self._CHAT_RETRY_DELAYS), delay,
+                "LLM streaming transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                attempt, max_retries, delay,
                 (response.content or "")[:120].lower(),
             )
             await asyncio.sleep(delay)
