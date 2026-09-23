@@ -107,11 +107,12 @@ def _build_idf(entries: list[dict[str, Any]]) -> dict[str, float]:
 
 
 class MemorySearchTool(Tool):
-    """Ranked search over HISTORY.md entries by recency, importance, and relevance."""
+    """Ranked search over HISTORY.md entries by recency, importance, relevance, and tag matching."""
 
-    W_RECENCY = 0.3
-    W_IMPORTANCE = 0.25
-    W_RELEVANCE = 0.45
+    W_RECENCY = 0.25
+    W_IMPORTANCE = 0.2
+    W_RELEVANCE = 0.4
+    W_TAG_MATCH = 0.15
 
     def __init__(self, workspace: Path):
         self._history_path = workspace / "memory" / "HISTORY.md"
@@ -167,20 +168,33 @@ class MemorySearchTool(Tool):
         now = datetime.now()
 
         max_rel = 0.0
-        scored: list[tuple[float, float, float, dict[str, Any]]] = []
+        scored: list[tuple[float, float, float, float, dict[str, Any]]] = []
         for entry in entries:
             entry_tokens = _tokenize(entry["body"] + " " + " ".join(entry["tags"]))
             rec = _recency_score(entry["ts"], now)
             imp = _importance_score(entry["importance"])
             rel = _relevance_score(query_tokens, entry_tokens, idf)
+            
+            # Tag matching signal: check if any query token matches an entry tag
+            tag_match = 0.0
+            for qt in query_tokens:
+                if qt in entry["tags"]:
+                    tag_match = 1.0
+                    break
+                    
             if rel > max_rel:
                 max_rel = rel
-            scored.append((rec, imp, rel, entry))
+            scored.append((rec, imp, rel, tag_match, entry))
 
         results: list[tuple[float, dict[str, Any]]] = []
-        for rec, imp, rel, entry in scored:
+        for rec, imp, rel, tag_match, entry in scored:
             norm_rel = (rel / max_rel) if max_rel > 0 else 0.0
-            total = self.W_RECENCY * rec + self.W_IMPORTANCE * imp + self.W_RELEVANCE * norm_rel
+            total = (
+                self.W_RECENCY * rec 
+                + self.W_IMPORTANCE * imp 
+                + self.W_RELEVANCE * norm_rel 
+                + self.W_TAG_MATCH * tag_match
+            )
             results.append((total, entry))
 
         results.sort(key=lambda x: x[0], reverse=True)
