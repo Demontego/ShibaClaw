@@ -300,6 +300,7 @@ class Thinker(ABC):
         reasoning_effort: object = _SENTINEL,
         tool_choice: str | dict[str, Any] | None = None,
         log_transient_errors: bool = True,
+        fallback_models: list[str] | None = None,
     ) -> LLMResponse:
         """Call chat() with retry on transient provider failures.
 
@@ -354,7 +355,18 @@ class Thinker(ABC):
                 )
             await asyncio.sleep(delay)
 
-        return await self._safe_chat(**kw)
+        response = await self._safe_chat(**kw)
+        if response.finish_reason == "error":
+            fallbacks = fallback_models if fallback_models is not None else ["google/gemini-3.5-flash", "openai/gpt-4o-mini"]
+            fallbacks = [m for m in fallbacks if m != model]
+            if fallbacks:
+                fallback = fallbacks[0]
+                logger.warning("Primary model {} failed. Falling back to {}", model, fallback)
+                kw_fallback = kw.copy()
+                kw_fallback["model"] = fallback
+                kw_fallback["fallback_models"] = fallbacks[1:]
+                return await self.chat_with_retry(**kw_fallback)
+        return response
 
     async def chat_with_retry_streaming(
         self,
@@ -366,6 +378,7 @@ class Thinker(ABC):
         temperature: object = _SENTINEL,
         reasoning_effort: object = _SENTINEL,
         tool_choice: str | dict[str, Any] | None = None,
+        fallback_models: list[str] | None = None,
     ) -> LLMResponse:
         """Like chat_with_retry but uses streaming for the final response."""
         if max_tokens is self._SENTINEL:
@@ -429,16 +442,17 @@ class Thinker(ABC):
                 logger.warning("Falling back to non-streaming due to SSE parser error")
                 kw_chat = kw.copy()
                 kw_chat.pop("on_token", None)
+                kw_chat["fallback_models"] = fallback_models
                 # Delegate entirely to chat_with_retry for the remaining attempts
                 return await self.chat_with_retry(**kw_chat)
 
         # Final attempt
         try:
-            return await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 self.chat_streaming(**kw), timeout=self._CHAT_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            return LLMResponse(
+            response = LLMResponse(
                 content="Error calling LLM: request timed out",
                 finish_reason="error",
             )
@@ -446,7 +460,19 @@ class Thinker(ABC):
             raise
         except Exception as exc:
             logger.exception("LLM Provider encountered an unexpected error during final streaming attempt")
-            return LLMResponse(content=f"Error calling LLM: {exc}", finish_reason="error")
+            response = LLMResponse(content=f"Error calling LLM: {exc}", finish_reason="error")
+
+        if response.finish_reason == "error":
+            fallbacks = fallback_models if fallback_models is not None else ["google/gemini-3.5-flash", "openai/gpt-4o-mini"]
+            fallbacks = [m for m in fallbacks if m != model]
+            if fallbacks:
+                fallback = fallbacks[0]
+                logger.warning("Primary model {} failed during streaming. Falling back to {}", model, fallback)
+                kw_fallback = kw.copy()
+                kw_fallback["model"] = fallback
+                kw_fallback["fallback_models"] = fallbacks[1:]
+                return await self.chat_with_retry_streaming(**kw_fallback)
+        return response
 
     @abstractmethod
     def get_default_model(self) -> str:
