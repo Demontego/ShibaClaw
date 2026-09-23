@@ -1032,51 +1032,74 @@ class ShibaBrain:
                             ),
                         )
                         continue
-                    try:
-                        tool_future = asyncio.ensure_future(
-                            self.tools.execute(tool_call.name, tool_call.arguments)
-                        )
-                        # Emit periodic "still working" progress while the
-                        # tool runs, so the UI doesn't look stuck.
-                        _heartbeat = 15  # seconds
-                        _waited = 0
-                        while not tool_future.done():
-                            remaining = self.tool_timeout - _waited
-                            if remaining <= 0 and self.tool_timeout > 0:
-                                break
-                            step_timeout = (
-                                max(0.1, min(float(_heartbeat), float(remaining)))
-                                if self.tool_timeout > 0
-                                else _heartbeat
+                    # Tool Execution Supervisor with Exponential Backoff + Jitter
+                    max_tool_retries = 3
+                    tool_retry_delays = (1.0, 2.0)
+                    
+                    for tool_attempt in range(1, max_tool_retries + 1):
+                        try:
+                            tool_future = asyncio.ensure_future(
+                                self.tools.execute(tool_call.name, tool_call.arguments)
                             )
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.shield(tool_future),
-                                    timeout=step_timeout,
-                                )
-                            except asyncio.TimeoutError:
-                                _waited += _heartbeat
-                                if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                            # Emit periodic "still working" progress while the
+                            # tool runs, so the UI doesn't look stuck.
+                            _heartbeat = 15  # seconds
+                            _waited = 0
+                            while not tool_future.done():
+                                remaining = self.tool_timeout - _waited
+                                if remaining <= 0 and self.tool_timeout > 0:
                                     break
-                                if on_progress:
-                                    await on_progress(
-                                        f"⏳ {tool_call.name} still running ({_waited}s)…",
-                                        tool_hint=True,
+                                step_timeout = (
+                                    max(0.1, min(float(_heartbeat), float(remaining)))
+                                    if self.tool_timeout > 0
+                                    else _heartbeat
+                                )
+                                try:
+                                    await asyncio.wait_for(
+                                        asyncio.shield(tool_future),
+                                        timeout=step_timeout,
                                     )
-                                continue
+                                except asyncio.TimeoutError:
+                                    _waited += _heartbeat
+                                    if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                                        break
+                                    if on_progress:
+                                        await on_progress(
+                                            f"⏳ {tool_call.name} still running ({_waited}s)…",
+                                            tool_hint=True,
+                                        )
+                                    continue
 
-                        if not tool_future.done():
-                            tool_future.cancel()
-                            result = (
-                                f"Error: Tool '{tool_call.name}' timed out after "
-                                f"{_waited}s (cap: {self.tool_timeout}s)"
+                            if not tool_future.done():
+                                tool_future.cancel()
+                                result = (
+                                    f"Error: Tool '{tool_call.name}' timed out after "
+                                    f"{_waited}s (cap: {self.tool_timeout}s)"
+                                )
+                            else:
+                                result = tool_future.result()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+
+                        # Check if we should retry (only for safe, idempotent tools on transient errors)
+                        is_error = result.startswith("Error:")
+                        is_transient = any(m in result.lower() for m in ["timeout", "connection", "500", "502", "503", "504", "temporarily unavailable"])
+                        is_safe = tool_call.name in {"web_search", "web_fetch", "read_file", "list_dir", "session_search"}
+
+                        if is_error and is_transient and is_safe and tool_attempt < max_tool_retries:
+                            import random
+                            base_delay = tool_retry_delays[tool_attempt - 1]
+                            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
+                            logger.warning(
+                                "Tool '{}' failed with transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                                tool_call.name, tool_attempt, max_tool_retries, delay, result[:120]
                             )
+                            await asyncio.sleep(delay)
+                            continue
                         else:
-                            result = tool_future.result()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:
-                        result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+                            break
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
