@@ -91,6 +91,7 @@ class ShibaBrain:
         model: str | None = None,
         max_iterations: int = 10,
         context_window_tokens: int = 4000,
+        max_session_tokens: int = 100000,
         web_search_config: WebSearchConfig | None = None,
         web_proxy: str | None = None,
         exec_config: ExecToolConfig | None = None,
@@ -114,6 +115,7 @@ class ShibaBrain:
         self.model = model or (provider.get_default_model() if provider else "unknown")
         self.max_iterations = max_iterations
         self.context_window_tokens = context_window_tokens
+        self.max_session_tokens = max_session_tokens
         self.web_search_config = web_search_config or WebSearchConfig()
         self.web_proxy = web_proxy
         self.exec_config = exec_config or ExecToolConfig()
@@ -229,6 +231,7 @@ class ShibaBrain:
         )
         self.max_iterations = new_cfg.agents.defaults.max_tool_iterations
         self.context_window_tokens = new_cfg.agents.defaults.context_window_tokens
+        self.max_session_tokens = getattr(new_cfg.agents.defaults, "max_session_tokens", 100000)
         self.restrict_to_workspace = new_cfg.tools.restrict_to_workspace
         self.web_proxy = new_cfg.tools.web.proxy
         self.web_search_config = new_cfg.tools.web.search
@@ -820,6 +823,7 @@ class ShibaBrain:
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
+        session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
             if session_key and session_key in self._steering_queues:
@@ -900,6 +904,24 @@ class ShibaBrain:
                 **call_kwargs,
             )
 
+            # Token Budget Guardrail
+            if response.usage:
+                prompt_tokens = response.usage.get("prompt_tokens", 0)
+                completion_tokens = response.usage.get("completion_tokens", 0)
+                total_tokens = response.usage.get("total_tokens", prompt_tokens + completion_tokens)
+                session_tokens_used += total_tokens
+
+            max_budget = getattr(self, "max_session_tokens", 100000)
+            if max_budget > 0 and session_tokens_used >= max_budget:
+                logger.warning(
+                    f"Session token budget ({max_budget}) exceeded: used {session_tokens_used} tokens."
+                )
+                final_content = (
+                    f"I reached the maximum token budget limit for processing "
+                    f"(used: {session_tokens_used} tokens, cap: {max_budget} tokens). "
+                    f"Try breaking the task into smaller steps."
+                )
+                break
 
             if response.has_tool_calls:
                 if on_progress:
