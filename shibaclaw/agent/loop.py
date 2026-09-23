@@ -825,6 +825,7 @@ class ShibaBrain:
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
+        tool_result_cache: dict[tuple[str, str], str] = {}
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
@@ -1159,6 +1160,27 @@ class ShibaBrain:
                 )
                 # Preserve full content (including <think>) for the UI
                 final_content = response.content
+
+                # SRE Health Monitor: log structured health status at the end of each iteration
+                elapsed = time.monotonic() - loop_start
+                stuck_detected = False
+                if len(iteration_tool_sequences) >= 3:
+                    last_three = iteration_tool_sequences[-3:]
+                    stuck_detected = (last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0)
+                
+                loop_detected = False
+                if len(response_content_history) >= 3:
+                    last_three_resp = response_content_history[-3:]
+                    loop_detected = (last_three_resp[0] == last_three_resp[1] == last_three_resp[2] and len(last_three_resp[0]) > 0)
+
+                logger.info(
+                    "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Stuck: {} | Loop: {}",
+                    iteration,
+                    elapsed,
+                    session_tokens_used,
+                    "YES" if stuck_detected else "NO",
+                    "YES" if loop_detected else "NO",
+                )
 
                 # Check for steering messages: if we have some, continue the loop
                 # instead of breaking, so the agent can respond to the injected message
