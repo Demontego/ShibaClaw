@@ -210,7 +210,7 @@ class MemorySearchTool(Tool):
             tags = " ".join(f"#{t}" for t in entry["tags"])
             header = f"{rank}. [{ts_label}] {tags} {stars} (score: {score:.2f})"
             lines.append(header)
-            lines.append(f"   {entry['body'][:300]}")
+            lines.append(f"   {entry['body'][:1000]}")
             lines.append("")
 
         return "\n".join(lines).rstrip()
