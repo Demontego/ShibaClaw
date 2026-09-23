@@ -812,8 +812,13 @@ class PackMemory:
 
         lock = self.get_lock(session.key)
         async with lock:
-            trigger = int(self.context_window_tokens * 0.6)
-            target = int(self.context_window_tokens * 0.4)
+            warning_threshold = int(self.context_window_tokens * 0.7)
+            critical_threshold = int(self.context_window_tokens * 0.85)
+            hard_limit_threshold = int(self.context_window_tokens * 0.95)
+
+            trigger = warning_threshold
+            target = int(self.context_window_tokens * 0.5)
+
             estimated, source = self.estimate_session_prompt_tokens(session)
             if estimated <= 0:
                 return
@@ -826,6 +831,25 @@ class PackMemory:
                     source,
                 )
                 return
+
+            if estimated >= hard_limit_threshold:
+                logger.error(
+                    "🚨 Context Overflow Hard Limit (95%) reached for {}: {}/{} tokens! "
+                    "Forcing aggressive context compaction.",
+                    session.key, estimated, self.context_window_tokens
+                )
+            elif estimated >= critical_threshold:
+                logger.warning(
+                    "⚠️ Context Overflow Critical Threshold (85%) reached for {}: {}/{} tokens! "
+                    "Forcing context compaction.",
+                    session.key, estimated, self.context_window_tokens
+                )
+            elif estimated >= warning_threshold:
+                logger.info(
+                    "ℹ️ Context Overflow Warning Threshold (70%) reached for {}: {}/{} tokens. "
+                    "Starting proactive context compaction.",
+                    session.key, estimated, self.context_window_tokens
+                )
 
             for round_num in range(self._MAX_CONSOLIDATION_ROUNDS):
                 if estimated <= target:
