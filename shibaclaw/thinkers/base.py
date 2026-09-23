@@ -342,9 +342,9 @@ class Thinker(ABC):
             if attempt == max_retries:
                 break
 
-            # Exponential backoff with jitter (±25% of base delay)
+            # Exponential backoff with Equal Jitter (base_delay/2 + random(0, base_delay/2))
             base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
-            delay = base_delay * random.uniform(0.75, 1.25)
+            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
 
             if log_transient_errors:
                 logger.warning(
@@ -412,9 +412,9 @@ class Thinker(ABC):
             if attempt == max_retries:
                 break
 
-            # Exponential backoff with jitter (±25% of base delay)
+            # Exponential backoff with Equal Jitter (base_delay/2 + random(0, base_delay/2))
             base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
-            delay = base_delay * random.uniform(0.75, 1.25)
+            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
 
             logger.warning(
                 "LLM streaming transient error (attempt {}/{}), retrying in {:.2f}s: {}",
