@@ -83,6 +83,7 @@ class Thinker(ABC):
 
     _CHAT_RETRY_DELAYS = (1, 2, 4)
     _TRANSIENT_ERROR_MARKERS = (
+        "408",
         "429",
         "rate limit",
         "500",
