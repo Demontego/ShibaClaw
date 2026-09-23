@@ -818,6 +818,8 @@ class ShibaBrain:
         except Exception:
             pass
 
+        tool_call_history: list[tuple[str, str]] = []
+
         while self.max_iterations == 0 or iteration < self.max_iterations:
             if session_key and session_key in self._steering_queues:
                 steer_msgs = self._steering_queues[session_key]
@@ -921,6 +923,25 @@ class ShibaBrain:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
+
+                    # Infinite Loop Detection
+                    call_key = (tool_call.name, args_str)
+                    tool_call_history.append(call_key)
+                    occurrences = tool_call_history.count(call_key)
+                    if occurrences >= 3:
+                        logger.warning("Infinite loop detected for tool call: {}({})", tool_call.name, args_str[:200])
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Infinite loop detected. You have called '{tool_call.name}' "
+                                f"with the exact same arguments {occurrences} times. "
+                                "Please reassess your goal and try a different approach or different arguments."
+                            ),
+                        )
+                        continue
+
                     if self._tool_disabled_for_profile(tool_call.name, profile_id):
                         messages = self.context.add_tool_result(
                             messages,
