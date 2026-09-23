@@ -819,6 +819,7 @@ class ShibaBrain:
             pass
 
         tool_call_history: list[tuple[str, str]] = []
+        iteration_tool_sequences: list[list[str]] = []
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
             if session_key and session_key in self._steering_queues:
@@ -1021,6 +1022,21 @@ class ShibaBrain:
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
+
+                # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
+                tool_names = [tc.name for tc in response.tool_calls]
+                iteration_tool_sequences.append(tool_names)
+                if len(iteration_tool_sequences) >= 3:
+                    last_three = iteration_tool_sequences[-3:]
+                    if last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0:
+                        logger.warning("Stuck detector triggered: repeating tool sequence {}", last_three[0])
+                        messages.append({
+                            "role": "system",
+                            "content": (
+                                "WARNING: You appear to be stuck in a loop of repeating the same actions. "
+                                "Please stop, reassess your current goal, and try a different strategy."
+                            )
+                        })
             else:
                 # Strip think from logs/debug output, but keep full content for memory (so UI can reload it)
                 clean = self._strip_think(response.content)
