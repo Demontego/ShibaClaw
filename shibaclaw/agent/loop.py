@@ -904,6 +904,33 @@ class ShibaBrain:
                 **call_kwargs,
             )
 
+            # Model Fallback Strategy
+            if response.finish_reason == "error":
+                fallback_models = ["google/gemini-2.5-flash", "openai/gpt-4o-mini"]
+                logger.warning("Primary model {} failed, trying fallback models...", active_model)
+                for fallback_model in fallback_models:
+                    if fallback_model == active_model:
+                        continue
+                    try:
+                        fallback_provider = self._resolve_provider_for_model(fallback_model)
+                        if not fallback_provider:
+                            continue
+                        logger.info("Trying fallback model: {}", fallback_model)
+                        response = await fallback_provider.chat_with_retry_streaming(
+                            messages=messages,
+                            on_token=on_response_token,
+                            tools=tool_defs,
+                            model=fallback_model,
+                            **call_kwargs,
+                        )
+                        if response.finish_reason != "error":
+                            active_model = fallback_model
+                            active_provider = fallback_provider
+                            logger.info("Successfully fell back to model: {}", fallback_model)
+                            break
+                    except Exception as e:
+                        logger.error("Fallback to {} failed: {}", fallback_model, e)
+
             # Token Budget Guardrail
             if response.usage:
                 prompt_tokens = response.usage.get("prompt_tokens", 0)
