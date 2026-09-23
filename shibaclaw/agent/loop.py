@@ -164,6 +164,7 @@ class ShibaBrain:
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._provider_cache: dict[str, Thinker] = {}
         self._steering_queues: dict[str, list[dict]] = {}
+        self._idempotency_cache: dict[str, Any] = {}
         self.memory_consolidator = PackMemory(
             workspace=workspace,
             provider=cast(Thinker, provider),
@@ -1032,6 +1033,18 @@ class ShibaBrain:
                             ),
                         )
                         continue
+
+                    # Idempotency Guard: check if this tool call has already been executed successfully in this session
+                    args_json = json.dumps(tool_call.arguments, sort_keys=True, ensure_ascii=False)
+                    idempotency_key = f"{session_key}:{tool_call.name}:{args_json}"
+                    if session_key and idempotency_key in self._idempotency_cache:
+                        logger.info("Idempotency Guard triggered: returning cached result for {}({})", tool_call.name, args_str[:200])
+                        result = self._idempotency_cache[idempotency_key]
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, result
+                        )
+                        continue
+
                     # Tool Execution Supervisor with Exponential Backoff + Jitter
                     max_tool_retries = 3
                     tool_retry_delays = (1.0, 2.0)
@@ -1110,6 +1123,8 @@ class ShibaBrain:
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
+                    if session_key and not result.startswith("Error:"):
+                        self._idempotency_cache[idempotency_key] = result
 
                 # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
                 tool_names = [tc.name for tc in response.tool_calls]
