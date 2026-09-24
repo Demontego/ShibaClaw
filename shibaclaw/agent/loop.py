@@ -825,7 +825,6 @@ class ShibaBrain:
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
-        tool_result_cache: dict[tuple[str, str], str] = {}
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
