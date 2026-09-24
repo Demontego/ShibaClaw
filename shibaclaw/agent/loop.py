@@ -21,6 +21,7 @@ from shibaclaw.agent.agentic_sre import AgenticSRE
 from shibaclaw.agent.self_repair import SelfRepair
 from shibaclaw.agent.hard_step_cap import HardStepCap
 from shibaclaw.agent.cost_circuit_breaker import CostCircuitBreaker
+from shibaclaw.agent.context_overflow_guard import ContextOverflowGuard, ContextOverflowError
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -842,6 +843,7 @@ class ShibaBrain:
         self_repair = SelfRepair(self.context.workspace)
         hard_step_cap = HardStepCap(self.context.workspace)
         cost_circuit_breaker = CostCircuitBreaker(self.context.workspace)
+        context_overflow_guard = ContextOverflowGuard(self.context.workspace, self.context_window_tokens)
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
@@ -971,6 +973,25 @@ class ShibaBrain:
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens
                 )
+
+                # Check Context Overflow Guard
+                try:
+                    overflow_action = context_overflow_guard.check_usage(
+                        current_tokens=prompt_tokens + completion_tokens,
+                        checkpoint_mgr=checkpoint_mgr,
+                        session_key=session_key
+                    )
+                    if overflow_action == "compress":
+                        # Trigger automatic context compression
+                        logger.warning("ContextOverflowGuard: Triggering automatic context compression.")
+                except ContextOverflowError as e:
+                    logger.error(f"ContextOverflowGuard: Hard limit exceeded: {e}")
+                    final_content = (
+                        f"I reached the maximum context window limit for processing "
+                        f"(used: {prompt_tokens + completion_tokens} tokens, cap: {context_overflow_guard.hard_limit_threshold} tokens). "
+                        f"Saved emergency checkpoint and enforced hard stop to prevent context overflow."
+                    )
+                    break
 
             if cost_circuit_breaker.is_tripped():
                 logger.warning(
