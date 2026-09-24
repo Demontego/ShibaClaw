@@ -1,4 +1,3 @@
-import pytest
 from shibaclaw.agent.stuck_detector import StuckDetector
 
 def test_stuck_detector_repeating_response():
@@ -42,5 +41,5 @@ def test_stuck_detector_goal_reassessment_prompt():
     prompt = detector.get_goal_reassessment_prompt("test reason")
     
     assert prompt["role"] == "system"
-    assert "WARNING: Stuck loop detected (test_reason)" or "test reason" in prompt["content"]
+    assert "WARNING: Stuck loop detected (test reason)" in prompt["content"]
     assert "GOAL REASSESSMENT REQUIRED" in prompt["content"]
