@@ -20,6 +20,7 @@ from shibaclaw.agent.layered_defense import LayeredDefense
 from shibaclaw.agent.agentic_sre import AgenticSRE
 from shibaclaw.agent.self_repair import SelfRepair
 from shibaclaw.agent.hard_step_cap import HardStepCap
+from shibaclaw.agent.cost_circuit_breaker import CostCircuitBreaker
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -840,6 +841,7 @@ class ShibaBrain:
         agentic_sre = AgenticSRE(self.context.workspace, sre_monitor, checkpoint_mgr)
         self_repair = SelfRepair(self.context.workspace)
         hard_step_cap = HardStepCap(self.context.workspace)
+        cost_circuit_breaker = CostCircuitBreaker(self.context.workspace)
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
@@ -962,6 +964,24 @@ class ShibaBrain:
                 completion_tokens = response.usage.get("completion_tokens", 0)
                 total_tokens = response.usage.get("total_tokens", prompt_tokens + completion_tokens)
                 session_tokens_used += total_tokens
+                
+                # Record usage and check Cost Circuit Breaker
+                cost_circuit_breaker.record_usage(
+                    model_name=self.model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens
+                )
+
+            if cost_circuit_breaker.is_tripped():
+                logger.warning(
+                    f"Cost Circuit Breaker tripped: cumulative cost ${cost_circuit_breaker.cumulative_cost_usd:.6f} exceeded limit ${cost_circuit_breaker.max_cost_usd:.2f}."
+                )
+                final_content = (
+                    f"I reached the maximum cost budget limit for processing "
+                    f"(spend: ${cost_circuit_breaker.cumulative_cost_usd:.6f}, cap: ${cost_circuit_breaker.max_cost_usd:.2f}). "
+                    f"Enforced hard stop to prevent runaway API costs."
+                )
+                break
 
             max_budget = getattr(self, "max_session_tokens", 100000)
             if max_budget > 0 and session_tokens_used >= max_budget:
