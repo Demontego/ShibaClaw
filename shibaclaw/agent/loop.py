@@ -18,6 +18,7 @@ from shibaclaw.agent.mcp_manager import MCPManager
 from shibaclaw.agent.checkpoint_manager import CheckpointManager
 from shibaclaw.agent.layered_defense import LayeredDefense
 from shibaclaw.agent.agentic_sre import AgenticSRE
+from shibaclaw.agent.self_repair import SelfRepair
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -836,6 +837,7 @@ class ShibaBrain:
         stuck_detector = layered_defense.stuck_detector
         sre_monitor = layered_defense.sre_monitor
         agentic_sre = AgenticSRE(self.context.workspace, sre_monitor, checkpoint_mgr)
+        self_repair = SelfRepair(self.context.workspace)
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
@@ -1196,10 +1198,14 @@ class ShibaBrain:
                 if recovery_prompt:
                     messages.append({"role": "user", "content": recovery_prompt})
 
-                # Run Agentic SRE cycle
+                # Run Agentic SRE cycle safely with Meta-Procedural Self-Repair
                 if session_key:
-                    sre_result = agentic_sre.run_sre_cycle(session_key)
-                    if not sre_result["healthy"]:
+                    success, sre_result = self_repair.execute_safe(
+                        "AgenticSRE",
+                        agentic_sre.run_sre_cycle,
+                        session_key
+                    )
+                    if success and sre_result and not sre_result["healthy"]:
                         action = sre_result["action"]
                         if action["type"] == "inject_prompt":
                             messages.append({"role": "user", "content": action["prompt"]})
