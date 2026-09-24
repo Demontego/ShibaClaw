@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from loguru import logger
 
 from shibaclaw.agent.mcp_manager import MCPManager
+from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -825,6 +826,8 @@ class ShibaBrain:
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
+        stuck_detector = StuckDetector()
+        executed_tool_calls = set()
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
@@ -955,17 +958,8 @@ class ShibaBrain:
             # Stuck Detector: check if the last 3 iterations had the exact same response content
             if response.content:
                 response_content_history.append(response.content.strip())
-                if len(response_content_history) >= 3:
-                    last_three = response_content_history[-3:]
-                    if last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0:
-                        logger.warning("Stuck detector triggered: repeating response content")
-                        messages.append({
-                            "role": "system",
-                            "content": (
-                                "WARNING: You appear to be stuck in a loop of repeating the same response. "
-                                "Please stop, reassess your current goal, and try a different strategy or action."
-                            )
-                        })
+                if stuck_detector.add_response(response.content):
+                    messages.append(stuck_detector.get_goal_reassessment_prompt("repeating response content"))
 
             if response.has_tool_calls:
                 if on_progress:
@@ -1129,17 +1123,16 @@ class ShibaBrain:
                 # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
                 tool_names = [tc.name for tc in response.tool_calls]
                 iteration_tool_sequences.append(tool_names)
-                if len(iteration_tool_sequences) >= 3:
-                    last_three = iteration_tool_sequences[-3:]
-                    if last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0:
-                        logger.warning("Stuck detector triggered: repeating tool sequence {}", last_three[0])
-                        messages.append({
-                            "role": "system",
-                            "content": (
-                                "WARNING: You appear to be stuck in a loop of repeating the same actions. "
-                                "Please stop, reassess your current goal, and try a different strategy."
-                            )
-                        })
+                if stuck_detector.add_tool_sequence(tool_names):
+                    messages.append(stuck_detector.get_goal_reassessment_prompt("repeating tool sequence"))
+
+                # Track progress metric: number of unique tool-argument pairs
+                for tc in response.tool_calls:
+                    executed_tool_calls.add((tc.name, frozenset(tc.arguments.items()) if isinstance(tc.arguments, dict) else str(tc.arguments)))
+                
+                progress_metric = len(executed_tool_calls)
+                if stuck_detector.add_progress_metric(progress_metric):
+                    messages.append(stuck_detector.get_goal_reassessment_prompt("lack of progress / flat progress metric"))
             else:
                 # Strip think from logs/debug output, but keep full content for memory (so UI can reload it)
                 clean = self._strip_think(response.content)
