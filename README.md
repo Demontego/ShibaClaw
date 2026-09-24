@@ -295,7 +295,7 @@ ShibaClaw includes a suite of advanced, production-grade safety and resilience f
 - **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks and prevent progress loss.
 - **IdempotentSaga**: Ensures safe, transactional execution of multi-step tasks with side effects and automatic rollback capabilities.
 - **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure to maintain operational continuity.
-- **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops.
+- **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops and runaway token consumption.
 
 ## Troubleshooting
 
