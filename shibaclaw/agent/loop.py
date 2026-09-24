@@ -15,9 +15,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from loguru import logger
 
 from shibaclaw.agent.mcp_manager import MCPManager
-from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.checkpoint_manager import CheckpointManager
-from shibaclaw.agent.sre_monitor import SREMonitor
+from shibaclaw.agent.layered_defense import LayeredDefense
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -831,11 +830,14 @@ class ShibaBrain:
         except Exception:
             pass
 
+        # Initialize Layered Defense System
+        layered_defense = LayeredDefense(self.context.workspace, session_key)
+        stuck_detector = layered_defense.stuck_detector
+        sre_monitor = layered_defense.sre_monitor
+
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
-        stuck_detector = StuckDetector()
-        sre_monitor = SREMonitor()
         executed_tool_calls = set()
         session_tokens_used: int = 0
 
@@ -1180,9 +1182,17 @@ class ShibaBrain:
                     sre_status["quality"],
                 )
 
-                # Save checkpoint at the end of each iteration
-                if session_key:
-                    checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
+                # Layered Defense: record iteration and save checkpoint
+                should_continue, recovery_prompt = layered_defense.record_iteration(
+                    iteration=iteration,
+                    response_content=response.content if 'response' in locals() else None,
+                    tool_names=tool_names if 'tool_names' in locals() else None,
+                    progress_metric=progress_metric if 'progress_metric' in locals() else None,
+                    messages=messages,
+                    metadata=metadata,
+                )
+                if recovery_prompt:
+                    messages.append({"role": "user", "content": recovery_prompt})
 
                 # Check for steering messages: if we have some, continue the loop
                 # instead of breaking, so the agent can respond to the injected message
@@ -1199,7 +1209,7 @@ class ShibaBrain:
             )
 
         if session_key:
-            checkpoint_mgr.delete_checkpoint(session_key)
+            layered_defense.cleanup()
             self._steering_queues.pop(session_key, None)
 
         return final_content, tools_used, messages
