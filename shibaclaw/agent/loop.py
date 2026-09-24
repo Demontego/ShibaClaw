@@ -19,6 +19,7 @@ from shibaclaw.agent.checkpoint_manager import CheckpointManager
 from shibaclaw.agent.layered_defense import LayeredDefense
 from shibaclaw.agent.agentic_sre import AgenticSRE
 from shibaclaw.agent.self_repair import SelfRepair
+from shibaclaw.agent.hard_step_cap import HardStepCap
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -838,6 +839,7 @@ class ShibaBrain:
         sre_monitor = layered_defense.sre_monitor
         agentic_sre = AgenticSRE(self.context.workspace, sre_monitor, checkpoint_mgr)
         self_repair = SelfRepair(self.context.workspace)
+        hard_step_cap = HardStepCap(self.context.workspace)
 
         tool_call_history: list[tuple[str, str]] = []
         iteration_tool_sequences: list[list[str]] = []
@@ -846,6 +848,9 @@ class ShibaBrain:
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
+            # Enforce Hard Step Cap
+            if not hard_step_cap.check_step_limit(iteration):
+                break
             if session_key and session_key in self._steering_queues:
                 steer_msgs = self._steering_queues[session_key]
                 if steer_msgs:
