@@ -284,6 +284,19 @@ Background tasks run on cron-like schedules or event triggers (messages, webhook
 
 Local, privacy-first retrieval-augmented generation: organize documents into named collections (PDF, CSV, HTML, TXT, Markdown), upload via drag-and-drop, and search with a FAISS index over `all-MiniLM-L6-v2` embeddings. The agent can call `knowledge_search` during conversation, or you can target a specific collection with `@kb:name`. It's an optional dependency — install with `pip install shibaclaw[rag]`.
 
+## Safety & Resilience (SRE)
+
+ShibaClaw includes a suite of advanced, production-grade safety and resilience features to ensure reliable and cost-effective execution:
+
+- **StuckDetector**: Monitors agent progress to detect repetitive actions or lack of progress, automatically triggering goal reassessment.
+- **Cost Circuit Breakers**: Prevents runaway API costs by enforcing strict budget limits per session.
+- **Context Overflow Guard**: A three-threshold guardrail (Warning, Critical, Hard Limit) that manages context window limits with automatic summarization and checkpointing.
+- **Agentic SRE**: Specialized Monitor, Recovery, and Audit agents that continuously track liveness, progress, and quality.
+- **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks.
+- **IdempotentSaga**: Ensures safe execution of multi-step transactional tasks with side effects.
+- **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure.
+- **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops.
+
 ## Troubleshooting
 
 | Problem | Try |
