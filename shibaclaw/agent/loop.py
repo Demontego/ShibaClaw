@@ -17,6 +17,7 @@ from loguru import logger
 from shibaclaw.agent.mcp_manager import MCPManager
 from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.checkpoint_manager import CheckpointManager
+from shibaclaw.agent.sre_monitor import SREMonitor
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -834,6 +835,7 @@ class ShibaBrain:
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
         stuck_detector = StuckDetector()
+        sre_monitor = SREMonitor()
         executed_tool_calls = set()
         session_tokens_used: int = 0
 
@@ -965,6 +967,7 @@ class ShibaBrain:
             # Stuck Detector: check if the last 3 iterations had the exact same response content
             if response.content:
                 response_content_history.append(response.content.strip())
+                sre_monitor.add_response(response.content)
                 if stuck_detector.add_response(response.content):
                     messages.append(stuck_detector.get_goal_reassessment_prompt("repeating response content"))
 
@@ -1130,6 +1133,7 @@ class ShibaBrain:
                 # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
                 tool_names = [tc.name for tc in response.tool_calls]
                 iteration_tool_sequences.append(tool_names)
+                sre_monitor.add_tool_sequence(tool_names)
                 if stuck_detector.add_tool_sequence(tool_names):
                     messages.append(stuck_detector.get_goal_reassessment_prompt("repeating tool sequence"))
 
@@ -1138,6 +1142,7 @@ class ShibaBrain:
                     executed_tool_calls.add((tc.name, frozenset(tc.arguments.items()) if isinstance(tc.arguments, dict) else str(tc.arguments)))
                 
                 progress_metric = len(executed_tool_calls)
+                sre_monitor.add_progress_metric(progress_metric)
                 if stuck_detector.add_progress_metric(progress_metric):
                     messages.append(stuck_detector.get_goal_reassessment_prompt("lack of progress / flat progress metric"))
             else:
@@ -1162,23 +1167,17 @@ class ShibaBrain:
 
                 # SRE Health Monitor: log structured health status at the end of each iteration
                 elapsed = time.monotonic() - loop_start
-                stuck_detected = False
-                if len(iteration_tool_sequences) >= 3:
-                    last_three = iteration_tool_sequences[-3:]
-                    stuck_detected = (last_three[0] == last_three[1] == last_three[2] and len(last_three[0]) > 0)
-                
-                loop_detected = False
-                if len(response_content_history) >= 3:
-                    last_three_resp = response_content_history[-3:]
-                    loop_detected = (last_three_resp[0] == last_three_resp[1] == last_three_resp[2] and len(last_three_resp[0]) > 0)
+                sre_status = sre_monitor.get_status()
 
                 logger.info(
-                    "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Stuck: {} | Loop: {}",
+                    "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,
                     elapsed,
                     session_tokens_used,
-                    "YES" if stuck_detected else "NO",
-                    "YES" if loop_detected else "NO",
+                    "YES" if sre_status["healthy"] else "NO",
+                    sre_status["liveness"],
+                    sre_status["progress"],
+                    sre_status["quality"],
                 )
 
                 # Save checkpoint at the end of each iteration
