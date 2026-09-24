@@ -289,7 +289,7 @@ Local, privacy-first retrieval-augmented generation: organize documents into nam
 ShibaClaw includes a suite of advanced, production-grade safety and resilience features to ensure reliable and cost-effective execution:
 
 - **StuckDetector**: Monitors agent progress to detect repetitive actions, tool-call loops, or lack of progress, automatically triggering goal reassessment and recovery prompts.
-- **Cost Circuit Breakers**: Prevents runaway API costs by enforcing strict budget limits per session.
+- **Cost Circuit Breakers**: Prevents runaway API costs by enforcing strict budget limits per session and automatically halting execution when thresholds are exceeded.
 - **Context Overflow Guard**: A three-threshold guardrail (Warning, Critical, Hard Limit) that manages context window limits with automatic summarization and checkpointing.
 - **Agentic SRE**: Specialized Monitor, Recovery, and Audit agents that continuously track liveness, progress, and quality.
 - **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks.
