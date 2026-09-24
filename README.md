@@ -294,7 +294,7 @@ ShibaClaw includes a suite of advanced, production-grade safety and resilience f
 - **Agentic SRE**: Specialized Monitor, Recovery, and Audit agents that continuously track liveness, progress, and quality, ensuring autonomous self-healing and system stability.
 - **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks and prevent progress loss.
 - **IdempotentSaga**: Ensures safe, transactional execution of multi-step tasks with side effects and automatic rollback capabilities.
-- **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure.
+- **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure to maintain operational continuity.
 - **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops.
 
 ## Troubleshooting
