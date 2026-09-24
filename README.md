@@ -68,6 +68,7 @@ ShibaClaw is a self-hosted AI agent you run on your own machine or server: a Pyt
 
 ## Features
 
+- **Advanced Safety & Resilience (SRE)** — StuckDetector, Cost Circuit Breakers, Context Overflow Guard, Agentic SRE, CheckpointManager, IdempotentSaga, SelfRepair, HardStepCap, SREMonitor, and LayeredDefense
 - **Security-first core** — encrypted credentials vault, install-time CVE audit, prompt-injection wrapping, SSRF/DNS-rebinding guard
 - **Three-tier memory & WebUI Manager** — working, semantic (FAISS), and procedural memory with interactive WebUI management, live editing, dream diary, and safe quarantine
 - **Human-in-the-loop interactive UX** — structured in-turn prompts (`ask_user`), masked vault credentials, progress cards, and dynamic permission sandboxing
