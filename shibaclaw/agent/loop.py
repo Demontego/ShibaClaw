@@ -16,6 +16,7 @@ from loguru import logger
 
 from shibaclaw.agent.mcp_manager import MCPManager
 from shibaclaw.agent.stuck_detector import StuckDetector
+from shibaclaw.agent.checkpoint_manager import CheckpointManager
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -728,8 +729,14 @@ class ShibaBrain:
         metadata: dict | None = None,
         temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
-        messages = initial_messages
-        iteration = 0
+        checkpoint_mgr = CheckpointManager(self.context.workspace)
+        checkpoint = checkpoint_mgr.load_checkpoint(session_key) if session_key else None
+        if checkpoint:
+            messages, iteration, checkpoint_metadata = checkpoint
+            logger.info("Resuming session %s from checkpoint at iteration %d", session_key, iteration)
+        else:
+            messages = initial_messages
+            iteration = 0
         final_content = None
         tools_used: list[str] = []
         loop_start = time.monotonic()
@@ -1174,6 +1181,10 @@ class ShibaBrain:
                     "YES" if loop_detected else "NO",
                 )
 
+                # Save checkpoint at the end of each iteration
+                if session_key:
+                    checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
+
                 # Check for steering messages: if we have some, continue the loop
                 # instead of breaking, so the agent can respond to the injected message
                 if session_key and self._steering_queues.get(session_key):
@@ -1189,6 +1200,7 @@ class ShibaBrain:
             )
 
         if session_key:
+            checkpoint_mgr.delete_checkpoint(session_key)
             self._steering_queues.pop(session_key, None)
 
         return final_content, tools_used, messages
