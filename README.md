@@ -296,7 +296,7 @@ ShibaClaw includes a suite of advanced, production-grade safety and resilience f
 - **IdempotentSaga**: Ensures safe, transactional execution of multi-step tasks with side effects, automatic rollback capabilities, and strict idempotency guarantees.
 - **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure to maintain operational continuity, system integrity, and self-healing capabilities.
 - **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops, runaway token consumption, and execution stalls.
-- **LayeredDefense**: Integrates all safety and resilience mechanisms into a unified, multi-layered defense system to guarantee robust, fault-tolerant execution.
+- **LayeredDefense**: Integrates all safety and resilience mechanisms into a unified, multi-layered defense system to guarantee robust, fault-tolerant execution and system reliability.
 
 ## Troubleshooting
 
