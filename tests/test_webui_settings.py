@@ -46,6 +46,42 @@ def _get_request(path: str = "/api/models", query_string: str = "") -> Request:
 
 
 @pytest.mark.asyncio
+async def test_api_settings_get_redacts_camelcase_and_nested_credentials(monkeypatch):
+    from shibaclaw.webui.routers import settings
+
+    async def no_vault_placeholders(data):
+        return data
+
+    config = Config.model_validate(
+        {
+            "channels": {
+                "telegram": {"botToken": "telegram-secret-1234"},
+                "email": {"imapPassword": "email-secret-1234"},
+            },
+            "tools": {
+                "mcpServers": {
+                    "demo": {
+                        "env": {"OPENAI_API_KEY": "environment-secret-1234"},
+                        "headers": {"Authorization": "Bearer header-secret-1234"},
+                    }
+                }
+            },
+        }
+    )
+    monkeypatch.setattr(agent_manager, "config", config)
+    monkeypatch.setattr(settings, "_inject_vault_placeholders", no_vault_placeholders)
+
+    response = await settings.api_settings_get(_get_request("/api/settings"))
+    payload = json.loads(response.body)
+
+    assert response.status_code == 200
+    assert payload["channels"]["telegram"]["botToken"] != "telegram-secret-1234"
+    assert payload["channels"]["email"]["imapPassword"] != "email-secret-1234"
+    assert payload["tools"]["mcpServers"]["demo"]["env"]["OPENAI_API_KEY"] != "environment-secret-1234"
+    assert payload["tools"]["mcpServers"]["demo"]["headers"]["Authorization"] != "Bearer header-secret-1234"
+
+
+@pytest.mark.asyncio
 async def test_api_settings_post_replaces_deleted_mcp_servers(monkeypatch):
     import shibaclaw.cli.commands as commands_module
 
