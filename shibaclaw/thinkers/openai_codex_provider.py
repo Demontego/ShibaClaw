@@ -13,6 +13,7 @@ from loguru import logger
 from shibaclaw.thinkers.base import LLMResponse, Thinker, ToolCallRequest
 
 DEFAULT_CODEX_URL = "https://chatgpt.com/backend-api/codex/responses"
+DEFAULT_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
 DEFAULT_ORIGINATOR = "shibaclaw"
 
 
@@ -43,7 +44,7 @@ class OpenAICodexThinker(Thinker):
         system_prompt, input_items = _convert_messages(messages)
 
         token = await asyncio.to_thread(_get_codex_token)
-        headers = _build_headers(token.account_id, token.access)
+        headers = _build_headers(token.account_id or "", token.access)
 
         body: dict[str, Any] = {
             "model": _strip_model_prefix(model),
@@ -106,7 +107,7 @@ class OpenAICodexThinker(Thinker):
         system_prompt, input_items = _convert_messages(messages)
 
         token = await asyncio.to_thread(_get_codex_token)
-        headers = _build_headers(token.account_id, token.access)
+        headers = _build_headers(token.account_id or "", token.access)
 
         body: dict[str, Any] = {
             "model": _strip_model_prefix(model),
@@ -158,7 +159,21 @@ class OpenAICodexThinker(Thinker):
         return self.default_model
 
     async def get_available_models(self) -> list[dict[str, str]]:
-        """Return known models since there is no standard /models endpoint."""
+        """Return models from the Codex backend ``/models`` endpoint.
+
+        The official Codex backend exposes ``/backend-api/codex/models``
+        (OpenAI-compatible ``{"models": [...]}`` shape, each entry carrying a
+        ``slug``/``id`` and ``display_name``). When the endpoint is reachable
+        and authenticated we return the live catalog; otherwise we fall back
+        to a hardcoded list so the UI never shows a wrong model name.
+        """
+        try:
+            models = await _fetch_codex_models()
+            if models:
+                return models
+        except Exception as e:
+            logger.debug("Codex /models fetch failed, using fallback: {}", e)
+
         return [
             {"id": "openai-codex/gpt-4o", "name": "GPT-4o"},
             {"id": "openai-codex/gpt-4o-mini", "name": "GPT-4o Mini"},
@@ -184,6 +199,52 @@ def _build_headers(account_id: str, token: str) -> dict[str, str]:
         "accept": "text/event-stream",
         "content-type": "application/json",
     }
+
+
+async def _fetch_codex_models() -> list[dict[str, str]]:
+    """Fetch the live model catalog from the Codex backend ``/models`` endpoint.
+
+    The official Codex backend exposes ``/backend-api/codex/models`` with an
+    OpenAI-compatible ``{"models": [...]}`` body where each entry carries a
+    ``slug``/``id`` and ``display_name``. We use the same OAuth token and
+    headers as the Responses API so the list always reflects what the account
+    can actually call.
+    """
+    token = await asyncio.to_thread(_get_codex_token)
+    headers = _build_headers(token.account_id or "", token.access)
+    # The /models endpoint is a plain GET (no streaming, no body).
+    headers = {k: v for k, v in headers.items() if k not in ("accept", "content-type")}
+    headers["accept"] = "application/json"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0, verify=True) as client:
+            resp = await client.get(DEFAULT_MODELS_URL, headers=headers)
+    except Exception:
+        async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            resp = await client.get(DEFAULT_MODELS_URL, headers=headers)
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Codex /models returned HTTP {resp.status_code}")
+
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise RuntimeError(f"Codex /models returned invalid JSON: {e}")
+
+    raw_models = data.get("models") if isinstance(data, dict) else None
+    if not isinstance(raw_models, list):
+        raise RuntimeError("Codex /models response missing 'models' list")
+
+    results: list[dict[str, str]] = []
+    for entry in raw_models:
+        if not isinstance(entry, dict):
+            continue
+        model_id = entry.get("slug") or entry.get("id") or entry.get("name")
+        if not model_id:
+            continue
+        display = entry.get("display_name") or entry.get("name") or model_id
+        results.append({"id": f"openai-codex/{model_id}", "name": str(display)})
+    return results
 
 
 async def _request_codex(
@@ -385,7 +446,7 @@ async def _consume_sse(response: httpx.Response, on_token: Any = None) -> tuple[
                 tool_calls.append(
                     ToolCallRequest(
                         id=f"{call_id}|{buf.get('id') or item.get('id') or 'fc_0'}",
-                        name=buf.get("name") or item.get("name"),
+                        name=str(buf.get("name") or item.get("name") or ""),
                         arguments=args,
                     )
                 )
