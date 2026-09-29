@@ -4,12 +4,15 @@ import os
 import shutil
 import re
 import warnings
-from functools import lru_cache
+import threading
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Defer langchain / filelock imports until RAG is actually used.
 _rag_available: Optional[bool] = None
+_rag_loaded = False
+_rag_load_lock = threading.Lock()
 
 _RAG_MSG = "RAG dependencies are not installed. Run: uv sync --extra rag"
 
@@ -33,48 +36,59 @@ def _file_lock(path: str):
 
 
 def is_rag_available() -> bool:
-    global _rag_available, Document, BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader, FAISS, RecursiveCharacterTextSplitter
+    """Check installed packages without importing the RAG/ML stack.
+
+    Called during gateway startup and by WebUI status/collection requests.
+    Importing loaders here also imports Transformers/PyTorch when installed,
+    which can stall a cold Windows launch before the gateway is listening.
+    """
+    global _rag_available
     if _rag_available is not None:
         return _rag_available
     import importlib.util
-    import sys
 
     importlib.invalidate_caches()
-    spec_lc = importlib.util.find_spec("langchain")
-    spec_comm = importlib.util.find_spec("langchain_community")
-    spec_faiss = importlib.util.find_spec("faiss")
-
-    if (
-        spec_lc is None
-        or spec_comm is None
-        or spec_faiss is None
-    ):
-        for mod_name in list(sys.modules.keys()):
-            if mod_name.startswith(("langchain", "faiss", "sentence_transformers")):
-                sys.modules.pop(mod_name, None)
-        class Document:
-            pass
-        _rag_available = False
-        return False
-
-    try:
-        from langchain_core.documents import Document as _Document
-        from langchain_community.document_loaders import (  # noqa: F401
-            BSHTMLLoader,
-            CSVLoader,
-            PyPDFLoader,
-            TextLoader,
+    # Top-level names only: find_spec on a submodule imports its parent.
+    _rag_available = all(
+        importlib.util.find_spec(name) is not None
+        for name in (
+            "langchain", "langchain_core", "langchain_community",
+            "langchain_text_splitters", "faiss", "filelock",
         )
-        from langchain_community.vectorstores import FAISS  # noqa: F401
-        from langchain_text_splitters import RecursiveCharacterTextSplitter  # noqa: F401
+    )
+    return _rag_available
+
+
+def _load_rag_dependencies() -> None:
+    """Load RAG implementations on first indexing/search use, in the worker.
+
+    Publish the implementations together after successful imports. Concurrent
+    uploads/searches must not see a partially initialized set of globals.
+    """
+    global _rag_loaded, Document, BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader, FAISS, RecursiveCharacterTextSplitter
+    if _rag_loaded:
+        return
+    with _rag_load_lock:
+        if _rag_loaded:
+            return
+        if not is_rag_available():
+            raise RuntimeError(_RAG_MSG)
+        try:
+            from langchain_core.documents import Document as _Document
+            from langchain_community.document_loaders import (
+                BSHTMLLoader as _BSHTMLLoader,
+                CSVLoader as _CSVLoader,
+                PyPDFLoader as _PyPDFLoader,
+                TextLoader as _TextLoader,
+            )
+            from langchain_community.vectorstores import FAISS as _FAISS
+            from langchain_text_splitters import RecursiveCharacterTextSplitter as _Splitter
+        except Exception as exc:
+            raise RuntimeError(f"Unable to load RAG dependencies: {exc}") from exc
         Document = _Document
-        _rag_available = True
-        return True
-    except Exception:
-        class Document:
-            pass
-        _rag_available = False
-        return False
+        BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader = _BSHTMLLoader, _CSVLoader, _PyPDFLoader, _TextLoader
+        FAISS, RecursiveCharacterTextSplitter = _FAISS, _Splitter
+        _rag_loaded = True
 
 
 def __getattr__(name: str) -> Any:
@@ -137,12 +151,13 @@ class KnowledgeManager:
         self.workspace_path = workspace_path
         self.base_dir = self.workspace_path / "memory" / "knowledge"
         self.base_dir.mkdir(parents=True, exist_ok=True)
-        if is_rag_available():
-            self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        else:
-            self.text_splitter = None
         self._faiss_cache = KnowledgeManager._faiss_cache
-        
+
+    @cached_property
+    def text_splitter(self):
+        _load_rag_dependencies()
+        return RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+
     @property
     def embeddings(self):
         # Lazy load embeddings to avoid blocking event loop on init
@@ -228,8 +243,7 @@ class KnowledgeManager:
             del self._faiss_cache[cid]
 
     def _get_loader(self, file_path: Path):
-        if not is_rag_available():
-            raise RuntimeError(_RAG_MSG)
+        _load_rag_dependencies()
         ext = file_path.suffix.lower()
         if ext == ".pdf":
             return PyPDFLoader(str(file_path))
@@ -241,8 +255,7 @@ class KnowledgeManager:
             return TextLoader(str(file_path), autodetect_encoding=True)
 
     def add_document(self, collection_id: str, file_path: Path, filename: str) -> None:
-        if not is_rag_available():
-            raise RuntimeError(_RAG_MSG)
+        _load_rag_dependencies()
         coll_dir = self._get_collection_dir(collection_id)
         if not coll_dir.exists():
             raise ValueError(f"Collection {collection_id} does not exist")
@@ -319,8 +332,7 @@ class KnowledgeManager:
             raise e
 
     def search(self, collection_ids: List[str], query: str, k: int = 4) -> List[Document]:
-        if not is_rag_available():
-            raise RuntimeError(_RAG_MSG)
+        _load_rag_dependencies()
         results = []
         for cid in collection_ids:
             try:

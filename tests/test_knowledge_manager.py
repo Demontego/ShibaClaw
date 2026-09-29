@@ -8,6 +8,8 @@ class FakeEmbeddings:
         return [[0.1, 0.2] for _ in texts]
     def embed_query(self, text):
         return [0.1, 0.2]
+    def __call__(self, text):
+        return self.embed_query(text)
 
 @pytest.fixture
 def workspace_dir(tmp_path):
@@ -74,6 +76,12 @@ def test_faiss_caching(mock_embeddings, km, tmp_path):
     km.add_document("test", dummy_file, "dummy.txt")
     
     assert "test" in km._faiss_cache
+
+    # Searching must still initialize/load the RAG implementation lazily,
+    # including the persisted-index path after a cache miss.
+    assert km.search(["test"], "hello")[0].page_content == "hello"
+    km._faiss_cache.clear()
+    assert km.search(["test"], "hello")[0].page_content == "hello"
     
     # Delete collection should clear cache
     km.delete_collection("test")
