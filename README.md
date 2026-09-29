@@ -38,17 +38,13 @@
 ---
 
 <details open>
-<summary>🚀 <b>What's new — v1.0.1 Security Release</b> (click to expand)</summary>
+<summary>🚀 <b>What's new — v1.0.2</b> (click to expand)</summary>
 
-**Latest release v1.0.1 (2026-09-17):**
+**Latest release v1.0.2 (2026-09-29):**
 
-- **Security & Dependabot Alert #23 Fix** — Upgraded `sharp` to `0.35.4` in the WhatsApp bridge plugin, addressing high-severity vulnerability GHSA-rgj7-g3m4-5g8c in upstream `libheif`.
-- **Milestone 1.0.0 — Production-Ready Agent Framework** — ShibaClaw hits 1.0.0! A complete, self-hosted personal AI assistant built for privacy, modularity, and rock-solid stability with full Python 3.12–3.14 and cross-platform Ubuntu/Windows CI.
-- **Interactive Memory Manager & Live Quarantine** — Brand-new dedicated WebUI panel (`psychology` sidebar icon) and REST endpoints (`/api/memory`). Inspect and live-edit long-term knowledge (`MEMORY.md`), user preferences (`USER.md`), session timeline (`HISTORY.md`), and dream diary reflections (`DREAM_DIARY.md`) with real-time token budgeting and safe quarantine redaction.
-- **Next-Gen In-Turn Interactive UX & Human-in-the-Loop** — Seamless interaction during agent turns: structured `ask_user` multi-choice prompts, masked `request_credential` vault isolation (kept strictly outside LLM context), durable `update_progress` visual cards, fast `session_search`, and dynamic per-session sandbox permissions (`full` | `workspace` | `readonly`).
-- **Hardened Security & Zero-Leak Incognito Sessions** — Per-execution `ContextVar` tool scoping prevents cross-session concurrency leaks. Incognito sessions strictly purge JSONL logs from disk and bypass memory consolidation. Automated fail-closed profile model allowlists prevent unauthorized model fallbacks.
-- **Complete LangChain 1.4+ Upgrade & Dependabot Fixes** — Upgraded the entire RAG stack to modern LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), resolving all known upstream security advisories (`pip-audit` clean).
-- **Modular Packaging, `uv` & Diagnostic Doctor** — Slim core engine with modular extras (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), sub-second startup with lazy plugin/channel discovery, and `shibaclaw doctor [--fix]` diagnostics.
+- **Faster RAG Startup** — RAG dependencies now load only when indexing or searching, reducing unnecessary work during gateway startup.
+- **OpenAI Codex OAuth Models** — The available model list is fetched from the authenticated Codex backend, with a fallback catalog if the endpoint is unavailable.
+- **More Reliable File Handling** — Uploads are streamed in chunks, authorized media files can be retrieved, and credential redaction handles more key-name variations.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 

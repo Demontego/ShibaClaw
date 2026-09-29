@@ -1,6 +1,6 @@
 {
   "name": "shibaclaw-webui",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "ShibaClaw WebUI static assets",
   "private": true,
   "scripts": {

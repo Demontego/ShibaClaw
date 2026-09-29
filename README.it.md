@@ -38,17 +38,13 @@
 ---
 
 <details open>
-<summary>🚀 <b>Novità — Release di sicurezza v1.0.1</b> (fai clic per espandere)</summary>
+<summary>🚀 <b>Novità — v1.0.2</b> (fai clic per espandere)</summary>
 
-**Ultima release v1.0.1 (2026-09-17):**
+**Ultima release v1.0.2 (2026-09-29):**
 
-- **Sicurezza e risoluzione Dependabot #23** — Aggiornato `sharp` a `0.35.4` nel plugin bridge di WhatsApp, risolvendo la vulnerabilità ad alta gravità GHSA-rgj7-g3m4-5g8c nella libreria upstream `libheif`.
-- **Traguardo 1.0.0 — Framework di agenti pronto per la produzione** — ShibaClaw raggiunge la 1.0.0! Un assistente IA personale completo e self-hosted, progettato per privacy, modularità e massima stabilità, con pieno supporto a Python 3.12–3.14 e CI multipiattaforma Ubuntu/Windows.
-- **Gestore memoria interattivo e quarantena in tempo reale** — Nuovo pannello dedicato nella WebUI (icona `psychology` nella barra laterale) ed endpoint REST (`/api/memory`). Ispeziona e modifica in tempo reale le conoscenze a lungo termine (`MEMORY.md`), le preferenze utente (`USER.md`), la cronologia della sessione (`HISTORY.md`) e le riflessioni del diario dei sogni (`DREAM_DIARY.md`), con monitoraggio in tempo reale del budget di token e redazione sicura degli elementi in quarantena.
-- **UX interattiva durante il turno e Human-in-the-Loop di nuova generazione** — Interazione fluida durante i turni dell'agente: prompt strutturati a scelta multipla (`ask_user`), isolamento sicuro delle credenziali nel vault mascherato (`request_credential`, tenute rigorosamente fuori dal contesto LLM), schede di avanzamento visive persistenti (`update_progress`), ricerca rapida nelle sessioni (`session_search`) e permessi di sandbox dinamici per sessione (`full` | `workspace` | `readonly`).
-- **Sicurezza rafforzata e sessioni in incognito a zero leak** — Scoping degli strumenti tramite `ContextVar` per singola esecuzione per prevenire leak di concorrenza tra sessioni diverse. Le sessioni in incognito eliminano completamente i log JSONL dal disco e ignorano il consolidamento della memoria. Whitelist restrittive dei modelli di profilo con blocco automatico in caso di errore (fail-closed) per impedire fallback non autorizzati.
-- **Aggiornamento completo a LangChain 1.4+ e correzioni Dependabot** — Aggiornato l'intero stack RAG a LangChain 1.4+ moderno (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), risolvendo tutti gli avvisi di sicurezza upstream noti (`pip-audit` pulito).
-- **Pacchettizzazione modulare, `uv` e comando diagnostico Doctor** — Core engine snello con extra modulari (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), avvio in meno di un secondo con rilevamento lazy di plugin/canali e diagnostica `shibaclaw doctor [--fix]`.
+- **Avvio RAG più rapido** — Le dipendenze RAG vengono caricate solo al primo uso per indicizzazione o ricerca, riducendo il lavoro all'avvio del gateway.
+- **Modelli OpenAI Codex OAuth** — L'elenco dei modelli disponibili viene recuperato dal backend Codex autenticato, con un catalogo di riserva se l'endpoint non è raggiungibile.
+- **Gestione file più affidabile** — Gli upload vengono trasmessi a blocchi, è possibile scaricare file multimediali autorizzati e la redazione delle credenziali riconosce più varianti dei nomi dei campi.
 
 Consulta [CHANGELOG.md](./CHANGELOG.md) per la cronologia completa delle versioni.
 

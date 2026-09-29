@@ -1,3 +1,10 @@
+## [1.0.2] - 2026-09-29
+
+### Added
+- **Lazy RAG Dependency Loading** — Deferred loading of LangChain and vector-store implementations until the first indexing or search operation, reducing gateway cold-start work and avoiding heavy imports during availability checks.
+- **Live OpenAI Codex OAuth Model Catalog** — Fetches available models from the authenticated Codex backend, with a fallback catalog when the endpoint is unavailable. Also handles missing account IDs and malformed tool-call names safely.
+- **More Robust Uploads and Media Access** — Streams uploads in 1 MiB chunks, handles missing or unusable filenames, and allows authorized file retrieval from the media directory. Secret redaction now normalizes key names and detects nested credential fields more reliably.
+
 ## [1.0.1] - 2026-09-17
 
 ### Security & Fixed
