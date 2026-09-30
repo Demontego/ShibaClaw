@@ -83,10 +83,12 @@ function initListeners() {
         }
     });
 
-    document.querySelectorAll(".hint-card").forEach((card) => {
+    document.querySelectorAll(".hint-card[data-hint]").forEach((card) => {
         card.addEventListener("click", () => {
-            chatInput.value = card.dataset.hint;
-            sendMessage();
+            chatInput.value = card.dataset.hintKey ? t(card.dataset.hintKey) : card.dataset.hint;
+            autoResizeInput();
+            updateSendButton();
+            chatInput.focus();
             closeSidebarOnMobile();
         });
     });
@@ -96,7 +98,8 @@ function initListeners() {
     });
 
     $("sidebar-toggle").addEventListener("click", () => {
-        setSidebarOpen(!$("sidebar").classList.contains("open"));
+        if (isMobileSidebar()) setSidebarOpen(!$("sidebar").classList.contains("open"));
+        else if (typeof window.toggleWorkspaceSidebar === "function") window.toggleWorkspaceSidebar();
     });
 
     $("sidebar-backdrop")?.addEventListener("click", closeSidebarOnMobile);
@@ -112,7 +115,7 @@ function initListeners() {
         const menuBtn = $("mobile-menu-btn");
         const toggleBtn = $("sidebar-toggle");
         if (!sidebar || !isMobileSidebar() || !sidebar.classList.contains("open")) return;
-        if (sidebar.contains(e.target) || menuBtn?.contains(e.target) || toggleBtn?.contains(e.target)) return;
+        if (sidebar.contains(e.target) || menuBtn?.contains(e.target) || toggleBtn?.contains(e.target) || e.target.closest(".workspace-mobile-menu")) return;
         closeSidebarOnMobile();
     });
 

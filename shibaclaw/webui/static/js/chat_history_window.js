@@ -232,6 +232,7 @@
     }
 
     async function loadSessionWindowed(sessionId) {
+        if (typeof window.showWorkspaceChat === "function") window.showWorkspaceChat();
         ensureStyles();
         if (typeof closeSettingsView === "function") closeSettingsView();
         if (state.processing) {

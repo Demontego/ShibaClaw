@@ -1,4 +1,6 @@
 window.openSettingsView = async function () {
+    if (typeof window.leaveWorkspace === "function") window.leaveWorkspace();
+    if (typeof window.setWorkspaceNav === "function") window.setWorkspaceNav("settings");
     const chatArea = document.getElementById("chat-area");
     const settingsView = document.getElementById("settings-view");
     if (chatArea) chatArea.style.display = "none";
@@ -47,6 +49,7 @@ window.closeSettingsView = function () {
     const chatArea = document.getElementById("chat-area");
     if (settingsView) settingsView.style.display = "none";
     if (chatArea) chatArea.style.display = "flex";
+    if (typeof window.setWorkspaceNav === "function") window.setWorkspaceNav("chat");
 };
 
 window.backToSettingsDashboard = function () {

@@ -133,60 +133,57 @@ function usageColor(pct) {
     return "#ef4444";
 }
 
-function buildTokenCard(t) {
-    const pct = t.usage_pct || 0;
-    const tier = usageTier(pct);
-    const isAuto = t.auto_detected === true;
-    const modelName = t.active_model ? String(t.active_model).split("/").pop() : "";
+function buildTokenCard(tokens) {
+    const pct = tokens.usage_pct || 0;
+    const isAuto = tokens.auto_detected === true;
+    const modelName = tokens.active_model ? String(tokens.active_model).split("/").pop() : "";
     const sourceHtml = isAuto
         ? `<div style="font-size:0.75rem; margin-top:8px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
             <span class="material-icons-round" style="font-size:14px; color:var(--shiba-gold);">auto_awesome</span>
-            <span>Auto-detected limit for <b>${escapeHtml(modelName || 'active model')}</b> (${fmtTokens(t.context_window)})</span>
+            <span>${escapeHtml(t("workspace.tokens_auto", { model: modelName || t("common.default"), limit: fmtTokens(tokens.context_window) }))}</span>
            </div>`
         : `<div style="font-size:0.75rem; margin-top:8px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
             <span class="material-icons-round" style="font-size:14px;">settings</span>
-            <span>Fallback limit from Settings (${fmtTokens(t.context_window)})</span>
+            <span>${escapeHtml(t("workspace.tokens_fallback", { limit: fmtTokens(tokens.context_window) }))}</span>
            </div>`;
 
     return `
     <div class="context-token-card">
-        <h3>📊 Token Estimate</h3>
+        <h3>${escapeHtml(t("workspace.tokens"))}</h3>
         <table class="context-token-table">
-            <tr><td>System Prompt</td><td>~${(t.system_prompt || 0).toLocaleString()}</td></tr>
-            <tr><td>Tool definitions</td><td>~${(t.tools || 0).toLocaleString()}</td></tr>
-            <tr><td>Session messages</td><td>~${(t.messages || 0).toLocaleString()}</td></tr>
-            <tr class="total"><td>Total</td><td>~${(t.total || 0).toLocaleString()}</td></tr>
+            <tr><td>${escapeHtml(t("workspace.tokens_system"))}</td><td>~${(tokens.system_prompt || 0).toLocaleString(window.i18n.clockLocale())}</td></tr>
+            <tr><td>${escapeHtml(t("workspace.tokens_tools"))}</td><td>~${(tokens.tools || 0).toLocaleString(window.i18n.clockLocale())}</td></tr>
+            <tr><td>${escapeHtml(t("workspace.tokens_messages"))}</td><td>~${(tokens.messages || 0).toLocaleString(window.i18n.clockLocale())}</td></tr>
+            <tr class="total"><td>${escapeHtml(t("workspace.tokens_total"))}</td><td>~${(tokens.total || 0).toLocaleString(window.i18n.clockLocale())}</td></tr>
         </table>
-        ${t.context_window > 0 ? `
+        ${tokens.context_window > 0 ? `
         <div class="context-usage-bar">
             <div class="context-usage-fill" style="width:${pct}%; background:${usageColor(pct)};"></div>
         </div>
         <div class="context-usage-label">
-            <span>${fmtTokens(t.total)} / ${fmtTokens(t.context_window)}</span>
+            <span>${fmtTokens(tokens.total)} / ${fmtTokens(tokens.context_window)}</span>
             <span style="color:${usageColor(pct)}">${pct}%</span>
         </div>
         ${sourceHtml}` : ""}
     </div>`;
 }
 
-function updateTokenBadge(t) {
+function updateTokenBadge(tokens) {
     const badge = $("token-badge");
     const text = $("token-badge-text");
     const fill = $("token-badge-fill");
-    if (!badge || !text || !t) return;
-    const pct = t.usage_pct ?? 0;
+    if (!badge || !text || !tokens) return;
+    const pct = tokens.usage_pct ?? 0;
     const tier = usageTier(pct);
     badge.className = "token-badge usage-" + tier;
     if (fill) fill.style.width = `${pct}%`;
-    text.textContent = `${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} · ${pct}%`;
+    text.textContent = `${fmtTokens(tokens.total ?? 0)} / ${fmtTokens(tokens.context_window ?? 0)} · ${pct}%`;
 
-    const isAuto = t.auto_detected === true;
-    const modelName = t.active_model ? String(t.active_model).split("/").pop() : "";
-    if (isAuto) {
-        badge.title = `Model Context: ${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} (${pct}%)\n✨ Auto-detected limit for ${modelName}\nClick for context breakdown`;
-    } else {
-        badge.title = `Model Context: ${fmtTokens(t.total ?? 0)} / ${fmtTokens(t.context_window ?? 0)} (${pct}%)\n⚙️ Using fallback limit from Settings\nClick for context breakdown`;
-    }
+    const modelName = tokens.active_model ? String(tokens.active_model).split("/").pop() : t("common.default");
+    const source = tokens.auto_detected === true
+        ? t("workspace.tokens_auto", { model: modelName, limit: fmtTokens(tokens.context_window) })
+        : t("workspace.tokens_fallback", { limit: fmtTokens(tokens.context_window) });
+    badge.title = `${t("workspace.tokens_badge", { used: fmtTokens(tokens.total ?? 0), limit: fmtTokens(tokens.context_window ?? 0), pct })}\n${source}\n${t("workspace.context_open")}`;
 }
 
 async function refreshTokenBadge() {

@@ -33,7 +33,8 @@ const jsFiles = [
     'frontend/js/mcp_manager.js',
     'frontend/js/connected_apps.js',
     'frontend/js/mentions.js',
-    'frontend/js/subagent_ui.js'
+    'frontend/js/subagent_ui.js',
+    'frontend/js/workspace.js'
 ];
 
 // Combine JS files
@@ -95,8 +96,6 @@ async function build() {
     }
     fs.mkdirSync('static/js', { recursive: true });
     fs.copyFileSync('frontend/js/chat_history_window.js', 'static/js/chat_history_window.js');
-    fs.mkdirSync('static/css', { recursive: true });
-    fs.copyFileSync('frontend/css/sidebar_modern.css', 'static/css/sidebar_modern.css');
 
     // Rewrite script/link tags
     // 1. Remove all the bundled scripts
@@ -118,10 +117,6 @@ async function build() {
     html = html.replace(
         /^[ \t]*<link rel="stylesheet" href="\/static\/css\/sidebar_modern\.css(?:\?v=[^"]*)?">[ \t]*\r?\n/gm,
         ''
-    );
-    html = html.replace(
-        /(<link rel="stylesheet" href="\/static\/bundle\.css\?v=[^"]+">)/,
-        `$1\n    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=${buildVer}">`
     );
     // Ensure vendor links have /static/
     html = html.replace(/href="\/vendor\//g, 'href="/static/vendor/');
