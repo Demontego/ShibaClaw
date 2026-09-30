@@ -113,7 +113,7 @@ window.runUpdateAction = async function () {
 
     _updateState.busy = true;
     const isPip = update.install_method === "pip";
-    
+
     panel.innerHTML = `
         <div class="update-progress-card">
             <div class="update-progress-icon-wrap">
@@ -162,7 +162,7 @@ window.runUpdateAction = async function () {
     } catch (e) {
         const msg = e.message || "";
         const isNetworkOrTimeout = e.name === "TypeError" || msg.includes("HTTP 504") || msg.includes("HTTP 502") || msg.includes("Failed to fetch") || msg.includes("NetworkError");
-        
+
         if (isNetworkOrTimeout) {
             panel.innerHTML = `
                 <div class="update-progress-card">
