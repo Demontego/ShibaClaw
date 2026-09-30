@@ -161,7 +161,7 @@ class OpenAICodexThinker(Thinker):
     def get_default_model(self) -> str:
         return self.default_model
 
-    async def get_available_models(self) -> list[dict[str, str]]:
+    async def get_available_models(self) -> list[dict[str, Any]]:
         """Return the live model catalog for the authenticated Codex account."""
         return await _fetch_codex_models()
 
@@ -184,7 +184,7 @@ def _build_headers(account_id: str, token: str) -> dict[str, str]:
     }
 
 
-async def _fetch_codex_models() -> list[dict[str, str]]:
+async def _fetch_codex_models() -> list[dict[str, Any]]:
     """Fetch picker-visible models using the account's Codex OAuth token."""
     token = await asyncio.to_thread(_get_codex_token)
     headers = _build_headers(token.account_id or "", token.access)
@@ -219,7 +219,7 @@ async def _fetch_codex_models() -> list[dict[str, str]]:
     if not isinstance(raw_models, list):
         raise RuntimeError("Codex /models response missing 'models' list")
 
-    results: list[dict[str, str]] = []
+    results: list[dict[str, Any]] = []
     for entry in raw_models:
         if not isinstance(entry, dict):
             continue
@@ -229,7 +229,17 @@ async def _fetch_codex_models() -> list[dict[str, str]]:
         if not model_id:
             continue
         display = entry.get("display_name") or entry.get("name") or model_id
-        results.append({"id": f"openai-codex/{model_id}", "name": str(display)})
+        model: dict[str, Any] = {"id": f"openai-codex/{model_id}", "name": str(display)}
+        reasoning_levels = entry.get("supported_reasoning_levels")
+        if isinstance(reasoning_levels, list):
+            efforts = [
+                str(level["effort"]).strip().lower()
+                for level in reasoning_levels
+                if isinstance(level, dict) and level.get("effort")
+            ]
+            if efforts:
+                model["reasoning_efforts"] = efforts
+        results.append(model)
     return results
 
 

@@ -43,7 +43,28 @@ def _canonical_model_id(provider_name: str, raw_model_id: str) -> str:
     return f"{provider_name}/{raw_model_id}"
 
 
-def _normalize_model_entry(provider_name: str, model: dict[str, str]) -> dict[str, Any] | None:
+def _extract_reasoning_efforts(model: dict[str, Any]) -> list[str]:
+    """Read reasoning levels exposed by a provider's model catalog."""
+    for key in (
+        "reasoning_efforts",
+        "supported_reasoning_efforts",
+        "supported_reasoning_levels",
+        "reasoning_levels",
+    ):
+        raw_efforts = model.get(key)
+        if not isinstance(raw_efforts, list):
+            continue
+        efforts = []
+        for item in raw_efforts:
+            value = item.get("effort") if isinstance(item, dict) else item
+            if isinstance(value, str) and value.strip():
+                efforts.append(value.strip().lower())
+        if efforts:
+            return efforts
+    return []
+
+
+def _normalize_model_entry(provider_name: str, model: dict[str, Any]) -> dict[str, Any] | None:
     from shibaclaw.thinkers.registry import get_model_reasoning_efforts
 
     raw_id = str((model or {}).get("id") or "").strip()
@@ -52,7 +73,8 @@ def _normalize_model_entry(provider_name: str, model: dict[str, str]) -> dict[st
 
     canonical_id = _canonical_model_id(provider_name, raw_id)
     name = str((model or {}).get("name") or raw_id).strip()
-    efforts = get_model_reasoning_efforts(raw_id) or get_model_reasoning_efforts(canonical_id)
+    efforts = _extract_reasoning_efforts(model)
+    efforts = efforts or get_model_reasoning_efforts(raw_id) or get_model_reasoning_efforts(canonical_id)
 
     if not efforts and isinstance(model, dict):
         supp = model.get("supported_parameters") or model.get("supported_params") or []
@@ -89,7 +111,7 @@ def _is_provider_configured(cfg, spec) -> bool:
     return cfg._provider_has_credentials(provider_cfg, spec)
 
 
-async def _fetch_provider_models(cfg, provider_name: str) -> list[dict[str, str]]:
+async def _fetch_provider_models(cfg, provider_name: str) -> list[dict[str, Any]]:
     from shibaclaw.cli.base import _make_provider
     from shibaclaw.thinkers.registry import find_by_name
 
@@ -109,7 +131,7 @@ async def _fetch_provider_models(cfg, provider_name: str) -> list[dict[str, str]
         raise RuntimeError(f"Provider {provider_name} not configured")
 
     models = await temp_provider.get_available_models()
-    normalized: list[dict[str, str]] = []
+    normalized: list[dict[str, Any]] = []
     for model in models:
         entry = _normalize_model_entry(provider_name, model)
         if entry:
@@ -117,7 +139,9 @@ async def _fetch_provider_models(cfg, provider_name: str) -> list[dict[str, str]
     return normalized
 
 
-async def _fetch_all_configured_provider_models(cfg) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+async def _fetch_all_configured_provider_models(
+    cfg,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     from shibaclaw.thinkers.registry import PROVIDERS
 
     provider_names: list[str] = []
