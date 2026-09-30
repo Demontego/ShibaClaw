@@ -46,7 +46,7 @@
 **Neueste Version v1.0.2 (2026-09-29):**
 
 - **Schnellerer RAG-Start** — RAG-Abhängigkeiten werden erst bei der ersten Indexierung oder Suche geladen und reduzieren so den Aufwand beim Gateway-Start.
-- **OpenAI-Codex-OAuth-Modelle** — Die verfügbaren Modelle werden vom authentifizierten Codex-Backend abgerufen; falls der Endpunkt nicht erreichbar ist, wird ein Ersatzkatalog verwendet.
+- **OpenAI-Codex-OAuth-Modelle** — Die verfügbaren Modelle werden mit `client_version` vom authentifizierten Codex-Backend abgerufen; schlägt die Anfrage fehl, wird kein statischer Katalog angezeigt.
 - **Zuverlässigere Dateiverarbeitung** — Uploads werden blockweise übertragen, autorisierte Mediendateien können abgerufen werden und die Geheimnisredaktion erkennt mehr Varianten von Feldnamen.
 
 Vollständige Versionshistorie im [Changelog](./CHANGELOG.md).

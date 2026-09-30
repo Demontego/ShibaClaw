@@ -14,6 +14,9 @@ from shibaclaw.thinkers.base import LLMResponse, Thinker, ToolCallRequest
 
 DEFAULT_CODEX_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_MODELS_URL = "https://chatgpt.com/backend-api/codex/models"
+# The Codex catalog is gated by client_version. Update this protocol version
+# after checking compatibility with newly available Codex models.
+CODEX_CLIENT_VERSION = "0.158.0"
 DEFAULT_ORIGINATOR = "shibaclaw"
 
 
@@ -159,29 +162,9 @@ class OpenAICodexThinker(Thinker):
         return self.default_model
 
     async def get_available_models(self) -> list[dict[str, str]]:
-        """Return models from the Codex backend ``/models`` endpoint.
+        """Return the live model catalog for the authenticated Codex account."""
+        return await _fetch_codex_models()
 
-        The official Codex backend exposes ``/backend-api/codex/models``
-        (OpenAI-compatible ``{"models": [...]}`` shape, each entry carrying a
-        ``slug``/``id`` and ``display_name``). When the endpoint is reachable
-        and authenticated we return the live catalog; otherwise we fall back
-        to a hardcoded list so the UI never shows a wrong model name.
-        """
-        try:
-            models = await _fetch_codex_models()
-            if models:
-                return models
-        except Exception as e:
-            logger.debug("Codex /models fetch failed, using fallback: {}", e)
-
-        return [
-            {"id": "openai-codex/gpt-4o", "name": "GPT-4o"},
-            {"id": "openai-codex/gpt-4o-mini", "name": "GPT-4o Mini"},
-            {"id": "openai-codex/o1-preview", "name": "o1-preview"},
-            {"id": "openai-codex/o1-mini", "name": "o1-mini"},
-            {"id": "openai-codex/o3-mini", "name": "o3-mini"},
-            {"id": "openai-codex/gpt-4-turbo", "name": "GPT-4 Turbo"},
-        ]
 
 def _strip_model_prefix(model: str) -> str:
     if model.startswith("openai-codex/") or model.startswith("openai_codex/"):
@@ -202,14 +185,7 @@ def _build_headers(account_id: str, token: str) -> dict[str, str]:
 
 
 async def _fetch_codex_models() -> list[dict[str, str]]:
-    """Fetch the live model catalog from the Codex backend ``/models`` endpoint.
-
-    The official Codex backend exposes ``/backend-api/codex/models`` with an
-    OpenAI-compatible ``{"models": [...]}`` body where each entry carries a
-    ``slug``/``id`` and ``display_name``. We use the same OAuth token and
-    headers as the Responses API so the list always reflects what the account
-    can actually call.
-    """
+    """Fetch picker-visible models using the account's Codex OAuth token."""
     token = await asyncio.to_thread(_get_codex_token)
     headers = _build_headers(token.account_id or "", token.access)
     # The /models endpoint is a plain GET (no streaming, no body).
@@ -218,10 +194,18 @@ async def _fetch_codex_models() -> list[dict[str, str]]:
 
     try:
         async with httpx.AsyncClient(timeout=30.0, verify=True) as client:
-            resp = await client.get(DEFAULT_MODELS_URL, headers=headers)
+            resp = await client.get(
+                DEFAULT_MODELS_URL,
+                headers=headers,
+                params={"client_version": CODEX_CLIENT_VERSION},
+            )
     except Exception:
         async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
-            resp = await client.get(DEFAULT_MODELS_URL, headers=headers)
+            resp = await client.get(
+                DEFAULT_MODELS_URL,
+                headers=headers,
+                params={"client_version": CODEX_CLIENT_VERSION},
+            )
 
     if resp.status_code != 200:
         raise RuntimeError(f"Codex /models returned HTTP {resp.status_code}")
@@ -238,6 +222,8 @@ async def _fetch_codex_models() -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
     for entry in raw_models:
         if not isinstance(entry, dict):
+            continue
+        if entry.get("visibility", "list") != "list":
             continue
         model_id = entry.get("slug") or entry.get("id") or entry.get("name")
         if not model_id:

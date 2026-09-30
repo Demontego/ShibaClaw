@@ -46,7 +46,7 @@
 **Dernière version v1.0.2 (2026-09-29) :**
 
 - **Démarrage RAG plus rapide** — Les dépendances RAG sont chargées uniquement lors de la première indexation ou recherche, ce qui réduit le travail au démarrage de la passerelle.
-- **Modèles OpenAI Codex OAuth** — La liste des modèles disponibles est récupérée depuis le backend Codex authentifié, avec un catalogue de secours si le point de terminaison est indisponible.
+- **Modèles OpenAI Codex OAuth** — La liste des modèles disponibles est récupérée depuis le backend Codex authentifié avec `client_version` ; si la requête échoue, aucun catalogue statique n'est affiché.
 - **Gestion des fichiers plus fiable** — Les téléversements sont transmis par blocs, les fichiers multimédias autorisés peuvent être récupérés et la protection des secrets reconnaît davantage de variantes de noms de champs.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
