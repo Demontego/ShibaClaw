@@ -92,10 +92,14 @@ function findAvailableModel(modelId) {
     }
     const cleanId = String(modelId).trim().toLowerCase();
     const rawName = cleanId.split("/").pop();
+    const exactId = _availableModels.find(m => (m.id || "").toLowerCase() === cleanId);
+    if (exactId) return exactId;
+    const exactRawId = _availableModels.find(m => (m.raw_id || "").toLowerCase() === cleanId);
+    if (exactRawId) return exactRawId;
     return _availableModels.find(m => {
         const mId = (m.id || "").toLowerCase();
         const mRaw = (m.raw_id || "").toLowerCase();
-        return mId === cleanId || mRaw === cleanId || mRaw === rawName || mId.endsWith("/" + rawName);
+        return mRaw === rawName || mId.endsWith("/" + rawName);
     }) || null;
 }
 
