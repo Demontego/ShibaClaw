@@ -41,13 +41,13 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novedades — v1.0.2</b> (haz clic para expandir)</summary>
+<summary>🚀 <b>Novedades — v1.0.3</b> (haz clic para expandir)</summary>
 
-**Última versión v1.0.2 (2026-09-29):**
+**Última versión v1.0.3 (2026-09-30):**
 
-- **Inicio de RAG más rápido** — Las dependencias de RAG se cargan solo al comenzar una operación de indexación o búsqueda, reduciendo el trabajo durante el arranque del gateway.
-- **Modelos OpenAI Codex OAuth** — La lista de modelos disponibles se obtiene del backend Codex autenticado con `client_version`; si la solicitud falla, no se muestra ningún catálogo estático.
-- **Gestión de archivos más fiable** — Las cargas se transmiten por bloques, se pueden recuperar archivos multimedia autorizados y la redacción de secretos reconoce más variantes de nombres de campo.
+- **Nuevo estilo de la interfaz Workspace** — Interfaz renovada para navegar por espacios de trabajo, aplicar temas y gestionar agentes, con controles localizados y pruebas de interacción.
+- **Dependencias Python más seguras** — PyJWT se actualizó a la versión 2.14.0 para corregir 10 avisos que afectaban a la versión 2.13.0.
+- **Actualizaciones fiables de la WebUI** — Los recursos CSS y JavaScript versionados evitan que el navegador reutilice archivos obsoletos después de una actualización.
 
 Consulta el [Changelog](./CHANGELOG.md) para el historial completo de versiones.
 

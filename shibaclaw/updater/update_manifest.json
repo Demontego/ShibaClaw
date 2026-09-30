@@ -1,41 +1,46 @@
 {
-    "version": "1.0.2",
-    "release_notes": "Release v1.0.2 adds lazy RAG dependency loading, live OpenAI Codex OAuth model discovery, and more reliable uploads, media access, and secret redaction.",
+    "version": "1.0.3",
+    "release_notes": "Release v1.0.3 adds WebUI workspace navigation, themes, and agent management; fixes PyJWT security advisories; and improves frontend asset cache busting.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped application version to 1.0.2."
+            "note": "Bumped application version to 1.0.3 and constrained PyJWT to a secure version."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v1.0.2 notes for the latest three commits."
+            "note": "Added v1.0.3 notes for the latest two commits and the PyJWT security fix."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated English and localized README release notes to v1.0.2."
+            "note": "Updated English and localized README release notes to v1.0.3."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Bumped the packaged update manifest to v1.0.2."
+            "note": "Bumped the packaged update manifest to v1.0.3."
         },
         {
             "path": "shibaclaw/desktop/app.manifest",
             "overwrite": true,
-            "note": "Updated the Windows desktop application version to 1.0.2.0."
+            "note": "Updated the Windows desktop application version to 1.0.3.0."
         },
         {
             "path": "shibaclaw/webui/package.json",
             "overwrite": true,
-            "note": "Updated the WebUI package version to 1.0.2."
+            "note": "Updated the WebUI package version to 1.0.3."
         },
         {
             "path": "shibaclaw/webui/package-lock.json",
             "overwrite": true,
-            "note": "Updated the WebUI lockfile package version to 1.0.2."
+            "note": "Updated the WebUI lockfile package version to 1.0.3."
+        },
+        {
+            "path": "uv.lock",
+            "overwrite": true,
+            "note": "Updated PyJWT to 2.14.0 to resolve known security advisories."
         }
     ]
 }

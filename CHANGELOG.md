@@ -1,3 +1,14 @@
+## [1.0.3] - 2026-09-30
+
+### Added
+- **New Workspace UI Style and Management** — Introduced a refreshed Workspace interface with navigation, theme application, and agent management, plus localized UI strings and interaction tests.
+
+### Security
+- **PyJWT Vulnerability Fix** — Updated the resolved PyJWT version to 2.14.0 and added an explicit `pyjwt>=2.14.0` dependency constraint to address 10 advisories reported for 2.13.0 through `mcp[crypto]`.
+
+### Changed
+- **Frontend Asset Cache Busting** — Versioned CSS and JavaScript asset URLs so browsers load the current WebUI assets after updates.
+
 ## [1.0.2] - 2026-09-29
 
 ### Added
