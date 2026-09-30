@@ -48,14 +48,22 @@ function Invoke-LoggedStep {
     )
 
     Show-InstallProgress -Message $Message -Step $Step -Total $Total
+    Add-Content -LiteralPath $installLog -Value "[$(Get-Date -Format o)] [START] $Message" -Encoding utf8
 
     try {
         & $Action 2>&1 | Out-File -FilePath $installLog -Append -Encoding utf8
-        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-            throw "Step failed: $Message"
-        }
+        # These actions use PowerShell cmdlets, which throw on failure but do not
+        # update LASTEXITCODE. A previous native command's exit code is unrelated.
+        Add-Content -LiteralPath $installLog -Value "[$(Get-Date -Format o)] [OK] $Message" -Encoding utf8
     }
     catch {
+        $stepError = $_
+        Add-Content -LiteralPath $installLog -Value @(
+            "[$(Get-Date -Format o)] [FAILED] $Message"
+            ($stepError | Out-String)
+            $stepError.ScriptStackTrace
+        ) -Encoding utf8
+        Write-Host "[!] $Message $($stepError.Exception.Message)" -ForegroundColor Red
         if (Test-Path $installLog) {
             Write-Host "[!] Installation details were saved to $installLog" -ForegroundColor Yellow
         }
