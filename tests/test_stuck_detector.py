@@ -43,3 +43,20 @@ def test_stuck_detector_goal_reassessment_prompt():
     assert prompt["role"] == "system"
     assert "WARNING: Stuck loop detected (test reason)" in prompt["content"]
     assert "GOAL REASSESSMENT REQUIRED" in prompt["content"]
+
+def test_stuck_detector_tool_error_pivot():
+    detector = StuckDetector(max_repeats=3)
+    
+    # First error
+    assert not detector.add_tool_error("web_fetch", "Error: 403 Forbidden")
+    # Second error (different tool)
+    assert not detector.add_tool_error("read_file", "Error: File not found")
+    # Third error (same as second)
+    assert not detector.add_tool_error("read_file", "Error: File not found")
+    # Fourth error (same as second and third) -> Stuck!
+    assert detector.add_tool_error("read_file", "Error: File not found")
+    
+    prompt = detector.get_tool_error_pivot_prompt("read_file", "Error: File not found")
+    assert prompt["role"] == "system"
+    assert "CRITICAL: Tool 'read_file' has failed repeatedly" in prompt["content"]
+    assert "STRATEGY PIVOT REQUIRED" in prompt["content"]

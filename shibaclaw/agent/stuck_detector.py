@@ -13,6 +13,7 @@ class StuckDetector:
         self.response_content_history: List[str] = []
         self.tool_sequence_history: List[List[str]] = []
         self.progress_metrics: List[Any] = []
+        self.tool_error_history: List[Dict[str, Any]] = []
 
     def add_response(self, content: str | None) -> bool:
         """
@@ -74,5 +75,35 @@ class StuckDetector:
                 "2. Reassess your current goal and the strategy you are using.\n"
                 "3. Identify what is blocking progress (e.g., tool errors, incorrect assumptions, or missing information).\n"
                 "4. Formulate a completely different approach or strategy to achieve the goal."
+            )
+        }
+
+    def add_tool_error(self, tool_name: str, error_message: str) -> bool:
+        """
+        Adds a tool error and checks if the same tool is failing repeatedly.
+        """
+        self.tool_error_history.append({"tool_name": tool_name, "error_message": error_message})
+        if len(self.tool_error_history) >= self.max_repeats:
+            last_n = self.tool_error_history[-self.max_repeats:]
+            # If the same tool failed max_repeats times in a row
+            if all(x["tool_name"] == last_n[0]["tool_name"] for x in last_n):
+                logger.warning("StuckDetector: Repeating tool error detected for tool: %s", tool_name)
+                return True
+        return False
+
+    def get_tool_error_pivot_prompt(self, tool_name: str, error_message: str) -> Dict[str, Any]:
+        """
+        Returns a system message prompting the agent to pivot strategy due to repeated tool errors.
+        """
+        return {
+            "role": "system",
+            "content": (
+                f"CRITICAL: Tool '{tool_name}' has failed repeatedly with the following error:\n"
+                f"\"{error_message}\"\n\n"
+                "STRATEGY PIVOT REQUIRED:\n"
+                "1. DO NOT call this tool again with the same arguments.\n"
+                "2. Pivot your strategy immediately. Use an alternative tool, decompose the task, or fall back to a different approach.\n"
+                "3. If you are trying to read/write a file, check if the path is correct or if you need to list the directory first.\n"
+                "4. If you are executing a command, check if the command is available or if there is a simpler way to achieve the result."
             )
         }

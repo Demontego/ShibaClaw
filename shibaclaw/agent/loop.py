@@ -1179,6 +1179,9 @@ class ShibaBrain:
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
+                    if result.startswith("Error:"):
+                        if stuck_detector.add_tool_error(tool_call.name, result):
+                            messages.append(stuck_detector.get_tool_error_pivot_prompt(tool_call.name, result))
                     if session_key and not result.startswith("Error:"):
                         self._idempotency_cache[idempotency_key] = result
 
