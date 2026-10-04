@@ -299,6 +299,7 @@ function initSocket() {
     });
 
     realtime.on("session_reset", (data) => {
+        if (typeof window.setWorkspaceChatTitle === "function") window.setWorkspaceChatTitle("");
         Object.values(state.processGroups).forEach(pg => {
             if (pg && pg.timer) clearInterval(pg.timer);
         });

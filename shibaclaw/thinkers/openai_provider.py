@@ -212,6 +212,15 @@ class OpenAIThinker(Thinker):
                 )
                 if supported and isinstance(supported, list):
                     entry["supported_parameters"] = supported
+                for field in (
+                    "reasoning_efforts",
+                    "supported_reasoning_efforts",
+                    "supported_reasoning_levels",
+                    "reasoning_levels",
+                ):
+                    levels = getattr(m, field, None)
+                    if levels is not None:
+                        entry[field] = levels
                 models.append(entry)
             return models
         except Exception as e:

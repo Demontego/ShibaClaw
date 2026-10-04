@@ -41,17 +41,13 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Nouveautés — Version de Sécurité v1.0.1</b> (cliquez pour déplier)</summary>
+<summary>🚀 <b>Nouveautés — v1.0.3</b> (cliquez pour déplier)</summary>
 
-**Dernière version v1.0.1 (2026-09-17) :**
+**Dernière version v1.0.3 (2026-09-30) :**
 
-- **Sécurité & Correction de l'Alerte Dependabot #23** — Mise à niveau de `sharp` vers la version `0.35.4` dans le plugin bridge WhatsApp, corrigeant la vulnérabilité de gravité élevée GHSA-rgj7-g3m4-5g8c dans `libheif`.
-- **Étape Majeure 1.0.0 — Framework d'Agent Prêt pour la Production** — ShibaClaw franchit le cap de la 1.0.0 ! Un assistant IA personnel auto-hébergé conçu pour la confidentialité, la modularité et une stabilité à toute épreuve, compatible Python 3.12–3.14 avec intégration continue multiplateforme Ubuntu/Windows.
-- **Gestionnaire de Mémoire Interactif & Quarantaine en Direct** — Nouveau panneau dédié dans la WebUI (icône `psychology` dans la barre latérale) et API REST (`/api/memory`). Visualisez et modifiez en direct les connaissances à long terme (`MEMORY.md`), les préférences utilisateur (`USER.md`), l'historique chronologique (`HISTORY.md`) et le journal de rêves (`DREAM_DIARY.md`), avec suivi du budget de tokens et mise en quarantaine sécurisée des faits oubliés.
-- **Expérience Interactive Nouvelle Génération Human-in-the-Loop** — Interaction fluide pendant les tours de l'agent : questions structurées à choix multiples (`ask_user`), masquage sécurisé de clés/identifiants en coffre-fort (`request_credential`, hors du contexte LLM), cartes de progression visuelles (`update_progress`), recherche rapide d'historique (`session_search`) et modes de permission dynamiques par session (`full` | `workspace` | `readonly`).
-- **Sécurité Renforcée & Sessions Incognito Zéro Fuite** — Portée `ContextVar` par exécution d'outil pour prévenir les fuites de concurrence inter-sessions. Les sessions incognito purgent les logs JSONL du disque et ignorent la consolidation de mémoire. Listes de modèles autorisés avec rejet strict par défaut (fail-closed).
-- **Mise à Niveau Complète LangChain 1.4+ & Correction des Alertes Dependabot** — Rénovation de la pile RAG vers LangChain 1.4+ (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), éliminant toutes les failles de sécurité répertoriées (`pip-audit` sans avertissement).
-- **Architecture Modulaire Allégée, `uv` & Commande Doctor** — Dépendances scindées en options (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), démarrage quasi-instantané grâce au chargement différé des canaux/plugins, et suite de diagnostics CLI `shibaclaw doctor [--fix]`.
+- **Nouveau style de l'interface Workspace** — Une interface repensée pour naviguer entre les espaces de travail, appliquer des thèmes et gérer les agents, avec des commandes localisées et des tests d'interaction.
+- **Dépendances Python plus sûres** — PyJWT a été mis à jour en version 2.14.0 pour corriger 10 avis concernant la version 2.13.0.
+- **Mises à jour WebUI fiables** — Les ressources CSS et JavaScript versionnées empêchent le navigateur de réutiliser des fichiers obsolètes après une mise à jour.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
 

@@ -576,6 +576,7 @@ function patchOpenModal() {
     const _origOpenModal = window.openModal;
     window.openModal = async function (id) {
         if (id === 'automation-modal') {
+            if (typeof window.prepareWorkspaceModal === 'function') window.prepareWorkspaceModal(id);
             const modal = document.getElementById('automation-modal');
             if (modal) modal.classList.add('active');
             if (typeof window.closeSidebarOnMobile === 'function') window.closeSidebarOnMobile();

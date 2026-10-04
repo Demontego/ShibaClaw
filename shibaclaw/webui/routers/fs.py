@@ -6,6 +6,7 @@ import urllib.parse
 import uuid
 from pathlib import Path
 
+import aiofiles
 from loguru import logger
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
@@ -45,8 +46,8 @@ async def api_upload(request: Request):
 
         results = []
         for f in files:
-            filename = f.filename
-            safe_name = "".join([c for c in filename if c.isalnum() or c in "._- "]).strip()
+            filename = f.filename or ""
+            safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ").strip()
             if not safe_name:
                 safe_name = f"upload_{uuid.uuid4().hex[:8]}"
 
@@ -58,8 +59,9 @@ async def api_upload(request: Request):
                 target_path = upload_dir / f"{name_stem}_{counter}{suffix}"
                 counter += 1
 
-            content = await f.read()
-            target_path.write_bytes(content)
+            async with aiofiles.open(target_path, "wb") as output:
+                while chunk := await f.read(1024 * 1024):
+                    await output.write(chunk)
             results.append(
                 {
                     "filename": target_path.name,
@@ -97,7 +99,7 @@ async def api_file_get(request: Request):
         if not token_candidate or not _verify_session_token(token_candidate):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
-    resolved = _resolve_workspace_path(path_str)
+    resolved = _resolve_workspace_path(path_str, allow_media=True)
     if not resolved:
         return JSONResponse({"error": "Forbidden"}, status_code=403)
 

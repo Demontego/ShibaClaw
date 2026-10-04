@@ -3,6 +3,24 @@
 ### Added
 - **Opt-in self-evolution** — `/evolve on|off` and `/panic` (owner DM or WebUI). A 10-minute alarm takes one backlog class on an `evolve/*` branch, or one world topic from `USER.md` and `memory/people/` into `memory/evolution/WORLD.md`. A separate `shibaclaw agent --model` session reviews code. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself and does not change the saved provider. Code budget: 3 applies per day, 45 minutes between them. World notes: 16 a day, 30 minutes apart. WebUI tool **Evolution** (`GET /api/evolve`) shows the gate, chronicle, backlog, patterns, world notes, and recent commits.
 
+## [1.0.3] - 2026-09-30
+
+### Added
+- **New Workspace UI Style and Management** — Introduced a refreshed Workspace interface with navigation, theme application, and agent management, plus localized UI strings and interaction tests.
+
+### Security
+- **PyJWT Vulnerability Fix** — Updated the resolved PyJWT version to 2.14.0 and added an explicit `pyjwt>=2.14.0` dependency constraint to address 10 advisories reported for 2.13.0 through `mcp[crypto]`.
+
+### Changed
+- **Frontend Asset Cache Busting** — Versioned CSS and JavaScript asset URLs so browsers load the current WebUI assets after updates.
+
+## [1.0.2] - 2026-09-29
+
+### Added
+- **Lazy RAG Dependency Loading** — Deferred loading of LangChain and vector-store implementations until the first indexing or search operation, reducing gateway cold-start work and avoiding heavy imports during availability checks.
+- **Live OpenAI Codex OAuth Model Catalog** — Fetches available models from the authenticated Codex backend, with a fallback catalog when the endpoint is unavailable. Also handles missing account IDs and malformed tool-call names safely.
+- **More Robust Uploads and Media Access** — Streams uploads in 1 MiB chunks, handles missing or unusable filenames, and allows authorized file retrieval from the media directory. Secret redaction now normalizes key names and detects nested credential fields more reliably.
+
 ## [1.0.1] - 2026-09-17
 
 ### Security & Fixed

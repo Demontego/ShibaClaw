@@ -151,10 +151,23 @@ class AnthropicThinker(Thinker):
                 )
         return anthropic_tools
 
-    async def get_available_models(self) -> list[dict[str, str]]:
+    async def get_available_models(self) -> list[dict[str, Any]]:
         try:
             res = await self._client.models.list()
-            return [{"id": m.id, "name": m.display_name or m.id} for m in res.data]
+            models = []
+            for model in res.data:
+                entry: dict[str, Any] = {"id": model.id, "name": model.display_name or model.id}
+                for field in (
+                    "reasoning_efforts",
+                    "supported_reasoning_efforts",
+                    "supported_reasoning_levels",
+                    "reasoning_levels",
+                ):
+                    levels = getattr(model, field, None)
+                    if levels is not None:
+                        entry[field] = levels
+                models.append(entry)
+            return models
         except Exception as e:
             logger.error("Failed to fetch models from Anthropic: {}", e)
             return []

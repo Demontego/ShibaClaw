@@ -20,8 +20,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1788852433962">
-    <link rel="stylesheet" href="/static/css/sidebar_modern.css?v=1788852433962">
+    <link rel="stylesheet" href="/static/bundle.css?v=1790775928747">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
@@ -37,7 +36,7 @@
 
 </head>
 
-<body>
+<body class="workspace-ui">
     <!-- Login Screen (shown when auth is required) -->
     <div class="login-overlay" id="login-overlay" style="display:none">
         <div class="login-card">
@@ -93,55 +92,38 @@
             <div class="sidebar-actions">
                 <button class="btn-action btn-new-chat" id="btn-new-session">
                     <span class="material-icons-round">add</span>
-                    <span data-i18n="nav.new_session">New Session</span>
+                    <span data-i18n="workspace.new_chat">New chat</span>
                 </button>
             </div>
 
-            <div class="sidebar-section tools-section">
-                <div class="section-title" data-i18n="nav.tools">TOOLS</div>
-                <nav class="sidebar-tools" aria-label="Tools">
-                    <button class="btn-command" onclick="openModal('fs-modal')" data-i18n-title="nav.files"
-                        data-i18n-aria="nav.files" title="Files" aria-label="Files">
-                        <span class="material-icons-round">folder_open</span>
-                    </button>
-                    <button class="btn-command" onclick="openModal('automation-modal')"
-                        data-i18n-title="nav.automation" data-i18n-aria="nav.automation" title="Automation"
-                        aria-label="Automation">
-                        <span class="material-icons-round">event_repeat</span>
-                        <span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
-                    </button>
-                    <button class="btn-command" onclick="openModal('knowledge-modal')"
-                        data-i18n-title="nav.knowledge" data-i18n-aria="nav.knowledge" title="Knowledge Base"
-                        aria-label="Knowledge Base">
-                        <span class="material-icons-round">library_books</span>
-                    </button>
-                    <button class="btn-command" onclick="openModal('memory-modal')"
-                        data-i18n-title="nav.memory" data-i18n-aria="nav.memory" title="Memory"
-                        aria-label="Memory">
-                        <span class="material-icons-round">psychology</span>
-                    </button>
-                    <button class="btn-command" id="btn-evolve" onclick="openModal('evolve-modal')"
-                        title="Evolution" aria-label="Evolution">
-                        <span class="material-icons-round">auto_awesome</span>
-                    </button>
-                    <button class="btn-command" onclick="openModal('connected-apps-modal')" data-i18n-title="nav.apps"
-                        data-i18n-aria="nav.apps" title="Apps" aria-label="Apps">
-                        <span class="material-icons-round">apps</span>
-                    </button>
-                    <button class="btn-command" onclick="openModal('settings-modal')" data-i18n-title="nav.settings"
-                        data-i18n-aria="nav.settings" title="Settings" aria-label="Settings">
-                        <span class="material-icons-round">settings</span>
-                    </button>
-                </nav>
-            </div>
+            <nav class="workspace-nav" data-i18n-aria="workspace.title" aria-label="Your workspace">
+                <button type="button" class="workspace-nav-item" data-workspace-page="chat" onclick="showWorkspaceChat()" aria-current="page">
+                    <span class="material-icons-round" aria-hidden="true">chat_bubble_outline</span><span class="workspace-nav-label" data-i18n="workspace.conversations">Conversations</span>
+                </button>
+                <button type="button" class="workspace-nav-item" data-workspace-page="agents" onclick="openWorkspaceAgents()">
+                    <span class="material-icons-round" aria-hidden="true">smart_toy</span><span class="workspace-nav-label" data-i18n="workspace.agents">Agents</span>
+                </button>
+                <button type="button" class="workspace-nav-item" data-workspace-page="automations" onclick="openModal('automation-modal')">
+                    <span class="material-icons-round" aria-hidden="true">schedule</span><span class="workspace-nav-label" data-i18n="workspace.automations">Automations</span><span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
+                </button>
+                <button type="button" class="workspace-nav-item" data-workspace-page="library" onclick="openModal('fs-modal')">
+                    <span class="material-icons-round" aria-hidden="true">folder_open</span><span class="workspace-nav-label" data-i18n="workspace.library">Library</span>
+                </button>
+                <button type="button" class="workspace-nav-item" data-workspace-page="apps" onclick="openModal('connected-apps-modal')">
+                    <span class="material-icons-round" aria-hidden="true">grid_view</span><span class="workspace-nav-label" data-i18n="workspace.apps">Apps &amp; tools</span>
+                </button>
+                <button type="button" class="workspace-nav-item" id="btn-evolve" onclick="openModal('evolve-modal')">
+                    <span class="material-icons-round" aria-hidden="true">auto_awesome</span><span class="workspace-nav-label">Evolution</span>
+                </button>
+            </nav>
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
                 <div class="history-section-head">
-                    <div class="section-title" data-i18n="nav.sessions">SESSIONS</div>
+                    <div class="section-title" data-i18n="workspace.recent">Recent conversations</div>
                     <div class="session-search-wrap">
                         <span class="material-icons-round session-search-icon">search</span>
-                        <input id="session-search" class="session-search" type="search"
+                        <input id="session-search" class="session-search" type="search" aria-label="Search" data-i18n-aria="workspace.search"
                             placeholder="Filter or search messages…" data-i18n-placeholder="nav.filter_sessions"
                             autocomplete="off" spellcheck="false" />
                     </div>
@@ -152,7 +134,7 @@
             </div>
 
             <!-- Workspace Summary -->
-            <div class="sidebar-section workspace-summary-section" id="workspace-summary">
+            <details class="sidebar-section workspace-summary-section" id="workspace-summary"><summary data-i18n="workspace.workspace_summary">Workspace status</summary>
                 <div class="summary-row" data-i18n-title="summary.channels_title" title="Active Channels">
                     <div class="status-dot disconnected" id="summary-ch-dot"></div>
                     <span><span data-i18n="summary.channel">Channel:</span> <strong id="summary-channels">--</strong></span>
@@ -165,9 +147,10 @@
                     <div class="status-dot disconnected" id="summary-restrict-dot"></div>
                     <span><span data-i18n="summary.restrict">Restrict WP:</span> <strong id="summary-restrict-badge">--</strong></span>
                 </div>
-            </div>
+            </details>
 
             <div class="sidebar-footer">
+                <button type="button" class="workspace-nav-item workspace-settings" data-workspace-page="settings" onclick="openModal('settings-modal')"><span class="material-icons-round" aria-hidden="true">tune</span><span class="workspace-nav-label" data-i18n="workspace.settings">Settings</span></button>
                 <div class="footer-actions">
                     <div class="lang-switcher" id="lang-switcher">
                         <button class="btn-command btn-lang btn-icon-only" id="btn-lang" type="button"
@@ -208,6 +191,8 @@
                     aria-label="Open mobile menu">
                     <span class="material-icons-round">menu</span>
                 </button>
+                <button type="button" class="workspace-sidebar-expand btn-icon" id="workspace-sidebar-toggle" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false"><span class="material-icons-round" aria-hidden="true">menu</span></button>
+                <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span aria-hidden="true">/</span><span id="workspace-chat-title" data-i18n="workspace.new_chat">New chat</span></div>
                 <div class="chat-header-info">
                     <div class="profile-selector" id="profile-selector">
                         <button class="btn-profile" id="btn-profile" data-i18n-title="chrome.agent_profile"
@@ -252,6 +237,7 @@
                         </div>
                     </div>
                 </div>
+                <button type="button" class="btn-width-toggle" id="workspace-context-toggle" onclick="toggleWorkspaceContext()" data-i18n-title="workspace.context_open" data-i18n-aria="workspace.context_open" aria-label="Open conversation context" aria-expanded="false" aria-controls="context-modal"><span class="material-icons-round" aria-hidden="true">view_sidebar</span></button>
                 <div class="width-toggle-wrapper">
                     <button class="btn-width-toggle" id="btn-width-toggle" data-i18n-title="chrome.adjust_width"
                         data-i18n-aria="chrome.adjust_width" title="Adjust chat width" aria-label="Adjust chat width">
@@ -271,30 +257,14 @@
             <!-- Welcome Screen -->
             <div class="welcome-screen" id="welcome-screen">
                 <div class="welcome-content">
-                    <img src="/static/shibaclaw_logo.webp" alt="ShibaClaw Logo" class="welcome-logo">
-                    <h2 class="welcome-title" data-i18n="welcome.title">Welcome to ShibaClaw</h2>
-                    <p class="welcome-subtitle" data-i18n="welcome.subtitle">A powerful AI agent that learns, acts, and secures your workflow.</p>
+                    <div class="welcome-eyebrow"><span class="material-icons-round" aria-hidden="true">auto_awesome</span><span data-i18n="workspace.welcome_eyebrow">Your assistant, in your space.</span></div>
+                    <h2 class="welcome-title" data-i18n="workspace.welcome_title">What are we working on today?</h2>
+                    <p class="welcome-subtitle" data-i18n="workspace.welcome_subtitle">An idea, a question, or a task to complete. Start here.</p>
                     <div class="welcome-hints">
-                        <button class="hint-card"
-                            data-hint="Help me set up my personal info. Ask me one question at a time and build a clean profile I can refine later.">
-                            <span class="material-icons-round">manage_accounts</span>
-                            <span data-i18n="welcome.hint_profile">Set up my profile</span>
-                        </button>
-                        <button class="hint-card"
-                            data-hint="Help me start a new project. Ask what I want to build, then propose the stack, structure, and first files.">
-                            <span class="material-icons-round">rocket_launch</span>
-                            <span data-i18n="welcome.hint_project">New project setup</span>
-                        </button>
-                        <button class="hint-card"
-                            data-hint="Help me schedule something. Ask what needs to happen, when it should run, and whether it should repeat.">
-                            <span class="material-icons-round">event_repeat</span>
-                            <span data-i18n="welcome.hint_schedule">Schedule a task</span>
-                        </button>
-                        <button class="hint-card"
-                            data-hint="Analyze this workspace and give me a clear map of the project, key files, entry points, and what matters first.">
-                            <span class="material-icons-round">travel_explore</span>
-                            <span data-i18n="welcome.hint_explore">Explore this repo</span>
-                        </button>
+                        <button type="button" class="hint-card" data-hint="" data-hint-key="workspace.hint_project_prompt"><span class="material-icons-round" aria-hidden="true">folder_open</span><span class="hint-copy"><span data-i18n="workspace.hint_project">Explore a project</span><small data-i18n="workspace.hint_project_desc">Find a clear next step</small></span></button>
+                        <button type="button" class="hint-card" data-hint="" data-hint-key="workspace.hint_research_prompt"><span class="material-icons-round" aria-hidden="true">travel_explore</span><span class="hint-copy"><span data-i18n="workspace.hint_research">Research a topic</span><small data-i18n="workspace.hint_research_desc">From sources to a useful summary</small></span></button>
+                        <button type="button" class="hint-card" onclick="openModal('automation-modal')"><span class="material-icons-round" aria-hidden="true">schedule</span><span class="hint-copy"><span data-i18n="workspace.hint_automation">Automate a routine</span><small data-i18n="workspace.hint_automation_desc">Delegate recurring work</small></span></button>
+                        <button type="button" class="hint-card" onclick="openWorkspaceAgents()"><span class="material-icons-round" aria-hidden="true">smart_toy</span><span class="hint-copy"><span data-i18n="workspace.hint_agents">Choose an agent</span><small data-i18n="workspace.hint_agents_desc">The right profile for the job</small></span></button>
                     </div>
                 </div>
             </div>
@@ -314,6 +284,7 @@
                     <div id="attachment-staging" class="attachment-staging" style="display:none">
                         <!-- Staged files appear here -->
                     </div>
+                    <div class="workspace-composer">
                     <div class="input-container">
                         <button class="btn-attach" id="btn-mic" data-i18n-title="chat.voice"
                             data-i18n-aria="chat.voice_aria" title="Voice Message (Auto-Stop on silence)"
@@ -327,10 +298,10 @@
                         </button>
                         <input type="file" id="file-input" multiple style="display:none">
                         <textarea id="chat-input" placeholder="Send a message to ShibaClaw..." rows="1"
-                            data-i18n-placeholder="chat.placeholder" data-i18n-aria="chat.message_aria"
+                            data-i18n-placeholder="workspace.chat_placeholder" data-i18n-aria="chat.message_aria"
                             aria-label="Chat message" autofocus></textarea>
                         <button class="btn-send" id="btn-send" disabled data-i18n-aria="chat.send" aria-label="Send message">
-                            <span class="material-icons-round">send</span>
+                            <span class="material-icons-round">arrow_upward</span>
                         </button>
                     </div>
                     <div class="input-footer">
@@ -420,6 +391,8 @@
                             </div>
                         </div>
                     </div>
+                    </div>
+                    <div class="workspace-composer-note"><span><span class="material-icons-round" aria-hidden="true">verified_user</span><span data-i18n="workspace.control">You stay in control</span></span><span data-i18n="chat.shift_enter">Shift + ↵ for new line</span></div>
             </div>
     </div>
     </main>
@@ -427,6 +400,8 @@
     <!-- Settings View (Dedicated Page) -->
     <div id="settings-view" class="settings-view" style="display:none">
         <header class="settings-header">
+            <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)" data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round" aria-hidden="true">menu</span></button>
+            <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar"><span class="material-icons-round" aria-hidden="true">menu_open</span></button>
             <div class="settings-header-left">
                 <button class="settings-back-btn" onclick="closeSettingsView()" data-i18n-title="settings.back_chat"
                     data-i18n-aria="settings.back_chat" title="Back to Chat" aria-label="Back to Chat">
@@ -437,6 +412,7 @@
                     <span class="settings-subtitle" id="settings-current-tab-title" data-i18n="settings.tab.agent">Agent</span>
                 </div>
             </div>
+            <div class="workspace-theme-control"><label for="workspace-theme" data-i18n="workspace.theme">Appearance</label><select id="workspace-theme" data-i18n-aria="workspace.theme" aria-label="Appearance"><option value="system" data-i18n="workspace.theme_system">System</option><option value="light" data-i18n="workspace.theme_light">Light</option><option value="dark" data-i18n="workspace.theme_dark">Dark</option></select></div>
             <button class="btn-primary" onclick="saveSettings()">
                 <span class="material-icons-round" style="font-size:1rem;vertical-align:middle">save</span> <span data-i18n="settings.save_changes">Save Changes</span>
             </button>
@@ -992,6 +968,30 @@
             </div>
         </div>
     </div>
+    <section id="workspace-view" class="workspace-view" style="display:none" aria-labelledby="workspace-view-title">
+        <header class="workspace-header">
+            <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)" data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round" aria-hidden="true">menu</span></button>
+            <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar"><span class="material-icons-round" aria-hidden="true">menu_open</span></button>
+            <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span aria-hidden="true">/</span><h1 id="workspace-view-title"></h1></div>
+            <button type="button" class="btn-secondary workspace-back" onclick="showWorkspaceChat()" data-i18n-title="workspace.back_chat" data-i18n-aria="workspace.back_chat"><span class="material-icons-round" aria-hidden="true">arrow_back</span><span data-i18n="workspace.back_chat">Back to conversation</span></button>
+        </header>
+        <div class="workspace-page-intro"><h2 id="workspace-page-heading"></h2><p id="workspace-page-description"></p></div>
+        <div id="workspace-app-actions" class="workspace-app-actions" hidden>
+            <button type="button" class="btn-secondary" onclick="openWorkspaceTools(false)"><span class="material-icons-round" aria-hidden="true">build</span><span data-i18n="settings.tab.tools">Tools</span></button>
+            <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
+        </div>
+        <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library" data-i18n-aria="workspace.library" hidden>
+            <button type="button" data-workspace-modal="fs-modal" onclick="openModal('fs-modal')" data-i18n="nav.files">Files</button>
+            <button type="button" data-workspace-modal="knowledge-modal" onclick="openModal('knowledge-modal')" data-i18n="nav.knowledge">Knowledge Base</button>
+            <button type="button" data-workspace-modal="memory-modal" onclick="openModal('memory-modal')" data-i18n="memory.tab_memory">Memory</button>
+        </nav>
+        <div id="workspace-stage" class="workspace-stage">
+            <div id="workspace-agents" class="workspace-agents" hidden>
+                <div class="workspace-page-actions"><button type="button" class="btn-secondary" onclick="refreshWorkspaceAgents()" data-i18n-aria="common.refresh" aria-label="Refresh"><span class="material-icons-round" aria-hidden="true">refresh</span></button><button type="button" class="btn-primary" onclick="openProfileModal()"><span class="material-icons-round" aria-hidden="true">add</span><span data-i18n="profiles.create">Create custom profile</span></button></div>
+                <div id="workspace-agent-grid" class="workspace-agent-grid" aria-live="polite"></div>
+            </div>
+        </div>
+    </section>
     </div>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
@@ -1267,25 +1267,25 @@
             </div>
 
             <!-- Toolbar with Forget Search and Tabs -->
-            <div style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; background: rgba(0,0,0,0.1);">
-                <div style="display: flex; gap: 4px;">
-                    <button class="auto-tab memory-tab-btn active" data-tab="memory" onclick="switchMemoryTab('memory')">
-                        <span class="material-icons-round" style="font-size: 15px;">memory</span> MEMORY.md
+            <div class="memory-toolbar" style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; background: rgba(0,0,0,0.1);">
+                <div class="memory-tabs" style="display: flex; gap: 4px;">
+                    <button class="auto-tab memory-tab-btn active" data-tab="memory" data-i18n-aria="memory.tab_memory" aria-label="Memory" title="MEMORY.md" onclick="switchMemoryTab('memory')">
+                        <span class="material-icons-round" style="font-size: 15px;">memory</span> <span data-i18n="memory.tab_memory">Memory</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="user" onclick="switchMemoryTab('user')">
-                        <span class="material-icons-round" style="font-size: 15px;">person</span> USER.md
+                    <button class="auto-tab memory-tab-btn" data-tab="user" data-i18n-aria="memory.tab_user" aria-label="User profile" title="USER.md" onclick="switchMemoryTab('user')">
+                        <span class="material-icons-round" style="font-size: 15px;">person</span> <span data-i18n="memory.tab_user">User profile</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="history" onclick="switchMemoryTab('history')">
-                        <span class="material-icons-round" style="font-size: 15px;">history</span> HISTORY.md
+                    <button class="auto-tab memory-tab-btn" data-tab="history" data-i18n-aria="memory.tab_history" aria-label="History" title="HISTORY.md" onclick="switchMemoryTab('history')">
+                        <span class="material-icons-round" style="font-size: 15px;">history</span> <span data-i18n="memory.tab_history">History</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="diary" onclick="switchMemoryTab('diary')">
-                        <span class="material-icons-round" style="font-size: 15px;">bedtime</span> Dream &amp; Quarantine
+                    <button class="auto-tab memory-tab-btn" data-tab="diary" data-i18n-aria="memory.tab_diary" aria-label="Dreams and quarantine" onclick="switchMemoryTab('diary')">
+                        <span class="material-icons-round" style="font-size: 15px;">bedtime</span> <span data-i18n="memory.tab_diary">Dreams &amp; quarantine</span>
                     </button>
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="text" id="memory-forget-input" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 180px;" placeholder="Search or redact fact..." onkeydown="if(event.key==='Enter')searchForgetMemory()">
-                    <button type="button" class="btn-secondary btn-sm" onclick="searchForgetMemory()" title="Search line to redact">
+                    <input type="text" id="memory-forget-input" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 180px;" data-i18n-placeholder="memory.forget_placeholder" data-i18n-aria="memory.forget_placeholder" aria-label="Search or redact a fact" placeholder="Search or redact a fact…" onkeydown="if(event.key==='Enter')searchForgetMemory()">
+                    <button type="button" class="btn-secondary btn-sm" onclick="searchForgetMemory()" data-i18n-title="memory.forget_search" data-i18n-aria="memory.forget_search" aria-label="Search for lines to redact" title="Search for lines to redact">
                         <span class="material-icons-round" style="font-size: 14px;">search</span>
                     </button>
                 </div>
@@ -1298,13 +1298,13 @@
 
             <!-- Footer with Edit/Save actions -->
             <div class="modal-footer" style="flex-shrink: 0; justify-content: space-between; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border-color);">
-                <div id="memory-save-status" style="font-size: 12px;"></div>
+                <div id="memory-save-status" role="status" aria-live="polite" style="font-size: 12px;"></div>
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn-secondary btn-sm" id="btn-memory-edit-toggle" onclick="toggleMemoryEdit()">
-                        <span class="material-icons-round">edit</span> Edit
+                    <button type="button" class="btn-secondary btn-sm" id="btn-memory-edit-toggle" data-i18n-aria="common.edit" aria-label="Edit" onclick="toggleMemoryEdit()">
+                        <span class="material-icons-round">edit</span> <span data-i18n="common.edit">Edit</span>
                     </button>
-                    <button type="button" class="btn-primary btn-sm" id="btn-memory-save" onclick="saveCurrentMemoryFile()" style="display: none;">
-                        <span class="material-icons-round">save</span> Save
+                    <button type="button" class="btn-primary btn-sm" id="btn-memory-save" data-i18n-aria="common.save" aria-label="Save" onclick="saveCurrentMemoryFile()" style="display: none;">
+                        <span class="material-icons-round">save</span> <span data-i18n="common.save">Save</span>
                     </button>
                 </div>
             </div>
@@ -1331,7 +1331,7 @@
     <div id="context-modal" class="modal-backdrop">
         <div class="modal large">
             <div class="modal-header">
-                <h2><span class="material-icons-round">psychology</span> <span data-i18n="context.title">Active Context</span></h2>
+                <h2><span class="material-icons-round" aria-hidden="true">psychology</span> <span data-i18n="workspace.context">Conversation context</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('context-modal')">
                     <span class="material-icons-round">close</span>
@@ -1360,12 +1360,6 @@
                 </button>
             </div>
             <div class="modal-body markdown-body">
-                <div style="border: 1px solid var(--accent-red); background: rgba(248, 113, 113, 0.05); padding: 12px; border-radius: var(--radius-md); display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px;">
-                    <span class="material-icons-round" style="color: var(--accent-red); font-size: 18px; margin-top: 2px;">warning</span>
-                    <div style="color: var(--text-primary); font-size: 0.85rem; line-height: 1.4;" data-i18n="changelog.login_warn">
-                        If you experience login issues with the WebUI post-update, please run <code>shibaclaw reset-admin</code> in your terminal/console.
-                    </div>
-                </div>
                 <div id="changelog-content">
                     <div class="loader" data-i18n="changelog.fetching">Fetching release notes...</div>
                 </div>
@@ -1619,9 +1613,9 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1788852433962"></script>
-    <script src="/static/js/evolve.js?v=1788852433962"></script>
-    <script src="/static/js/chat_history_window.js?v=1788852433962"></script>
+    <script src="/static/bundle.js?v=1790775928747"></script>
+    <script src="/static/js/evolve.js?v=1790775928747"></script>
+    <script src="/static/js/chat_history_window.js?v=1790775928747"></script>
 </body>
 
 </html>

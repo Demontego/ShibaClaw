@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
@@ -69,25 +70,34 @@ def _deep_merge(base: dict, patch: dict):
 
 def _redact_secrets(obj: Any, keys_to_redact: Optional[Set[str]] = None) -> Any:
     """Recursively redact sensitive fields in a config-like dict."""
-    _keys = keys_to_redact or {
-        "api_key",
-        "apiKey",
-        "access_token",
-        "accessToken",
+    keys = keys_to_redact or {
+        "apikey",
+        "authorization",
+        "cookie",
         "token",
         "secret",
         "password",
         "key",
-        "auth_token",
     }
-    if isinstance(obj, dict):
-        return {
-            k: (_redact_one(v) if k.lower() in _keys else _redact_secrets(v, _keys))
-            for k, v in obj.items()
-        }
-    if isinstance(obj, list):
-        return [_redact_secrets(item, _keys) for item in obj]
-    return obj
+    normalized_keys = {re.sub(r"[^a-z0-9]", "", key.casefold()) for key in keys}
+
+    def redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                normalized_key = re.sub(r"[^a-z0-9]", "", key.casefold())
+                if isinstance(item, str) and any(
+                    normalized_key.endswith(secret_key) for secret_key in normalized_keys
+                ):
+                    result[key] = _redact_one(item)
+                else:
+                    result[key] = redact(item)
+            return result
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        return value
+
+    return redact(obj)
 
 
 def _redact_one(val: Any) -> Any:
@@ -99,7 +109,7 @@ def _redact_one(val: Any) -> Any:
     return "*" * (len(val) - 4) + val[-4:]
 
 
-def _resolve_workspace_path(path_str: str | None) -> Path | None:
+def _resolve_workspace_path(path_str: str | None, *, allow_media: bool = False) -> Path | None:
     if not agent_manager.config:
         return None
     workspace = agent_manager.config.workspace_path.resolve()
@@ -109,9 +119,10 @@ def _resolve_workspace_path(path_str: str | None) -> Path | None:
     resolved = (workspace / raw).resolve() if not raw.is_absolute() else raw.resolve()
     if resolved.is_relative_to(workspace):
         return resolved
-    media_root = get_media_dir().resolve()
-    if resolved.is_relative_to(media_root) and resolved.is_file():
-        return resolved
+    if allow_media:
+        media_root = get_media_dir().resolve()
+        if resolved.is_relative_to(media_root) and resolved.is_file():
+            return resolved
     return None
 
 

@@ -41,17 +41,13 @@
 > As notas de versão estão em [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novidades — Versão de Segurança v1.0.1</b> (clique para expandir)</summary>
+<summary>🚀 <b>Novidades — v1.0.3</b> (clique para expandir)</summary>
 
-**Última versão v1.0.1 (2026-09-17):**
+**Última versão v1.0.3 (2026-09-30):**
 
-- **Segurança e Correção do Alerta Dependabot #23** — Atualização do `sharp` para `0.35.4` no plugin bridge do WhatsApp, corrigindo a vulnerabilidade de alta gravidade GHSA-rgj7-g3m4-5g8c na biblioteca upstream `libheif`.
-- **Marco 1.0.0 — Framework de Agente Pronto para Produção** — O ShibaClaw atinge a versão 1.0.0! Um assistente de IA pessoal auto-hospedado projetado para privacidade, modularidade e estabilidade robusta, com suporte integral ao Python 3.12–3.14 e CI multiplataforma no Ubuntu e Windows.
-- **Gerenciador de Memória Interativo & Quarentena em Tempo Real** — Novo painel dedicado na WebUI (ícone `psychology` na barra lateral) e endpoints REST (`/api/memory`). Inspecione e edite em tempo real a memória de longo prazo (`MEMORY.md`), preferências do usuário (`USER.md`), linha do tempo de sessões (`HISTORY.md`) e reflexões do diário de sonhos (`DREAM_DIARY.md`), com orçamento de tokens e redação segura em quarentena.
-- **UX Interativa de Nova Geração Human-in-the-Loop** — Interação fluida durante a execução do agente: prompts estruturados de múltipla escolha (`ask_user`), isolamento de credenciais mascaradas em cofre (`request_credential`, estritamente fora do contexto do LLM), cartões visuais de progresso (`update_progress`), busca rápida no histórico (`session_search`) e permissões dinâmicas de sandbox por sessão (`full` | `workspace` | `readonly`).
-- **Segurança Reforçada & Sessões Anônimas Sem Vazamentos** — Escopo de ferramentas isolado via `ContextVar` para evitar vazamentos de concorrência entre sessões. O modo anônimo (Incognito) apaga logs JSONL do disco e ignora a consolidação de memória. Listas de modelos permitidos por perfil com proteção fail-closed.
-- **Atualização Completa para LangChain 1.4+ e Correções Dependabot** — Migração do stack RAG para LangChain 1.4+ moderno (`langchain>=1.4.0`, `langchain-core>=1.6.2`, `langchain-openai>=1.6.0`, `langchain-text-splitters>=1.1.2`), eliminando todas as vulnerabilidades relatadas (`pip-audit` limpo).
-- **Arquitetura Modular Leve, `uv` & Utilitário Doctor** — Pacotes opcionais modulares (`[desktop]`, `[audit]`, `[rag]`, `[server]`, `[full]`), inicialização em sub-segundos com descoberta sob demanda de plugins/canais e suíte de diagnóstico CLI `shibaclaw doctor [--fix]`.
+- **Novo estilo da interface Workspace** — Interface renovada para navegar pelos workspaces, aplicar temas e gerenciar agentes, com controles localizados e testes de interação.
+- **Dependências Python mais seguras** — O PyJWT foi atualizado para a versão 2.14.0 para corrigir 10 alertas que afetavam a versão 2.13.0.
+- **Atualizações confiáveis da WebUI** — Recursos CSS e JavaScript versionados impedem que o navegador reutilize arquivos antigos após uma atualização.
 
 Veja o [Changelog](./CHANGELOG.md) para o histórico completo de lançamentos.
 

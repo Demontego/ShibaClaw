@@ -41,17 +41,13 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>🚀 <b>最新动态 — v1.0.1 安全发布</b>（点击展开）</summary>
+<summary>🚀 <b>最新动态 — v1.0.3</b>（点击展开）</summary>
 
-**最新发布 v1.0.1 (2026-09-17):**
+**最新发布 v1.0.3 (2026-09-30):**
 
-- **安全更新与 Dependabot 告警 #23 修复** — 升级 WhatsApp 桥接插件中的 `sharp` 至 `0.35.4`，修复上游 `libheif` 的高危漏洞 GHSA-rgj7-g3m4-5g8c。
-- **里程碑 1.0.0 — 生产就绪型智能体框架** — ShibaClaw 正式迈入 1.0.0 时代！专为隐私、模块化和极致稳定性打造的自托管个人 AI 助手框架，全面支持 Python 3.12–3.14 并配备 Ubuntu 与 Windows 跨平台自动化 CI。
-- **交互式内存管理器与实时隔离区** — 全新 WebUI 专属管理面板（侧边栏 `psychology` 图标）与 REST API（`/api/memory`）。实时查看并在线编辑长期知识（`MEMORY.md`）、用户偏好（`USER.md`）、会话时间线（`HISTORY.md`）以及梦境日记（`DREAM_DIARY.md`），内置实时 Token 预算监控与安全遗忘隔离防丢机制。
-- **下一代人机协同交互体验 (Human-in-the-Loop UX)** — 智能体运行中的无缝协同：结构化多选交互提示（`ask_user`）、隔离保密凭据输入（`request_credential`，绝密保管于保险库且绝不泄露给 LLM 上下文）、持久化进度卡片（`update_progress`）、精准会话全文搜索（`session_search`）以及每会话动态沙箱权限隔离（`full` | `workspace` | `readonly`）。
-- **强化安全性与零泄漏无痕会话** — 工具执行采用 `ContextVar` 作用域隔离，杜绝高并发跨会话数据泄漏。无痕隐身（Incognito）模式自动清理磁盘 JSONL 日志并跳过内存固化归档。各 Profile 模型白名单机制采用 fail-closed 默认拒绝保护。
-- **全面升级 LangChain 1.4+ 并彻底修复 Dependabot CVE** — RAG 依赖全线升级至现代化 LangChain 1.4+（`langchain>=1.4.0`、`langchain-core>=1.6.2`、`langchain-openai>=1.6.0`、`langchain-text-splitters>=1.1.2`），彻底解决全部已知上游安全漏洞（`pip-audit` 零风险）。
-- **轻量模块化打包、`uv` 与环境诊断 Doctor** — 精简核心引擎，提供丰富的模块化扩展组件（`[desktop]`、`[audit]`、`[rag]`、`[server]`、`[full]`），插件与通道按需延迟加载实现亚秒级冷启动，并内置 `shibaclaw doctor [--fix]` 命令行诊断排错套件。
+- **全新的工作区界面风格** — 更新后的界面支持工作区导航、主题应用和代理管理，并提供本地化控件及交互测试。
+- **提升 Python 依赖安全性** — 将 PyJWT 更新至 2.14.0，修复影响 2.13.0 的 10 项安全公告。
+- **提升 WebUI 更新可靠性** — 为 CSS 和 JavaScript 资源添加版本号，防止浏览器在更新后继续使用旧文件。
 
 完整版本历史请查看 [CHANGELOG.md](./CHANGELOG.md)。
 

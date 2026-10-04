@@ -669,7 +669,7 @@ function updateSendButton() {
             iconSpan.textContent = "navigation";
             btnSend.title = typeof t === "function" ? t("chat.steer") : "Steer the agent";
         } else {
-            iconSpan.textContent = "send";
+            iconSpan.textContent = "arrow_upward";
             btnSend.title = hasText
                 ? (typeof t === "function" ? t("chat.send") : "Send message")
                 : (typeof t === "function" ? t("chat.type_to_send") : "Type a message to send");

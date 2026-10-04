@@ -170,24 +170,24 @@ async function _loadContextModalContent() {
     if (!contentEl) return;
 
     if (!state.sessionId) {
-        contentEl.innerHTML = "<div class='loader'>No active session</div>";
+        contentEl.textContent = t("workspace.context_empty");
         return;
     }
 
     const sessionId = state.sessionId;
-    contentEl.innerHTML = `<div class="loader">Loading context...</div>`;
+    contentEl.textContent = t("context.loading");
     try {
         const res = await authFetch(`/api/context?session_id=${encodeURIComponent(sessionId)}`);
         const data = await res.json();
         if (!state.contextModalOpen || state.sessionId !== sessionId) return;
-        const t = data.tokens || {};
-        const tokenCard = buildTokenCard(t);
+        const tokens = data.tokens || {};
+        const tokenCard = buildTokenCard(tokens);
         contentEl.innerHTML = tokenCard + renderMarkdown(data.context);
         enhanceCodeBlocks(contentEl);
-        updateTokenBadge(t);
+        updateTokenBadge(tokens);
     } catch (e) {
         if (!state.contextModalOpen || state.sessionId !== sessionId) return;
-        contentEl.innerHTML = "Error loading context.";
+        contentEl.textContent = t("workspace.context_error");
     }
 }
 
@@ -643,6 +643,7 @@ document.addEventListener("click", () => {
 });
 
 async function loadSession(sessionId) {
+    if (typeof window.showWorkspaceChat === "function") window.showWorkspaceChat();
     if (typeof closeSettingsView === "function") closeSettingsView();
     if (state.processing) {
         state.processing = false;
@@ -727,6 +728,7 @@ async function loadSession(sessionId) {
 
 function _syncSessionUI(data, loadSeq, sessionId) {
     setSessionLabel(data.nickname || sessionId);
+    if (typeof window.setWorkspaceChatTitle === "function") window.setWorkspaceChatTitle(data.nickname, "workspace.conversations");
     state.profileId = data.profile_id || "default";
     if (typeof window.syncProfileSelection === "function") {
         window.syncProfileSelection(state.profileId);
@@ -962,6 +964,7 @@ window.openModal = async function (id) {
     }
     const modal = $(id);
     if (!modal) return;
+    if (typeof window.prepareWorkspaceModal === "function") window.prepareWorkspaceModal(id);
     modal.classList.add("active");
 
     if (typeof window.closeSidebarOnMobile === "function") {
@@ -1044,6 +1047,7 @@ window.closeModal = function (id) {
         _clearOAuthPollsByPrefix("onboard:");
     }
     modal.classList.remove("active");
+    if (typeof window.onWorkspaceModalClosed === "function") window.onWorkspaceModalClosed(id);
 };
 
 // ── UI Helpers ────────────────────────────────────────────────

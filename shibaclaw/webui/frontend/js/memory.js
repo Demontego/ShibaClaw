@@ -11,29 +11,76 @@
     };
     let _activeTab = "memory"; // "memory", "user", "history", "diary"
     let _isEditMode = false;
+    let _loadState = "ready";
+    let _loadError = null;
+    let _saveStatus = null;
+
+    // Replace variables with callbacks so user content containing $ stays literal.
+    function _mt(key, vars) {
+        const values = vars || {};
+        return t(key).replace(/\{([^}]+)\}/g, (match, name) =>
+            Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match);
+    }
+
+    function _errorMessage(error) {
+        if (error.status) return _mt("memory.server_error", { status: error.status });
+        return error.key ? _mt(error.key) : error.message;
+    }
+
+    function _renderLoadState() {
+        const contentEl = document.getElementById("memory-content-area");
+        if (!contentEl) return;
+        const loading = _loadState === "loading";
+        contentEl.innerHTML = `
+            <div style="padding: 3rem; text-align: center; color: ${loading ? "var(--text-muted)" : "var(--accent-red, #e06c75)"};">
+                <span class="material-icons-round ${loading ? "spin" : ""}" style="font-size: 24px;">${loading ? "progress_activity" : "error_outline"}</span>
+                <div style="margin-top: 8px;">${escapeHtml(loading ? _mt("memory.loading") : _mt("memory.load_error", { error: _errorMessage(_loadError) }))}</div>
+            </div>`;
+    }
+
+    function _updateEditorControls() {
+        const editBtn = document.getElementById("btn-memory-edit-toggle");
+        const saveBtn = document.getElementById("btn-memory-save");
+        const editKey = _isEditMode ? "memory.view" : "common.edit";
+        if (editBtn) {
+            editBtn.innerHTML = `<span class="material-icons-round">${_isEditMode ? "visibility" : "edit"}</span> <span>${escapeHtml(_mt(editKey))}</span>`;
+            editBtn.setAttribute("data-i18n-aria", editKey);
+            editBtn.setAttribute("aria-label", _mt(editKey));
+        }
+        if (saveBtn) saveBtn.style.display = _isEditMode ? "inline-flex" : "none";
+        const caption = document.getElementById("memory-editor-caption");
+        const textarea = document.getElementById("memory-editor-textarea");
+        const editing = _mt("memory.editing", { file: getTargetFilename() });
+        if (caption) caption.textContent = editing;
+        if (textarea) textarea.setAttribute("aria-label", editing);
+    }
+
+    function _updateSaveStatus() {
+        const statusEl = document.getElementById("memory-save-status");
+        if (!statusEl || !_saveStatus) return;
+        const vars = _saveStatus.error ? { error: _errorMessage(_saveStatus.error) } : _saveStatus.vars;
+        statusEl.textContent = _mt(_saveStatus.key, vars);
+        statusEl.style.color = _saveStatus.color;
+    }
 
     window.loadMemoryData = async function () {
         const contentEl = document.getElementById("memory-content-area");
         if (!contentEl) return;
 
-        contentEl.innerHTML = `
-            <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-                <span class="material-icons-round spin" style="font-size: 24px;">progress_activity</span>
-                <div style="margin-top: 8px;">Loading memory...</div>
-            </div>`;
+        _loadState = "loading";
+        _renderLoadState();
 
         try {
             const res = await authFetch("/api/memory");
-            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            if (!res.ok) throw Object.assign(new Error(), { status: res.status });
             _memData = await res.json();
+            _loadState = "ready";
             _updateTokenBadge();
             renderMemoryView();
         } catch (e) {
-            contentEl.innerHTML = `
-                <div style="padding: 2rem; color: var(--accent-red, #e06c75); text-align: center;">
-                    <span class="material-icons-round" style="font-size: 32px;">error_outline</span>
-                    <div style="margin-top: 8px;">Failed to load memory: ${escapeHtml(e.message)}</div>
-                </div>`;
+            _loadState = "error";
+            _loadError = e;
+            _renderLoadState();
         }
     };
 
@@ -50,7 +97,7 @@
 
         badge.innerHTML = `
             <span class="material-icons-round" style="font-size: 14px; vertical-align: middle;">memory</span>
-            <span>${current} / ${max} tokens (${pct}%)</span>
+            <span>${escapeHtml(_mt("memory.tokens", { current, max, pct }))}</span>
         `;
         badge.style.color = color;
     }
@@ -85,34 +132,25 @@
 
     function renderMemoryView() {
         const contentEl = document.getElementById("memory-content-area");
-        const editBtn = document.getElementById("btn-memory-edit-toggle");
-        const saveBtn = document.getElementById("btn-memory-save");
         if (!contentEl) return;
 
         const content = getCurrentContent();
         const filename = getTargetFilename();
 
-        if (editBtn) {
-            editBtn.innerHTML = _isEditMode 
-                ? '<span class="material-icons-round">visibility</span> View' 
-                : '<span class="material-icons-round">edit</span> Edit';
-        }
-        if (saveBtn) {
-            saveBtn.style.display = _isEditMode ? "inline-flex" : "none";
-        }
+        _updateEditorControls();
 
         if (_isEditMode) {
             contentEl.innerHTML = `
                 <div style="height: 100%; display: flex; flex-direction: column;">
-                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Editing <strong>${filename}</strong></div>
-                    <textarea id="memory-editor-textarea" class="form-input" style="flex: 1; min-height: 380px; font-family: var(--font-mono, monospace); font-size: 13px; line-height: 1.5; resize: none;">${escapeHtml(content)}</textarea>
+                    <div id="memory-editor-caption" style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">${escapeHtml(_mt("memory.editing", { file: filename }))}</div>
+                    <textarea id="memory-editor-textarea" class="form-input" aria-labelledby="memory-editor-caption" style="flex: 1; min-height: 380px; font-family: var(--font-mono, monospace); font-size: 13px; line-height: 1.5; resize: none;">${escapeHtml(content)}</textarea>
                 </div>`;
         } else {
             if (_activeTab === "diary" && !content && (!_memData.quarantined || _memData.quarantined.length === 0)) {
                 contentEl.innerHTML = `
                     <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
                         <span class="material-icons-round" style="font-size: 36px; opacity: 0.5;">bedtime</span>
-                        <div style="margin-top: 8px;">No Dream Diary entries or quarantined items yet.</div>
+                        <div style="margin-top: 8px;">${escapeHtml(_mt("memory.diary_empty"))}</div>
                     </div>`;
                 return;
             }
@@ -121,8 +159,8 @@
                 contentEl.innerHTML = `
                     <div style="padding: 2.5rem; text-align: center; color: var(--text-muted);">
                         <span class="material-icons-round" style="font-size: 36px; opacity: 0.5;">description</span>
-                        <div style="margin-top: 8px;"><strong>${filename}</strong> is currently empty.</div>
-                        <div style="margin-top: 6px; font-size: 12px;">Click Edit to populate it or interact with the agent to learn facts.</div>
+                        <div style="margin-top: 8px;">${escapeHtml(_mt("memory.empty", { file: filename }))}</div>
+                        <div style="margin-top: 6px; font-size: 12px;">${escapeHtml(_mt("memory.empty_hint"))}</div>
                     </div>`;
                 return;
             }
@@ -134,7 +172,7 @@
                     <div style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
                         <h4 style="display: flex; align-items: center; gap: 6px; color: var(--accent-red, #e06c75); font-size: 13px; margin-bottom: 8px;">
                             <span class="material-icons-round" style="font-size: 16px;">shield</span>
-                            Quarantined Memories (${_memData.quarantined.length})
+                            ${escapeHtml(_mt("memory.quarantined", { n: _memData.quarantined.length }))}
                         </h4>
                         <div style="display: flex; flex-direction: column; gap: 8px;">`;
                 for (const q of _memData.quarantined) {
@@ -160,10 +198,8 @@
         const filename = getTargetFilename();
         const content = textarea.value;
 
-        if (statusEl) {
-            statusEl.textContent = "Saving...";
-            statusEl.style.color = "var(--shiba-gold)";
-        }
+        _saveStatus = { key: "memory.saving", color: "var(--shiba-gold)" };
+        _updateSaveStatus();
 
         try {
             const res = await authFetch("/api/memory/save", {
@@ -172,7 +208,7 @@
                 body: JSON.stringify({ file: filename, content: content })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Save failed");
+            if (!res.ok) throw data.error ? new Error(data.error) : Object.assign(new Error(), { key: "memory.save_failed" });
 
             if (_activeTab === "user") _memData.user = content;
             else if (_activeTab === "history") _memData.history = content;
@@ -183,16 +219,16 @@
             _updateTokenBadge();
 
             if (statusEl) {
-                statusEl.textContent = "Saved!";
-                statusEl.style.color = "#98c379";
-                setTimeout(() => { statusEl.textContent = ""; }, 3000);
+                _saveStatus = { key: "memory.saved", color: "#98c379" };
+                _updateSaveStatus();
+                setTimeout(() => { _saveStatus = null; statusEl.textContent = ""; }, 3000);
             }
             _isEditMode = false;
             renderMemoryView();
         } catch (e) {
             if (statusEl) {
-                statusEl.textContent = `Error: ${e.message}`;
-                statusEl.style.color = "var(--accent-red, #e06c75)";
+                _saveStatus = { key: "memory.error", error: e, color: "var(--accent-red, #e06c75)" };
+                _updateSaveStatus();
             }
         }
     };
@@ -201,7 +237,7 @@
         const input = document.getElementById("memory-forget-input");
         const needle = (input ? input.value : "").trim();
         if (needle.length < 3) {
-            alert("Please enter at least 3 characters to search/forget.");
+            alert(_mt("memory.forget_min"));
             return;
         }
 
@@ -212,14 +248,14 @@
                 body: JSON.stringify({ needle: needle, confirm: false })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Forget search failed");
+            if (!res.ok) throw new Error(data.error || _mt("memory.forget_search_failed"));
 
             const memCount = data.counts ? data.counts["MEMORY.md"] || 0 : 0;
             const histCount = data.counts ? data.counts["HISTORY.md"] || 0 : 0;
             const total = memCount + histCount;
 
             if (total === 0) {
-                alert(`No lines found matching "${needle}" in MEMORY.md or HISTORY.md.`);
+                alert(_mt("memory.forget_none", { needle }));
                 return;
             }
 
@@ -228,7 +264,7 @@
                 ...(data.matches?.["HISTORY.md"] || []).map(m => `[HISTORY] ${m}`)
             ].slice(0, 5).join("\n");
 
-            const msg = `Found ${total} matching line(s) for "${needle}":\n\n${previewLines}\n\nDo you want to quarantine and permanently redact these entries?`;
+            const msg = _mt("memory.forget_confirm", { n: total, needle, preview: previewLines });
             
             if (confirm(msg)) {
                 const confRes = await authFetch("/api/memory/forget", {
@@ -237,13 +273,24 @@
                     body: JSON.stringify({ needle: needle, confirm: true })
                 });
                 const confData = await confRes.json();
-                if (!confRes.ok) throw new Error(confData.error || "Failed to redact lines");
-                alert(`Successfully quarantined and removed matching lines.`);
+                if (!confRes.ok) throw new Error(confData.error || _mt("memory.forget_failed"));
+                alert(_mt("memory.forget_success"));
                 if (input) input.value = "";
                 await loadMemoryData();
             }
         } catch (e) {
-            alert(`Error: ${e.message}`);
+            alert(_mt("memory.error", { error: e.message }));
         }
     };
+
+    document.addEventListener("shibaclaw:localechange", () => {
+        const modal = document.getElementById("memory-modal");
+        if (!modal || !modal.classList.contains("active")) return;
+        _updateTokenBadge();
+        _updateEditorControls();
+        _updateSaveStatus();
+        if (_isEditMode && document.getElementById("memory-editor-textarea")) return;
+        if (_loadState === "ready") renderMemoryView();
+        else _renderLoadState();
+    });
 })();

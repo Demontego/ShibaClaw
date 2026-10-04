@@ -92,10 +92,14 @@ function findAvailableModel(modelId) {
     }
     const cleanId = String(modelId).trim().toLowerCase();
     const rawName = cleanId.split("/").pop();
+    const exactId = _availableModels.find(m => (m.id || "").toLowerCase() === cleanId);
+    if (exactId) return exactId;
+    const exactRawId = _availableModels.find(m => (m.raw_id || "").toLowerCase() === cleanId);
+    if (exactRawId) return exactRawId;
     return _availableModels.find(m => {
         const mId = (m.id || "").toLowerCase();
         const mRaw = (m.raw_id || "").toLowerCase();
-        return mId === cleanId || mRaw === cleanId || mRaw === rawName || mId.endsWith("/" + rawName);
+        return mRaw === rawName || mId.endsWith("/" + rawName);
     }) || null;
 }
 
@@ -183,8 +187,17 @@ function checkModelSupportsReasoning(modelId) {
     return false;
 }
 
-function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) {
-    if (typeof reasoningEffort !== "undefined" && reasoningEffort !== null) {
+function reasoningEffortLabel(effort) {
+    const normalized = String(effort || "").toLowerCase();
+    if (normalized === "low") return typeof t === "function" ? t("chat.effort_low") : "Low";
+    if (normalized === "medium") return typeof t === "function" ? t("chat.effort_medium") : "Medium";
+    if (normalized === "high") return typeof t === "function" ? t("chat.effort_high") : "High";
+    if (normalized === "xhigh") return "Extra High";
+    return normalized.replace(/[_-]+/g, " ").replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = null) {
+    if (typeof reasoningEffort !== "undefined") {
         _activeSessionReasoningEffort = reasoningEffort;
     }
     const currentModel = modelId || state.activeModelId || "";
@@ -210,26 +223,35 @@ function updateReasoningSelectorDisplay(reasoningEffort = null, modelId = null) 
     btn.style.cursor = "";
     btn.title = typeof t === "function" ? t("chat.reasoning_title") : "Change reasoning effort for active session";
 
-    const effortStr = _activeSessionReasoningEffort ? String(_activeSessionReasoningEffort).toLowerCase() : "";
+    let effortStr = _activeSessionReasoningEffort ? String(_activeSessionReasoningEffort).toLowerCase() : "";
+    const currentModelEntry = findAvailableModel(currentModel);
+    const supportedEfforts = currentModelEntry && currentModelEntry.reasoning_efforts;
+    if (effortStr && Array.isArray(supportedEfforts) && !supportedEfforts.includes(effortStr)) {
+        effortStr = "";
+    }
     let label = typeof t === "function" ? t("chat.effort_default") : "Default";
-    if (effortStr === "low") label = typeof t === "function" ? t("chat.effort_low") : "Low";
-    else if (effortStr === "medium") label = typeof t === "function" ? t("chat.effort_medium") : "Medium";
-    else if (effortStr === "high") label = typeof t === "function" ? t("chat.effort_high") : "High";
+    if (effortStr) label = reasoningEffortLabel(effortStr);
 
     display.textContent = (typeof t === "function" ? t("chat.effort_prefix") : "Effort: ") + label;
 
     if (list) {
-        renderReasoningDropdownList(list, effortStr);
+        renderReasoningDropdownList(list, effortStr, currentModel);
     }
 }
 
-function renderReasoningDropdownList(container, currentEffort) {
+function renderReasoningDropdownList(container, currentEffort, modelId = null) {
     container.innerHTML = "";
+    const model = findAvailableModel(modelId || state.activeModelId);
+    const modelEfforts = model && Array.isArray(model.reasoning_efforts) && model.reasoning_efforts.length
+        ? model.reasoning_efforts
+        : ["low", "medium", "high"];
     const options = [
         { value: "", label: typeof t === "function" ? t("chat.effort_default") : "Default", desc: typeof t === "function" ? t("chat.effort_default_desc") : "Use provider default effort" },
-        { value: "low", label: typeof t === "function" ? t("chat.effort_low") : "Low", desc: typeof t === "function" ? t("chat.effort_low_desc") : "Faster, lower reasoning depth" },
-        { value: "medium", label: typeof t === "function" ? t("chat.effort_medium") : "Medium", desc: typeof t === "function" ? t("chat.effort_medium_desc") : "Balanced speed and depth" },
-        { value: "high", label: typeof t === "function" ? t("chat.effort_high") : "High", desc: typeof t === "function" ? t("chat.effort_high_desc") : "Deep reasoning, slower" }
+        ...modelEfforts.map(effort => ({
+            value: String(effort).toLowerCase(),
+            label: reasoningEffortLabel(effort),
+            desc: `Reasoning effort: ${reasoningEffortLabel(effort)}`
+        }))
     ];
 
     options.forEach(opt => {
