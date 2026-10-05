@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, List, Dict
 
@@ -107,3 +108,49 @@ class StuckDetector:
                 "4. If you are executing a command, check if the command is available or if there is a simpler way to achieve the result."
             )
         }
+
+    async def classify_intent_and_detect_loop_async(
+        self,
+        response_content: str,
+        provider: Any,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Uses a lightweight decision model to classify the agent's intent and detect semantic loops
+        in the hot path of StuckDetector.
+        """
+        if not provider or not response_content:
+            return {"intent": "unknown", "is_loop": False, "confidence": 0.0}
+
+        prompt = (
+            "You are a high-speed intent classifier and loop detector. "
+            "Analyze the following agent response and classify its intent and whether it is stuck in a semantic loop.\n\n"
+            f"Agent Response:\n{response_content}\n\n"
+            "Respond with a JSON object containing:\n"
+            "1. 'intent': string (e.g., 'file_read', 'command_exec', 'web_search', 'conversation', 'error_recovery')\n"
+            "2. 'is_loop': boolean (true if the agent is repeating itself, asking the same question, or stuck in a loop)\n"
+            "3. 'confidence': float (0.0 to 1.0)\n"
+            "4. 'reason': string (brief explanation)\n\n"
+            "JSON output only:"
+        )
+
+        try:
+            active_model = model or "google/gemini-2.5-flash"
+            response = await provider.chat_with_retry(
+                messages=[{"role": "user", "content": prompt}],
+                model=active_model,
+            )
+            content = response.content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            result = json.loads(content)
+            logger.info("StuckDetector: High-speed decision model result: {}", result)
+            return result
+        except Exception as e:
+            logger.error("StuckDetector: Failed to classify intent and detect loop: {}", e)
+            return {"intent": "unknown", "is_loop": False, "confidence": 0.0, "error": str(e)}
+

@@ -1,3 +1,4 @@
+import pytest
 from shibaclaw.agent.stuck_detector import StuckDetector
 
 def test_stuck_detector_repeating_response():
@@ -60,3 +61,28 @@ def test_stuck_detector_tool_error_pivot():
     assert prompt["role"] == "system"
     assert "CRITICAL: Tool 'read_file' has failed repeatedly" in prompt["content"]
     assert "STRATEGY PIVOT REQUIRED" in prompt["content"]
+
+
+class MockResponse:
+    def __init__(self, content: str):
+        self.content = content
+
+class MockProvider:
+    async def chat_with_retry(self, messages: list[dict], model: str) -> MockResponse:
+        return MockResponse('{"intent": "file_read", "is_loop": true, "confidence": 0.95, "reason": "Repeating read_file call"}')
+
+@pytest.mark.asyncio
+async def test_stuck_detector_classify_intent_and_detect_loop():
+    detector = StuckDetector()
+    provider = MockProvider()
+    
+    result = await detector.classify_intent_and_detect_loop_async(
+        response_content="I am reading the file again.",
+        provider=provider,
+    )
+    
+    assert result["intent"] == "file_read"
+    assert result["is_loop"] is True
+    assert result["confidence"] == 0.95
+    assert result["reason"] == "Repeating read_file call"
+

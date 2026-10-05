@@ -1027,6 +1027,14 @@ class ShibaBrain:
                 if stuck_detector.add_response(response.content):
                     messages.append(stuck_detector.get_goal_reassessment_prompt("repeating response content"))
 
+                # High-speed decision model loop detection
+                decision = await stuck_detector.classify_intent_and_detect_loop_async(
+                    response.content, self.provider, model
+                )
+                if decision.get("is_loop"):
+                    logger.warning("StuckDetector: Loop detected by decision model: {}", decision.get("reason"))
+                    messages.append(stuck_detector.get_goal_reassessment_prompt(f"decision model: {decision.get('reason')}"))
+
             if response.has_tool_calls:
                 if on_progress:
                     thought = self._strip_think(response.content)
