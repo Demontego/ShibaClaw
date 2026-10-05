@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import Any, List, Dict
+from shibaclaw.agent.memory_guard import MemoryGuard
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class StuckDetector:
         self.tool_sequence_history: List[List[str]] = []
         self.progress_metrics: List[Any] = []
         self.tool_error_history: List[Dict[str, Any]] = []
+        self.memory_guard = MemoryGuard(max_history_size=100)
 
     def add_response(self, content: str | None) -> bool:
         """
@@ -27,6 +29,7 @@ class StuckDetector:
             return False
         
         self.response_content_history.append(clean_content)
+        self.response_content_history = self.memory_guard.guard_list(self.response_content_history, "response_content_history")
         if len(self.response_content_history) >= self.max_repeats:
             last_n = self.response_content_history[-self.max_repeats:]
             if all(x == last_n[0] for x in last_n):
@@ -42,6 +45,7 @@ class StuckDetector:
             return False
         
         self.tool_sequence_history.append(tool_names)
+        self.tool_sequence_history = self.memory_guard.guard_list(self.tool_sequence_history, "tool_sequence_history")
         if len(self.tool_sequence_history) >= self.max_repeats:
             last_n = self.tool_sequence_history[-self.max_repeats:]
             if all(x == last_n[0] for x in last_n):
@@ -55,6 +59,7 @@ class StuckDetector:
         and checks if progress has been flat/stagnant for too long.
         """
         self.progress_metrics.append(metric)
+        self.progress_metrics = self.memory_guard.guard_list(self.progress_metrics, "progress_metrics")
         if len(self.progress_metrics) >= self.max_repeats + 1:
             last_n = self.progress_metrics[-(self.max_repeats + 1):]
             # If the metric hasn't changed at all across max_repeats + 1 steps, we are flat
@@ -84,6 +89,7 @@ class StuckDetector:
         Adds a tool error and checks if the same tool is failing repeatedly.
         """
         self.tool_error_history.append({"tool_name": tool_name, "error_message": error_message})
+        self.tool_error_history = self.memory_guard.guard_list(self.tool_error_history, "tool_error_history")
         if len(self.tool_error_history) >= self.max_repeats:
             last_n = self.tool_error_history[-self.max_repeats:]
             # If the same tool failed max_repeats times in a row
