@@ -1264,6 +1264,11 @@ class ShibaBrain:
                 elapsed = time.monotonic() - loop_start
                 sre_status = sre_monitor.get_status()
 
+                # FD Guard: check and resolve file descriptor leaks
+                fd_status = layered_defense.fd_guard.check_and_resolve_leaks()
+                if fd_status.get("leak_detected"):
+                    logger.warning("FDGuard: File descriptor leak detected: {}", fd_status.get("message"))
+
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,

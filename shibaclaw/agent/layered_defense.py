@@ -7,12 +7,13 @@ from shibaclaw.agent.checkpoint_manager import CheckpointManager
 from shibaclaw.agent.semantic_tool_circuit_breaker import SemanticToolCircuitBreaker
 from shibaclaw.agent.tool_profiler import ToolProfiler
 from shibaclaw.agent.race_condition_guard import RaceConditionGuard
+from shibaclaw.agent.fd_guard import FDGuard
 
 logger = logging.getLogger(__name__)
 
 class LayeredDefense:
     """
-    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard)
+    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard, FDGuard)
     into a single, cohesive, layered defense system.
     """
     def __init__(self, workspace: Path, session_key: str | None = None):
@@ -26,6 +27,7 @@ class LayeredDefense:
         self.semantic_tool_breaker = SemanticToolCircuitBreaker(workspace)
         self.tool_profiler = ToolProfiler(workspace)
         self.race_guard = RaceConditionGuard()
+        self.fd_guard = FDGuard()
 
     def record_iteration(
         self,
