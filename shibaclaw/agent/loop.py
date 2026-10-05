@@ -1118,6 +1118,15 @@ class ShibaBrain:
                     tool_retry_delays = (1.0, 2.0)
                     
                     for tool_attempt in range(1, max_tool_retries + 1):
+                        resource = layered_defense.race_guard.extract_resource(tool_call.name, tool_call.arguments)
+                        acquired = True
+                        if resource:
+                            acquired = await layered_defense.race_guard.acquire(resource, tool_call.name, timeout=2.0)
+
+                        if not acquired:
+                            result = f"Error: Tool '{tool_call.name}' failed to acquire lock for resource '{resource}' (race condition detected)"
+                            break
+
                         try:
                             tool_start_time = time.monotonic()
                             tool_future = asyncio.ensure_future(
@@ -1164,6 +1173,9 @@ class ShibaBrain:
                             raise
                         except Exception as exc:
                             result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+                        finally:
+                            if resource and acquired:
+                                layered_defense.race_guard.release(resource, tool_call.name)
 
                         # Record execution duration
                         tool_duration = time.monotonic() - tool_start_time
