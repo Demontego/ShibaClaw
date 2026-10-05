@@ -105,3 +105,45 @@ class ContextOverflowGuard:
             logger.info("ContextOverflowGuard: Logged incident to learnings.md")
         except Exception as e:
             logger.error("ContextOverflowGuard: Failed to log incident: %s", e)
+
+    def budget_context(self, messages: list, max_tokens: Optional[int] = None) -> list:
+        """
+        Dynamically budgets the context by pruning or compressing older messages
+        if the estimated token count exceeds the max_tokens budget.
+        Keeps the system prompt (messages[0]) and the most recent messages intact.
+        """
+        if not messages:
+            return messages
+            
+        target_budget = max_tokens or self.critical_threshold
+        
+        # Estimate tokens: 1 token ≈ 4 characters
+        estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
+        if estimated_tokens <= target_budget:
+            return messages
+
+        logger.warning(
+            "ContextOverflowGuard: Estimated tokens (%d) exceed budget (%d). Budgeting context...",
+            estimated_tokens,
+            target_budget
+        )
+
+        # Keep system prompt (index 0) and the last 3 messages
+        system_prompt = messages[0]
+        recent_messages = messages[-3:]
+        middle_messages = messages[1:-3]
+
+        # Prune/compress middle messages if needed
+        budgeted_middle = []
+        current_tokens = (len(system_prompt.get("content") or "") + sum(len(msg.get("content") or "") for msg in recent_messages)) // 4
+
+        for msg in reversed(middle_messages):
+            msg_tokens = len(msg.get("content") or "") // 4
+            if current_tokens + msg_tokens <= target_budget:
+                budgeted_middle.insert(0, msg)
+                current_tokens += msg_tokens
+            else:
+                # Compress or skip
+                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", (msg.get("content") or "")[:50])
+
+        return [system_prompt] + budgeted_middle + recent_messages
