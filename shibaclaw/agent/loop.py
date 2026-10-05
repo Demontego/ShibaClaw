@@ -1177,6 +1177,13 @@ class ShibaBrain:
                     if layered_defense.semantic_tool_breaker.record_call(tool_call.name, tool_call.arguments, result):
                         result = layered_defense.semantic_tool_breaker.get_tripped_message(tool_call.name)
 
+                    if result.startswith("Error:"):
+                        # Structured In-Band Error Feedback
+                        if tool := self.tools.get(tool_call.name):
+                            from shibaclaw.agent.tools.error_feedback import format_structured_error_feedback
+                            raw_err = result[len("Error:"):].strip()
+                            result = format_structured_error_feedback(tool_call.name, raw_err, tool.parameters)
+
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
