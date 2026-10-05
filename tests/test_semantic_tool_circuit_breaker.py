@@ -1,5 +1,3 @@
-import pytest
-from pathlib import Path
 from shibaclaw.agent.semantic_tool_circuit_breaker import SemanticToolCircuitBreaker
 
 def test_semantic_tool_circuit_breaker_trips(tmp_path):
