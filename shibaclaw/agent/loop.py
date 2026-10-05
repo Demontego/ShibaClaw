@@ -1119,6 +1119,7 @@ class ShibaBrain:
                     
                     for tool_attempt in range(1, max_tool_retries + 1):
                         try:
+                            tool_start_time = time.monotonic()
                             tool_future = asyncio.ensure_future(
                                 self.tools.execute(tool_call.name, tool_call.arguments)
                             )
@@ -1163,6 +1164,10 @@ class ShibaBrain:
                             raise
                         except Exception as exc:
                             result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+
+                        # Record execution duration
+                        tool_duration = time.monotonic() - tool_start_time
+                        layered_defense.tool_profiler.record_execution(tool_call.name, tool_duration)
 
                         # Check if we should retry (only for safe, idempotent tools on transient errors)
                         is_error = result.startswith("Error:")
