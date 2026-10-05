@@ -62,7 +62,7 @@ async def run(host: str, port: int, token: str, device_id: str) -> None:
                 continue
             payload = msg.get("payload") or {}
             ok, result, error = _tool_result(payload.get("name", ""), payload.get("arguments") or {})
-            print("invoke", payload.get("name"), arguments := payload.get("arguments"), "->", result or error)
+            print("invoke", payload.get("name"), payload.get("arguments"), "->", result or error)
             await ws.send(
                 json.dumps(
                     {
