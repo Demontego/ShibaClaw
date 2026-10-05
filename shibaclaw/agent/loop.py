@@ -1172,6 +1172,10 @@ class ShibaBrain:
                             continue
                         else:
                             break
+                    # Semantic Tool Circuit Breaker
+                    if layered_defense.semantic_tool_breaker.record_call(tool_call.name, tool_call.arguments, result):
+                        result = layered_defense.semantic_tool_breaker.get_tripped_message(tool_call.name)
+
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (

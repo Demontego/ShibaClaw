@@ -4,12 +4,13 @@ from typing import Any, Dict, List, Tuple
 from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.sre_monitor import SREMonitor
 from shibaclaw.agent.checkpoint_manager import CheckpointManager
+from shibaclaw.agent.semantic_tool_circuit_breaker import SemanticToolCircuitBreaker
 
 logger = logging.getLogger(__name__)
 
 class LayeredDefense:
     """
-    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager)
+    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker)
     into a single, cohesive, layered defense system.
     """
     def __init__(self, workspace: Path, session_key: str | None = None):
@@ -20,6 +21,7 @@ class LayeredDefense:
         self.stuck_detector = StuckDetector()
         self.sre_monitor = SREMonitor()
         self.checkpoint_mgr = CheckpointManager(workspace)
+        self.semantic_tool_breaker = SemanticToolCircuitBreaker(workspace)
 
     def record_iteration(
         self,
