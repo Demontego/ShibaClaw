@@ -14,7 +14,10 @@
     <string name="status_online">Online</string>
     <string name="boop_prompt">User booped the Shiba widget. Greet them in one short line, or say what you can do on this phone (apps, settings).</string>
     <string name="notif_channel">Shiba</string>
+    <string name="notif_replies_channel">Shiba replies</string>
     <string name="notif_title">Shiba is on the home screen</string>
     <string name="input_hint">Tell Shiba…</string>
     <string name="send">Send</string>
+    <string name="notif_listener_button">Allow notification access</string>
+    <string name="notif_listener_hint">Lets the home widget mention unread alerts (counts stay on this phone).</string>
 </resources>

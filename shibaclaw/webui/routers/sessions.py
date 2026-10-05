@@ -17,7 +17,12 @@ async def api_sessions_list(request: Request):
     pm = agent_manager.pm
     if not pm:
         return JSONResponse({"error": "Agent manager not ready"}, status_code=500)
-    return JSONResponse({"sessions": pm.list_sessions()})
+    sessions = [
+        s
+        for s in pm.list_sessions()
+        if not str(s.get("key") or s.get("session_key") or "").endswith(":digest")
+    ]
+    return JSONResponse({"sessions": sessions})
 
 
 async def api_sessions_get(request: Request):

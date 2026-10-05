@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.view.View
 import android.widget.RemoteViews
+import com.shibaclaw.companion.data.Clip
+import com.shibaclaw.companion.data.Mood
 
 class ShibaWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
@@ -24,12 +26,14 @@ class ShibaWidget : AppWidgetProvider() {
             val now = System.currentTimeMillis()
             val last = Prefs.lastTapAt(context)
             Prefs.setLastTap(context, now)
-            val action = if (now - last in 1..DOUBLE_TAP_MS) {
-                ShibaService.ACTION_HEY
+            if (now - last in 1..DOUBLE_TAP_MS) {
+                ShibaService.start(context, ShibaService.ACTION_HEY)
+                val open = Intent(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(open)
             } else {
-                ShibaService.ACTION_BOOP
+                ShibaService.start(context, ShibaService.ACTION_BOOP)
             }
-            ShibaService.start(context, action)
         }
     }
 
@@ -45,10 +49,13 @@ class ShibaWidget : AppWidgetProvider() {
 
         private fun render(context: Context, mgr: AppWidgetManager, id: Int) {
             val views = RemoteViews(context.packageName, R.layout.shiba_widget)
-            val mood = Mood.from(Prefs.mood(context))
-            views.setImageViewResource(R.id.shiba_face, mood.drawable())
+            val clip = Clip.entries.firstOrNull { it.name == Prefs.clipName(context) }
+                ?: Clip.forMood(Mood.from(Prefs.mood(context)))
+            val frames = clip.frameDrawables
+            val index = Prefs.frameIndex(context).coerceIn(0, frames.lastIndex)
+            views.setImageViewResource(R.id.shiba_face, frames[index])
             val bubble = Prefs.lastBubble(context)
-            if (bubble.isBlank() || mood == Mood.SLEEP) {
+            if (bubble.isBlank()) {
                 views.setViewVisibility(R.id.shiba_bubble, View.GONE)
             } else {
                 views.setViewVisibility(R.id.shiba_bubble, View.VISIBLE)

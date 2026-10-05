@@ -192,6 +192,8 @@ async def ws_endpoint(websocket: WebSocket):
     else:
         session_id = provided_id if provided_id else f"webui:{ws_id[:8]}"
     sessions[ws_id] = _make_session_state(session_id)
+    if device_id:
+        sessions[ws_id]["device_id"] = device_id
     _ws_clients[ws_id] = websocket
     _subscribe_ws_to_session(ws_id, session_id)
     logger.info("🌐 WebUI client connected: {} (Session: {})", ws_id, session_id)
@@ -270,6 +272,12 @@ async def ws_endpoint(websocket: WebSocket):
             elif msg_type == "device_result":
                 await android_bridge.submit_result(data)
 
+            elif msg_type == "digest_request":
+                device_id = (sessions.get(ws_id) or {}).get("device_id") or ""
+                if not device_id:
+                    continue
+                asyncio.create_task(_push_digest(websocket, device_id))
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -280,6 +288,17 @@ async def ws_endpoint(websocket: WebSocket):
         sessions.pop(ws_id, None)
         _ws_clients.pop(ws_id, None)
         logger.info("🌐 WebUI client disconnected: {}", ws_id)
+
+
+async def _push_digest(ws: WebSocket, device_id: str) -> None:
+    """Build a phone digest off the receive loop so chat messages keep flowing."""
+    digest = await android_bridge.build_digest(device_id)
+    if not digest:
+        return
+    try:
+        await _emit_to_ws(ws, {"type": "digest", **digest})
+    except Exception as exc:
+        logger.debug("digest push failed: {}", exc)
 
 
 async def _emit_session_status(ws: WebSocket, session_key: str) -> None:
