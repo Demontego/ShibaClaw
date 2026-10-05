@@ -336,6 +336,53 @@ class SubagentManager:
             logger.error("Subagent [{}] failed: {}", task_id, e)
             await self._announce_result(task_id, label, task, error_msg, origin, "error")
 
+    def _synthesize_structured_result(self, result: str) -> str:
+        """
+        Synthesizes a structured summary of the subagent's result.
+        If the result is valid JSON, formats it cleanly.
+        Otherwise, extracts key sections (e.g., Summary, Key Findings, Next Steps)
+        to prevent pouring raw, verbose transcripts into the parent's context.
+        """
+        clean_result = result.strip()
+        try:
+            # If it's already JSON, pretty-print it
+            parsed = json.loads(clean_result)
+            return json.dumps(parsed, indent=2, ensure_ascii=False)
+        except json.JSONDecodeError:
+            pass
+
+        # If it's a long text, extract key lines or structure it
+        lines = clean_result.split("\n")
+        if len(lines) <= 15:
+            return clean_result
+
+        # Extract headers or key bullet points
+        summary_lines = []
+        key_findings = []
+        for line in lines:
+            line_strip = line.strip()
+            if not line_strip:
+                continue
+            if line_strip.startswith(("#", "##", "###")):
+                summary_lines.append(line_strip)
+            elif line_strip.startswith(("-", "*", "1.", "2.")):
+                if len(key_findings) < 8:
+                    key_findings.append(line_strip)
+
+        if summary_lines or key_findings:
+            structured = []
+            if summary_lines:
+                structured.append("### Structure / Sections:")
+                structured.extend(summary_lines[:5])
+            if key_findings:
+                structured.append("\n### Key Highlights:")
+                structured.extend(key_findings)
+            structured.append(f"\n[Full result truncated for context efficiency — {len(lines)} lines total]")
+            return "\n".join(structured)
+
+        # Fallback: return first 10 and last 5 lines
+        return "\n".join(lines[:10]) + "\n\n...\n\n" + "\n".join(lines[-5:])
+
     async def _announce_result(
         self,
         task_id: str,
@@ -348,12 +395,15 @@ class SubagentManager:
         """Announce the subagent result to the main agent via the message bus."""
         status_text = "completed successfully" if status == "ok" else "failed"
 
+        # Synthesize structured result to prevent context overflow in parent
+        structured_result = self._synthesize_structured_result(result) if status == "ok" else result
+
         announce_content = f"""[Subagent '{label}' {status_text}]
 
 Task: {task}
 
 Result:
-{result}
+{structured_result}
 
 Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs."""
 
