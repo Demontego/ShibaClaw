@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 from shibaclaw.agent.subagent import SubagentManager
