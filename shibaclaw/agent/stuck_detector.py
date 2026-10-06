@@ -1,9 +1,9 @@
 import json
-import logging
 from typing import Any, List, Dict
-from shibaclaw.agent.memory_guard import MemoryGuard
 
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+from shibaclaw.agent.memory_guard import MemoryGuard
 
 class StuckDetector:
     """
