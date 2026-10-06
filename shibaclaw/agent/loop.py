@@ -32,7 +32,7 @@ from shibaclaw.agent.tools.memory_ops import MemoryForgetTool, ProposeSkillTool
 from shibaclaw.agent.tools.message import MessageTool
 from shibaclaw.agent.tools.registry import SkillVault
 from shibaclaw.agent.tools.shell import ExecTool
-from shibaclaw.agent.tools.spawn import SpawnTool
+from shibaclaw.agent.tools.spawn import SpawnMeaTool, SpawnTool
 from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
 from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.agent.interactive import normalize_permission_mode
@@ -434,6 +434,7 @@ class ShibaBrain:
             )
         )
         self.tools.register(SpawnTool(manager=self.subagents))
+        self.tools.register(SpawnMeaTool(manager=self.subagents))
         if self.automation_service:
             self.tools.register(AutomationTool(self.automation_service))
 

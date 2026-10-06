@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added
