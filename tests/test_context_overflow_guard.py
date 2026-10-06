@@ -42,3 +42,28 @@ def test_context_overflow_guard_budget_context(tmp_path: Path):
     assert budgeted[-3:] == messages[-3:]
     # At least one middle message should be pruned to fit the budget
     assert len(budgeted) < len(messages)
+
+def test_context_window_recovery(tmp_path: Path):
+    from shibaclaw.agent.context_overflow_guard import ContextWindowRecovery
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
+    recovery = ContextWindowRecovery(guard)
+    
+    messages = [
+        {"role": "system", "content": "System prompt " * 100}, # 1400 chars
+        {"role": "user", "content": "Middle message 1 " * 100}, # 1700 chars
+        {"role": "assistant", "content": "Middle message 2 " * 100}, # 1700 chars
+        {"role": "user", "content": "Recent message 1 " * 10}, # 170 chars
+        {"role": "assistant", "content": "Recent message 2 " * 10}, # 170 chars
+        {"role": "user", "content": "Recent message 3 " * 10}, # 170 chars
+    ]
+    
+    recovered = recovery.recover_context(messages, max_tokens=500)
+    
+    # System prompt and recent messages must be kept
+    assert recovered[0] == messages[0]
+    assert recovered[-3:] == messages[-3:]
+    # Middle messages must be replaced by a single summary message
+    assert len(recovered) == 5
+    assert recovered[1]["role"] == "system"
+    assert "[Context Window Recovery]" in recovered[1]["content"]
+

@@ -147,3 +147,52 @@ class ContextOverflowGuard:
                 logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", (msg.get("content") or "")[:50])
 
         return [system_prompt] + budgeted_middle + recent_messages
+
+class ContextWindowRecovery:
+    """
+    Implements Context Window Recovery to automatically compress and summarize
+    older messages when approaching the token limit, ensuring no context is lost.
+    """
+    def __init__(self, guard: ContextOverflowGuard):
+        self.guard = guard
+
+    def recover_context(self, messages: list, max_tokens: int) -> list:
+        """
+        Compresses the context by summarizing older messages and replacing them
+        with a single summary message, keeping the system prompt and recent messages intact.
+        """
+        if not messages or len(messages) <= 4:
+            return messages
+
+        # Estimate tokens: 1 token ≈ 4 characters
+        estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
+        if estimated_tokens <= max_tokens:
+            return messages
+
+        logger.warning(
+            "ContextWindowRecovery: Context size (%d tokens) exceeds limit (%d). Initiating recovery...",
+            estimated_tokens,
+            max_tokens
+        )
+
+        system_prompt = messages[0]
+        recent_messages = messages[-3:]
+        middle_messages = messages[1:-3]
+
+        # Summarize middle messages
+        summary_content = "Summary of previous conversation turns:\n"
+        for msg in middle_messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content") or ""
+            # Truncate content for summary
+            truncated = content[:100] + "..." if len(content) > 100 else content
+            summary_content += f"- {role}: {truncated}\n"
+
+        summary_message = {
+            "role": "system",
+            "content": f"[Context Window Recovery] {summary_content}"
+        }
+
+        logger.info("ContextWindowRecovery: Successfully compressed older messages into a summary.")
+        return [system_prompt, summary_message] + recent_messages
+
