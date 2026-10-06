@@ -1,11 +1,15 @@
+import sys
+import pytest
 from shibaclaw.agent.fd_guard import FDGuard
 
+@pytest.mark.skipif(sys.platform == "win32", reason="File descriptors via /proc are unix-only")
 def test_fd_guard_get_open_fds():
     guard = FDGuard()
     fds = guard.get_open_fds()
     assert isinstance(fds, list)
     assert len(fds) > 0
 
+@pytest.mark.skipif(sys.platform == "win32", reason="File descriptors via /proc are unix-only")
 def test_fd_guard_detect_leak():
     # Set a very low limit to trigger leak detection
     guard = FDGuard(max_fds=1)
