@@ -6,6 +6,7 @@
         "memory-modal": "library",
         "automation-modal": "automations",
         "connected-apps-modal": "apps",
+        "evolve-modal": "evolution",
     };
     let page = "chat";
     let activePanel = null;
@@ -21,6 +22,9 @@
             ? (systemTheme.matches ? "dark" : "light") : theme;
         const select = document.getElementById("workspace-theme");
         if (select) select.value = theme;
+        const color = document.documentElement.dataset.theme === "light" ? "#fcfbf9" : "#191918";
+        const meta = document.getElementById("theme-color");
+        if (meta) meta.setAttribute("content", color);
     }
 
     window.setWorkspaceNav = function (next) {
@@ -39,7 +43,7 @@
         const title = document.getElementById("workspace-view-title");
         const heading = document.getElementById("workspace-page-heading");
         const description = document.getElementById("workspace-page-description");
-        if (["agents", "library", "automations", "apps"].includes(page)) {
+        if (["agents", "library", "automations", "apps", "evolution"].includes(page)) {
             if (title) title.textContent = t(`workspace.${page}`);
             if (heading) heading.textContent = t(`workspace.${page}`);
             if (description) description.textContent = t(`workspace.${page}_subtitle`);
@@ -51,12 +55,20 @@
         if (page === "agents") renderAgents();
     }
 
+    function setMainPane(mode) {
+        const open = mode !== "chat";
+        document.body.classList.toggle("workspace-page-open", open);
+        const chat = document.getElementById("chat-area");
+        const view = document.getElementById("workspace-view");
+        if (chat) chat.style.display = open ? "none" : "flex";
+        if (view) view.style.display = open ? "flex" : "none";
+    }
+
     window.leaveWorkspace = function () {
         ++agentsRequest;
         Object.keys(panels).forEach(id => document.getElementById(id)?.classList.remove("active"));
         activePanel = null;
-        const view = document.getElementById("workspace-view");
-        if (view) view.style.display = "none";
+        setMainPane("chat");
     };
 
     window.setWorkspaceChatTitle = function (title, key = "workspace.new_chat") {
@@ -69,8 +81,7 @@
     window.showWorkspaceChat = function () {
         window.leaveWorkspace();
         if (typeof window.closeSettingsView === "function") window.closeSettingsView();
-        const chat = document.getElementById("chat-area");
-        if (chat) chat.style.display = "flex";
+        setMainPane("chat");
         window.setWorkspaceNav("chat");
         if (typeof window.closeSidebarOnMobile === "function") window.closeSidebarOnMobile();
     };
@@ -78,11 +89,12 @@
     function showPage(next) {
         window.leaveWorkspace();
         if (typeof window.closeSettingsView === "function") window.closeSettingsView();
-        document.getElementById("chat-area").style.display = "none";
-        document.getElementById("workspace-view").style.display = "flex";
+        setMainPane(next);
         document.getElementById("workspace-agents").hidden = next !== "agents";
         document.getElementById("workspace-library-tabs").hidden = next !== "library";
         document.getElementById("workspace-app-actions").hidden = next !== "apps";
+        const evolveActions = document.getElementById("workspace-evolve-actions");
+        if (evolveActions) evolveActions.hidden = next !== "evolution";
         window.setWorkspaceNav(next);
         translateWorkspace();
         if (typeof window.closeSidebarOnMobile === "function") window.closeSidebarOnMobile();
@@ -118,7 +130,10 @@
         if (id === "context-modal") {
             document.getElementById("chat-area").classList.remove("context-visible");
             document.getElementById("workspace-context-toggle").setAttribute("aria-expanded", "false");
-        } else if (id === activePanel) window.showWorkspaceChat();
+        } else if (id === activePanel) {
+            activePanel = null;
+            window.showWorkspaceChat();
+        }
     };
 
     window.toggleWorkspaceContext = function () {
@@ -130,6 +145,24 @@
         const collapsed = document.body.classList.toggle("workspace-sidebar-collapsed");
         try { localStorage.setItem("shibaclaw_sidebar_collapsed", String(collapsed)); } catch (_) { /* optional storage */ }
     };
+
+    function applySidebarForViewport() {
+        if (window.matchMedia("(max-width: 900px)").matches) {
+            document.body.classList.remove("workspace-sidebar-collapsed");
+            return;
+        }
+        try {
+            const stored = localStorage.getItem("shibaclaw_sidebar_collapsed");
+            if (stored === "true" || stored === "false") {
+                document.body.classList.toggle("workspace-sidebar-collapsed", stored === "true");
+                return;
+            }
+        } catch (_) { /* optional storage */ }
+        document.body.classList.toggle(
+            "workspace-sidebar-collapsed",
+            window.matchMedia("(max-width: 1199px)").matches,
+        );
+    }
 
     function renderAgents() {
         const grid = document.getElementById("workspace-agent-grid");
@@ -215,9 +248,11 @@
         try {
             const stored = localStorage.getItem("shibaclaw_theme");
             if (["system", "light", "dark"].includes(stored)) theme = stored;
-            document.body.classList.toggle("workspace-sidebar-collapsed", localStorage.getItem("shibaclaw_sidebar_collapsed") === "true");
         } catch (_) { /* optional storage */ }
         applyTheme();
+        applySidebarForViewport();
+        window.matchMedia("(max-width: 900px)").addEventListener("change", applySidebarForViewport);
+        window.matchMedia("(max-width: 1199px)").addEventListener("change", applySidebarForViewport);
         window.setWorkspaceNav(page);
         systemTheme.addEventListener("change", applyTheme);
         document.getElementById("workspace-theme")?.addEventListener("change", event => {
@@ -231,6 +266,12 @@
         if (profile && actions) actions.prepend(profile);
         const newChat = document.getElementById("btn-new-session");
         newChat?.addEventListener("click", window.showWorkspaceChat, { capture: true });
+        document.querySelector(".logo")?.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                window.showWorkspaceChat();
+            }
+        });
         // Session items are rebuilt by the history renderer; delegation survives rerenders.
         document.getElementById("history-list")?.addEventListener("click", event => {
             if (event.target.closest(".history-item") && !event.target.closest(".btn-session-menu, .session-dropdown")) {

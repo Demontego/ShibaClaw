@@ -3,9 +3,16 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <title>ShibaClaw — AI Assistant</title>
     <meta name="description" content="ShibaClaw WebUI — Premium AI Agent Interface">
+    <meta name="theme-color" content="#191918" id="theme-color">
+    <meta name="color-scheme" content="dark light">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ShibaClaw">
+    <link rel="manifest" href="/static/manifest.webmanifest">
     <link rel="icon" type="image/webp" href="/static/shibaclaw_logo.webp">
     <link rel="apple-touch-icon" href="/static/shibaclaw_logo.webp">
 
@@ -20,7 +27,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1790775928747">
+    <link rel="stylesheet" href="/static/bundle.css?v=1791292676074">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
@@ -42,20 +49,23 @@
         <div class="login-card">
             <img src="/static/shibaclaw_logo.webp" alt="ShibaClaw" class="login-logo">
             <h1 class="login-title">ShibaClaw</h1>
-            <p id="login-subtitle" class="login-subtitle" data-i18n="login.subtitle">Enter your credentials to continue</p>
+            <p id="login-subtitle" class="login-subtitle" data-i18n="login.subtitle">Enter your credentials to continue
+            </p>
             <div class="login-input-group" style="flex-direction: column; align-items: stretch;">
                 <input type="text" id="login-username" class="login-input" placeholder="Username"
-                    data-i18n-placeholder="login.username" data-i18n-aria="login.username"
-                    autocomplete="username" spellcheck="false" aria-label="Username">
+                    data-i18n-placeholder="login.username" data-i18n-aria="login.username" autocomplete="username"
+                    spellcheck="false" aria-label="Username">
                 <input type="password" id="login-password" class="login-input" placeholder="Password"
                     data-i18n-placeholder="login.password" data-i18n-aria="login.password"
                     autocomplete="current-password" spellcheck="false" aria-label="Password">
                 <button id="btn-login" class="login-btn" style="width: 100%; justify-content: center; margin-top: 8px;">
-                    <span id="btn-login-icon" class="material-icons-round" style="font-size:18px;vertical-align:middle">login</span>
+                    <span id="btn-login-icon" class="material-icons-round"
+                        style="font-size:18px;vertical-align:middle">login</span>
                     <span id="btn-login-text" data-i18n="login.connect">Connect</span>
                 </button>
             </div>
-            <div id="login-error" class="login-error" style="display:none" data-i18n="login.invalid">Invalid credentials</div>
+            <div id="login-error" class="login-error" style="display:none" data-i18n="login.invalid">Invalid credentials
+            </div>
             <p id="login-hint" class="login-hint" style="display:none"></p>
         </div>
     </div>
@@ -64,23 +74,13 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo">
+                <div class="logo" role="button" tabindex="0" onclick="showWorkspaceChat()"
+                    data-i18n-title="workspace.conversations" title="Conversations">
                     <img src="/static/shibaclaw_logo.webp" alt="ShibaClaw Logo" class="logo-icon">
                     <div class="logo-text">
                         <h1>ShibaClaw</h1>
-                        <div class="header-sub-row">
-                            <span class="version" id="sidebar-version" onclick="openChangelog()"
-                                data-i18n-title="version.whats_new" title="View what's new">loading...</span>
-                            <div class="status-micro" id="status-card">
-                                <div class="status-dot disconnected" id="status-dot"></div>
-                                <span class="status-text" id="status-text" data-i18n="status.connecting">Connecting...</span>
-                                <button class="btn-restart" id="btn-restart" onclick="restartGateway()"
-                                    data-i18n-title="restart.gateway" data-i18n-aria="restart.gateway"
-                                    title="Restart Gateway" tabindex="-1" aria-label="Restart Gateway">
-                                    <span class="material-icons-round">refresh</span>
-                                </button>
-                            </div>
-                        </div>
+                        <span class="version" id="sidebar-version" onclick="openChangelog()"
+                            data-i18n-title="version.whats_new" title="View what's new">loading...</span>
                     </div>
                 </div>
                 <button class="sidebar-toggle" id="sidebar-toggle" data-i18n-aria="chrome.toggle_sidebar"
@@ -97,32 +97,47 @@
             </div>
 
             <nav class="workspace-nav" data-i18n-aria="workspace.title" aria-label="Your workspace">
-                <button type="button" class="workspace-nav-item" data-workspace-page="chat" onclick="showWorkspaceChat()" aria-current="page">
-                    <span class="material-icons-round" aria-hidden="true">chat_bubble_outline</span><span class="workspace-nav-label" data-i18n="workspace.conversations">Conversations</span>
+                <button type="button" class="workspace-nav-item" data-workspace-page="agents"
+                    onclick="openWorkspaceAgents()" data-i18n-title="workspace.agents"
+                    data-i18n-aria="workspace.agents" title="Agents" aria-label="Agents">
+                    <span class="material-icons-round" aria-hidden="true">smart_toy</span><span
+                        class="workspace-nav-label" data-i18n="workspace.agents">Agents</span>
                 </button>
-                <button type="button" class="workspace-nav-item" data-workspace-page="agents" onclick="openWorkspaceAgents()">
-                    <span class="material-icons-round" aria-hidden="true">smart_toy</span><span class="workspace-nav-label" data-i18n="workspace.agents">Agents</span>
+                <button type="button" class="workspace-nav-item" data-workspace-page="automations"
+                    onclick="openModal('automation-modal')" data-i18n-title="workspace.automations"
+                    data-i18n-aria="workspace.automations" title="Automations" aria-label="Automations">
+                    <span class="material-icons-round" aria-hidden="true">schedule</span><span
+                        class="workspace-nav-label" data-i18n="workspace.automations">Automations</span><span
+                        class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
                 </button>
-                <button type="button" class="workspace-nav-item" data-workspace-page="automations" onclick="openModal('automation-modal')">
-                    <span class="material-icons-round" aria-hidden="true">schedule</span><span class="workspace-nav-label" data-i18n="workspace.automations">Automations</span><span class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
+                <button type="button" class="workspace-nav-item" data-workspace-page="library"
+                    onclick="openModal('fs-modal')" data-i18n-title="workspace.library"
+                    data-i18n-aria="workspace.library" title="Library" aria-label="Library">
+                    <span class="material-icons-round" aria-hidden="true">folder_open</span><span
+                        class="workspace-nav-label" data-i18n="workspace.library">Library</span>
                 </button>
-                <button type="button" class="workspace-nav-item" data-workspace-page="library" onclick="openModal('fs-modal')">
-                    <span class="material-icons-round" aria-hidden="true">folder_open</span><span class="workspace-nav-label" data-i18n="workspace.library">Library</span>
+                <button type="button" class="workspace-nav-item" data-workspace-page="apps"
+                    onclick="openModal('connected-apps-modal')" data-i18n-title="workspace.apps"
+                    data-i18n-aria="workspace.apps" title="Apps &amp; tools" aria-label="Apps &amp; tools">
+                    <span class="material-icons-round" aria-hidden="true">grid_view</span><span
+                        class="workspace-nav-label" data-i18n="workspace.apps">Apps &amp; tools</span>
                 </button>
-                <button type="button" class="workspace-nav-item" data-workspace-page="apps" onclick="openModal('connected-apps-modal')">
-                    <span class="material-icons-round" aria-hidden="true">grid_view</span><span class="workspace-nav-label" data-i18n="workspace.apps">Apps &amp; tools</span>
+                <button type="button" class="workspace-nav-item" id="btn-evolve" data-workspace-page="evolution"
+                    onclick="openModal('evolve-modal')" data-i18n-title="workspace.evolution"
+                    data-i18n-aria="workspace.evolution" title="Evolution" aria-label="Evolution">
+                    <span class="material-icons-round" aria-hidden="true">auto_awesome</span><span
+                        class="workspace-nav-label" data-i18n="workspace.evolution">Evolution</span>
                 </button>
             </nav>
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
                 <div class="history-section-head">
-                    <div class="section-title" data-i18n="workspace.recent">Recent conversations</div>
                     <div class="session-search-wrap">
                         <span class="material-icons-round session-search-icon">search</span>
-                        <input id="session-search" class="session-search" type="search" aria-label="Search" data-i18n-aria="workspace.search"
-                            placeholder="Filter or search messages…" data-i18n-placeholder="nav.filter_sessions"
-                            autocomplete="off" spellcheck="false" />
+                        <input id="session-search" class="session-search" type="search" aria-label="Search"
+                            data-i18n-aria="workspace.search" placeholder="Filter or search messages…"
+                            data-i18n-placeholder="nav.filter_sessions" autocomplete="off" spellcheck="false" />
                     </div>
                 </div>
                 <div id="history-list" class="history-list">
@@ -131,28 +146,49 @@
             </div>
 
             <!-- Workspace Summary -->
-            <details class="sidebar-section workspace-summary-section" id="workspace-summary"><summary data-i18n="workspace.workspace_summary">Workspace status</summary>
+            <details class="sidebar-section workspace-summary-section" id="workspace-summary">
+                <summary data-i18n="workspace.workspace_summary">Workspace status</summary>
                 <div class="summary-row" data-i18n-title="summary.channels_title" title="Active Channels">
                     <div class="status-dot disconnected" id="summary-ch-dot"></div>
-                    <span><span data-i18n="summary.channel">Channel:</span> <strong id="summary-channels">--</strong></span>
+                    <span><span data-i18n="summary.channel">Channel:</span> <strong
+                            id="summary-channels">--</strong></span>
                 </div>
                 <div class="summary-row" data-i18n-title="summary.provider_title" title="Configured Provider">
                     <div class="status-dot disconnected" id="summary-provider-dot"></div>
-                    <span><span data-i18n="summary.provider">Provider:</span> <strong id="summary-provider">--</strong></span>
+                    <span><span data-i18n="summary.provider">Provider:</span> <strong
+                            id="summary-provider">--</strong></span>
                 </div>
-                <div class="summary-row" data-i18n-title="summary.restrict_title" title="Restrict agent to workspace directory">
+                <div class="summary-row" data-i18n-title="summary.restrict_title"
+                    title="Restrict agent to workspace directory">
                     <div class="status-dot disconnected" id="summary-restrict-dot"></div>
-                    <span><span data-i18n="summary.restrict">Restrict WP:</span> <strong id="summary-restrict-badge">--</strong></span>
+                    <span><span data-i18n="summary.restrict">Restrict WP:</span> <strong
+                            id="summary-restrict-badge">--</strong></span>
                 </div>
             </details>
 
             <div class="sidebar-footer">
-                <button type="button" class="workspace-nav-item workspace-settings" data-workspace-page="settings" onclick="openModal('settings-modal')"><span class="material-icons-round" aria-hidden="true">tune</span><span class="workspace-nav-label" data-i18n="workspace.settings">Settings</span></button>
+                <button type="button" class="workspace-nav-item workspace-settings" data-workspace-page="settings"
+                    onclick="openModal('settings-modal')" data-i18n-title="workspace.settings"
+                    data-i18n-aria="workspace.settings" title="Settings" aria-label="Settings"><span
+                        class="material-icons-round" aria-hidden="true">settings</span><span
+                        class="workspace-nav-label" data-i18n="workspace.settings">Settings</span></button>
+                <div class="footer-status">
+                    <div class="status-micro" id="status-card">
+                        <div class="status-dot disconnected" id="status-dot"></div>
+                        <span class="status-text" id="status-text"
+                            data-i18n="status.connecting">Connecting...</span>
+                        <button class="btn-restart" id="btn-restart" onclick="restartGateway()"
+                            data-i18n-title="restart.gateway" data-i18n-aria="restart.gateway"
+                            title="Restart Gateway" tabindex="-1" aria-label="Restart Gateway">
+                            <span class="material-icons-round">refresh</span>
+                        </button>
+                    </div>
+                </div>
                 <div class="footer-actions">
                     <div class="lang-switcher" id="lang-switcher">
                         <button class="btn-command btn-lang btn-icon-only" id="btn-lang" type="button"
-                            data-i18n-title="footer.language" data-i18n-aria="footer.language"
-                            title="Language" aria-label="Language" aria-haspopup="listbox" aria-expanded="false">
+                            data-i18n-title="footer.language" data-i18n-aria="footer.language" title="Language"
+                            aria-label="Language" aria-haspopup="listbox" aria-expanded="false">
                             <span class="material-icons-round" aria-hidden="true">translate</span>
                         </button>
                         <div class="lang-menu" id="lang-menu" role="listbox" hidden></div>
@@ -160,15 +196,15 @@
                     <a href="https://github.com/RikyZ90/ShibaClaw" target="_blank" rel="noopener noreferrer"
                         class="btn-command btn-github" data-i18n-title="footer.github" data-i18n-aria="footer.github"
                         title="GitHub" aria-label="GitHub">
-                        <svg height="16" viewBox="0 0 16 16" width="16" fill="currentColor">
+                        <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor" aria-hidden="true">
                             <path
                                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
                             </path>
                         </svg>
                     </a>
                     <button class="btn-command btn-logout btn-icon-only" id="btn-logout" type="button"
-                        data-i18n-title="footer.logout" data-i18n-aria="footer.logout_aria"
-                        title="Logout" aria-label="Logout from ShibaClaw" hidden>
+                        data-i18n-title="footer.logout" data-i18n-aria="footer.logout_aria" title="Logout"
+                        aria-label="Logout from ShibaClaw" hidden>
                         <span class="material-icons-round" aria-hidden="true">logout</span>
                     </button>
                 </div>
@@ -188,8 +224,13 @@
                     aria-label="Open mobile menu">
                     <span class="material-icons-round">menu</span>
                 </button>
-                <button type="button" class="workspace-sidebar-expand btn-icon" id="workspace-sidebar-toggle" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar" aria-controls="sidebar" aria-expanded="false"><span class="material-icons-round" aria-hidden="true">menu</span></button>
-                <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span aria-hidden="true">/</span><span id="workspace-chat-title" data-i18n="workspace.new_chat">New chat</span></div>
+                <button type="button" class="workspace-sidebar-expand btn-icon" id="workspace-sidebar-toggle"
+                    onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar"
+                    data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar" aria-controls="sidebar"
+                    aria-expanded="false"><span class="material-icons-round" aria-hidden="true">menu</span></button>
+                <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span
+                        aria-hidden="true">/</span><span id="workspace-chat-title" data-i18n="workspace.new_chat">New
+                        chat</span></div>
                 <div class="chat-header-info">
                     <div class="profile-selector" id="profile-selector">
                         <button class="btn-profile" id="btn-profile" data-i18n-title="chrome.agent_profile"
@@ -219,14 +260,17 @@
                     <div class="notification-dropdown" id="notification-dropdown" aria-hidden="true">
                         <div class="notification-dropdown-header">
                             <div>
-                                <div class="notification-dropdown-title" data-i18n="chrome.notifications">Notifications</div>
-                                <div class="notification-dropdown-subtitle" id="notification-subtitle" data-i18n="notif.subtitle_loading">Loading...</div>
+                                <div class="notification-dropdown-title" data-i18n="chrome.notifications">Notifications
+                                </div>
+                                <div class="notification-dropdown-subtitle" id="notification-subtitle"
+                                    data-i18n="notif.subtitle_loading">Loading...</div>
                             </div>
                             <div class="notification-dropdown-actions">
-                                <button type="button" class="notification-action-btn" id="notification-mark-all" data-i18n="chrome.mark_all_read">Mark
+                                <button type="button" class="notification-action-btn" id="notification-mark-all"
+                                    data-i18n="chrome.mark_all_read">Mark
                                     all read</button>
-                                <button type="button" class="notification-action-btn"
-                                    id="notification-clear-all" data-i18n="chrome.clear">Clear</button>
+                                <button type="button" class="notification-action-btn" id="notification-clear-all"
+                                    data-i18n="chrome.clear">Clear</button>
                             </div>
                         </div>
                         <div class="notification-list" id="notification-list">
@@ -234,7 +278,11 @@
                         </div>
                     </div>
                 </div>
-                <button type="button" class="btn-width-toggle" id="workspace-context-toggle" onclick="toggleWorkspaceContext()" data-i18n-title="workspace.context_open" data-i18n-aria="workspace.context_open" aria-label="Open conversation context" aria-expanded="false" aria-controls="context-modal"><span class="material-icons-round" aria-hidden="true">view_sidebar</span></button>
+                <button type="button" class="btn-width-toggle" id="workspace-context-toggle"
+                    onclick="toggleWorkspaceContext()" data-i18n-title="workspace.context_open"
+                    data-i18n-aria="workspace.context_open" aria-label="Open conversation context" aria-expanded="false"
+                    aria-controls="context-modal"><span class="material-icons-round"
+                        aria-hidden="true">view_sidebar</span></button>
                 <div class="width-toggle-wrapper">
                     <button class="btn-width-toggle" id="btn-width-toggle" data-i18n-title="chrome.adjust_width"
                         data-i18n-aria="chrome.adjust_width" title="Adjust chat width" aria-label="Adjust chat width">
@@ -242,8 +290,10 @@
                     </button>
                     <div class="width-popover" id="width-popover">
                         <div class="width-presets">
-                            <button class="width-preset" data-width="600" data-i18n="chrome.width_narrow">Narrow</button>
-                            <button class="width-preset active" data-width="860" data-i18n="chrome.width_default">Default</button>
+                            <button class="width-preset" data-width="600"
+                                data-i18n="chrome.width_narrow">Narrow</button>
+                            <button class="width-preset active" data-width="860"
+                                data-i18n="chrome.width_default">Default</button>
                             <button class="width-preset" data-width="1100" data-i18n="chrome.width_wide">Wide</button>
                             <button class="width-preset" data-width="1400" data-i18n="chrome.width_full">Full</button>
                         </div>
@@ -254,14 +304,35 @@
             <!-- Welcome Screen -->
             <div class="welcome-screen" id="welcome-screen">
                 <div class="welcome-content">
-                    <div class="welcome-eyebrow"><span class="material-icons-round" aria-hidden="true">auto_awesome</span><span data-i18n="workspace.welcome_eyebrow">Your assistant, in your space.</span></div>
+                    <div class="welcome-eyebrow"><span class="material-icons-round"
+                            aria-hidden="true">auto_awesome</span><span data-i18n="workspace.welcome_eyebrow">Your
+                            assistant, in your space.</span></div>
                     <h2 class="welcome-title" data-i18n="workspace.welcome_title">What are we working on today?</h2>
-                    <p class="welcome-subtitle" data-i18n="workspace.welcome_subtitle">An idea, a question, or a task to complete. Start here.</p>
+                    <p class="welcome-subtitle" data-i18n="workspace.welcome_subtitle">An idea, a question, or a task to
+                        complete. Start here.</p>
                     <div class="welcome-hints">
-                        <button type="button" class="hint-card" data-hint="" data-hint-key="workspace.hint_project_prompt"><span class="material-icons-round" aria-hidden="true">folder_open</span><span class="hint-copy"><span data-i18n="workspace.hint_project">Explore a project</span><small data-i18n="workspace.hint_project_desc">Find a clear next step</small></span></button>
-                        <button type="button" class="hint-card" data-hint="" data-hint-key="workspace.hint_research_prompt"><span class="material-icons-round" aria-hidden="true">travel_explore</span><span class="hint-copy"><span data-i18n="workspace.hint_research">Research a topic</span><small data-i18n="workspace.hint_research_desc">From sources to a useful summary</small></span></button>
-                        <button type="button" class="hint-card" onclick="openModal('automation-modal')"><span class="material-icons-round" aria-hidden="true">schedule</span><span class="hint-copy"><span data-i18n="workspace.hint_automation">Automate a routine</span><small data-i18n="workspace.hint_automation_desc">Delegate recurring work</small></span></button>
-                        <button type="button" class="hint-card" onclick="openWorkspaceAgents()"><span class="material-icons-round" aria-hidden="true">smart_toy</span><span class="hint-copy"><span data-i18n="workspace.hint_agents">Choose an agent</span><small data-i18n="workspace.hint_agents_desc">The right profile for the job</small></span></button>
+                        <button type="button" class="hint-card" data-hint=""
+                            data-hint-key="workspace.hint_project_prompt"><span class="material-icons-round"
+                                aria-hidden="true">folder_open</span><span class="hint-copy"><span
+                                    data-i18n="workspace.hint_project">Explore a project</span><small
+                                    data-i18n="workspace.hint_project_desc">Find a clear next
+                                    step</small></span></button>
+                        <button type="button" class="hint-card" data-hint=""
+                            data-hint-key="workspace.hint_research_prompt"><span class="material-icons-round"
+                                aria-hidden="true">travel_explore</span><span class="hint-copy"><span
+                                    data-i18n="workspace.hint_research">Research a topic</span><small
+                                    data-i18n="workspace.hint_research_desc">From sources to a useful
+                                    summary</small></span></button>
+                        <button type="button" class="hint-card" onclick="openModal('automation-modal')"><span
+                                class="material-icons-round" aria-hidden="true">schedule</span><span
+                                class="hint-copy"><span data-i18n="workspace.hint_automation">Automate a
+                                    routine</span><small data-i18n="workspace.hint_automation_desc">Delegate recurring
+                                    work</small></span></button>
+                        <button type="button" class="hint-card" onclick="openWorkspaceAgents()"><span
+                                class="material-icons-round" aria-hidden="true">smart_toy</span><span
+                                class="hint-copy"><span data-i18n="workspace.hint_agents">Choose an agent</span><small
+                                    data-i18n="workspace.hint_agents_desc">The right profile for the
+                                    job</small></span></button>
                     </div>
                 </div>
             </div>
@@ -282,713 +353,864 @@
                         <!-- Staged files appear here -->
                     </div>
                     <div class="workspace-composer">
-                    <div class="input-container">
-                        <button class="btn-attach" id="btn-mic" data-i18n-title="chat.voice"
-                            data-i18n-aria="chat.voice_aria" title="Voice Message (Auto-Stop on silence)"
-                            aria-label="Record voice message">
-                            <span class="material-icons-round">mic</span>
-                        </button>
-                        <button class="btn-attach" id="btn-attach" data-i18n-title="chat.attach"
-                            data-i18n-aria="chat.attach" title="Attach files or images"
-                            aria-label="Attach files or images">
-                            <span class="material-icons-round">attach_file</span>
-                        </button>
-                        <input type="file" id="file-input" multiple style="display:none">
-                        <textarea id="chat-input" placeholder="Send a message to ShibaClaw..." rows="1"
-                            data-i18n-placeholder="workspace.chat_placeholder" data-i18n-aria="chat.message_aria"
-                            aria-label="Chat message" autofocus></textarea>
-                        <button class="btn-send" id="btn-send" disabled data-i18n-aria="chat.send" aria-label="Send message">
-                            <span class="material-icons-round">arrow_upward</span>
-                        </button>
-                    </div>
-                    <div class="input-footer">
-                        <div class="input-actions">
-                            <!-- Model Selector Dropdown -->
-                            <div class="model-selector-wrapper" id="model-selector-wrapper" style="position: relative;">
-                                <button class="btn-input-action" id="btn-model-select"
-                                    data-i18n-title="chat.model_title" title="Change active model for session">
-                                    <span class="material-icons-round">auto_awesome</span>
-                                    <span id="active-model-display" data-i18n="common.default">Default</span>
-                                    <span class="material-icons-round"
-                                        style="margin-left: 4px; font-size: 16px;">arrow_drop_up</span>
-                                </button>
-                            </div>
-                            <!-- Reasoning Effort Selector Dropdown -->
-                            <div class="model-selector-wrapper" id="reasoning-selector-wrapper" style="position: relative;">
-                                <button class="btn-input-action" id="btn-reasoning-select"
-                                    data-i18n-title="chat.reasoning_title"
-                                    title="Change reasoning effort for active session">
-                                    <span class="material-icons-round">psychology</span>
-                                    <span id="active-reasoning-display">Effort: Default</span>
-                                    <span class="material-icons-round"
-                                        style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
-                                </button>
-                                <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
-                                    style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 150px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary); backdrop-filter: blur(12px);">
-                                    <div style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;" data-i18n="chat.reasoning_effort">Reasoning Effort</span>
-                                    </div>
-                                    <div class="model-dropdown-list" id="reasoning-dropdown-list" style="max-height: 200px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
-                                        <!-- populated dynamically -->
+                        <div class="input-container">
+                            <button class="btn-attach" id="btn-mic" data-i18n-title="chat.voice"
+                                data-i18n-aria="chat.voice_aria" title="Voice Message (Auto-Stop on silence)"
+                                aria-label="Record voice message">
+                                <span class="material-icons-round">mic</span>
+                            </button>
+                            <button class="btn-attach" id="btn-attach" data-i18n-title="chat.attach"
+                                data-i18n-aria="chat.attach" title="Attach files or images"
+                                aria-label="Attach files or images">
+                                <span class="material-icons-round">attach_file</span>
+                            </button>
+                            <input type="file" id="file-input" multiple style="display:none">
+                            <textarea id="chat-input" placeholder="Send a message to ShibaClaw..." rows="1"
+                                data-i18n-placeholder="workspace.chat_placeholder" data-i18n-aria="chat.message_aria"
+                                aria-label="Chat message" autofocus></textarea>
+                            <button class="btn-send" id="btn-send" disabled data-i18n-aria="chat.send"
+                                aria-label="Send message">
+                                <span class="material-icons-round">arrow_upward</span>
+                            </button>
+                        </div>
+                        <div class="input-footer">
+                            <div class="input-actions">
+                                <!-- Model Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="model-selector-wrapper">
+                                    <button class="btn-input-action" id="btn-model-select"
+                                        data-i18n-title="chat.model_title" title="Change active model for session">
+                                        <span class="material-icons-round">auto_awesome</span>
+                                        <span id="active-model-display" data-i18n="common.default">Default</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 4px; font-size: 16px;">arrow_drop_up</span>
+                                    </button>
+                                </div>
+                                <!-- Reasoning Effort Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="reasoning-selector-wrapper">
+                                    <button class="btn-input-action" id="btn-reasoning-select"
+                                        data-i18n-title="chat.reasoning_title"
+                                        title="Change reasoning effort for active session">
+                                        <span class="material-icons-round">psychology</span>
+                                        <span id="active-reasoning-display">Effort: Default</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
+                                    </button>
+                                    <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
+                                        style="display: none;">
+                                        <div class="dropdown-head">
+                                            <span class="dropdown-head-label"
+                                                data-i18n="chat.reasoning_effort">Reasoning Effort</span>
+                                        </div>
+                                        <div class="model-dropdown-list dropdown-list" id="reasoning-dropdown-list">
+                                            <!-- populated dynamically -->
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                            <!-- Knowledge Base Selector Dropdown -->
-                            <div class="model-selector-wrapper" id="kb-selector-wrapper" style="position: relative;">
-                                <button class="btn-input-action" id="btn-kb-select"
-                                    data-i18n-title="chat.kb_title" title="Select active Knowledge Bases">
-                                    <span class="material-icons-round">library_books</span>
-                                    <span id="active-kb-display">KBs (0)</span>
-                                    <span class="material-icons-round"
-                                        style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
+                                <!-- Knowledge Base Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="kb-selector-wrapper">
+                                    <button class="btn-input-action" id="btn-kb-select" data-i18n-title="chat.kb_title"
+                                        title="Select active Knowledge Bases">
+                                        <span class="material-icons-round">library_books</span>
+                                        <span id="active-kb-display">KBs (0)</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
+                                    </button>
+                                    <div class="model-dropdown-menu premium-dropdown dropdown-wide" id="kb-dropdown-menu"
+                                        style="display: none;">
+                                        <div class="dropdown-head">
+                                            <span class="dropdown-head-label"
+                                                data-i18n="chat.collections">Collections</span>
+                                            <button type="button" class="dropdown-head-action material-icons-round"
+                                                onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';"
+                                                data-i18n-title="chat.manage_collections"
+                                                title="Manage Collections">settings</button>
+                                        </div>
+                                        <div class="model-dropdown-list dropdown-list" id="kb-dropdown-list">
+                                            <!-- populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="model-dropdown-menu" id="model-dropdown-menu" style="display: none;">
+                                    <input type="text" id="model-search-input" placeholder="Search models..."
+                                        data-i18n-placeholder="common.search_models"
+                                        data-i18n-aria="common.search_models" autocomplete="off"
+                                        aria-label="Search models...">
+                                    <div class="model-list" id="model-list-container">
+                                        <!-- Models injected here -->
+                                        <div style="padding: 10px; color: var(--text-2); text-align: center; font-size: 0.85rem;"
+                                            data-i18n="chat.loading_models">
+                                            Loading models...</div>
+                                    </div>
+                                </div>
+                                <button class="btn-input-action btn-stop" id="btn-stop" disabled
+                                    data-i18n-title="chat.stop_title" title="Stop agent">
+                                    <span class="material-icons-round">stop_circle</span>
+                                    <span data-i18n="chat.stop">Stop</span>
                                 </button>
-                                <div class="model-dropdown-menu premium-dropdown" id="kb-dropdown-menu"
-                                    style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 170px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary);">
-                                    <div style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;" data-i18n="chat.collections">Collections</span>
-                                        <span class="material-icons-round" onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';" style="font-size: 15px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--text-color)'" onmouseout="this.style.color='var(--text-muted)'" data-i18n-title="chat.manage_collections" title="Manage Collections">settings</span>
-                                    </div>
-                                    <div class="model-dropdown-list" id="kb-dropdown-list" style="max-height: 220px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
-                                        <!-- populated dynamically -->
-                                    </div>
+                            </div>
+
+                            <div class="input-footer-right">
+                                <span class="input-hint"><span data-i18n="chat.shift_enter">Shift + ↵ for new
+                                        line</span></span>
+                                <div class="token-badge" id="token-badge" data-i18n-title="chat.token_badge_title"
+                                    title="Click to view full context" onclick="openModal('context-modal')">
+                                    <div class="token-badge-fill" id="token-badge-fill"></div>
+                                    <span class="material-icons-round" style="z-index: 1;">data_usage</span>
+                                    <span class="token-badge-text" id="token-badge-text" style="z-index: 1;">-- /
+                                        --</span>
                                 </div>
                             </div>
-                            <div class="model-dropdown-menu" id="model-dropdown-menu" style="display: none;">
-                                <input type="text" id="model-search-input" placeholder="Search models..."
-                                    data-i18n-placeholder="common.search_models" data-i18n-aria="common.search_models"
-                                    autocomplete="off" aria-label="Search models...">
-                                <div class="model-list" id="model-list-container">
-                                    <!-- Models injected here -->
-                                    <div
-                                        style="padding: 10px; color: var(--text-2); text-align: center; font-size: 0.85rem;"
-                                        data-i18n="chat.loading_models">
-                                        Loading models...</div>
+                        </div>
+                    </div>
+                    <div class="workspace-composer-note"><span><span class="material-icons-round"
+                                aria-hidden="true">verified_user</span><span data-i18n="workspace.control">You stay in
+                                control</span></span><span data-i18n="chat.shift_enter">Shift + ↵ for new line</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Settings View (Dedicated Page) -->
+        <div id="settings-view" class="settings-view" style="display:none">
+            <header class="settings-header">
+                <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)"
+                    data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round"
+                        aria-hidden="true">menu</span></button>
+                <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()"
+                    data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar"
+                    aria-label="Toggle sidebar"><span class="material-icons-round"
+                        aria-hidden="true">menu_open</span></button>
+                <div class="settings-header-left">
+                    <button class="settings-back-btn" onclick="closeSettingsView()" data-i18n-title="settings.back_chat"
+                        data-i18n-aria="settings.back_chat" title="Back to Chat" aria-label="Back to Chat">
+                        <span class="material-icons-round">arrow_back</span>
+                    </button>
+                    <div>
+                        <h2 data-i18n="settings.title">Settings</h2>
+                        <span class="settings-subtitle" id="settings-current-tab-title"
+                            data-i18n="settings.tab.agent">Agent</span>
+                    </div>
+                </div>
+                <div class="workspace-theme-control"><label for="workspace-theme"
+                        data-i18n="workspace.theme">Appearance</label><select id="workspace-theme"
+                        data-i18n-aria="workspace.theme" aria-label="Appearance">
+                        <option value="system" data-i18n="workspace.theme_system">System</option>
+                        <option value="light" data-i18n="workspace.theme_light">Light</option>
+                        <option value="dark" data-i18n="workspace.theme_dark">Dark</option>
+                    </select></div>
+                <button class="btn-primary" onclick="saveSettings()">
+                    <span class="material-icons-round" style="font-size:1rem;vertical-align:middle">save</span> <span
+                        data-i18n="settings.save_changes">Save Changes</span>
+                </button>
+            </header>
+
+            <div class="settings-layout">
+                <!-- Vertical sidebar nav -->
+                <nav class="settings-sidebar" id="settings-sidebar">
+                    <div class="settings-sidebar-section" data-i18n="settings.sec.ai">AI &amp; Models</div>
+                    <button class="settings-sidebar-item" data-tab="providers" onclick="switchSettingsTab('providers')">
+                        <span class="material-icons-round">key</span><span
+                            data-i18n="settings.tab.provider">Provider</span>
+                    </button>
+                    <button class="settings-sidebar-item" data-tab="oauth" onclick="switchSettingsTab('oauth')">
+                        <span class="material-icons-round">lock_open</span><span
+                            data-i18n="settings.tab.oauth">OAuth</span>
+                    </button>
+
+                    <div class="settings-sidebar-section" data-i18n="settings.sec.connectivity">Connectivity &amp;
+                        Channels</div>
+                    <button class="settings-sidebar-item" data-tab="channels" onclick="switchSettingsTab('channels')">
+                        <span class="material-icons-round">forum</span><span
+                            data-i18n="settings.tab.channels">Channels</span>
+                    </button>
+                    <button class="settings-sidebar-item" data-tab="gateway" onclick="switchSettingsTab('gateway')">
+                        <span class="material-icons-round">dns</span><span
+                            data-i18n="settings.tab.gateway">Gateway</span>
+                    </button>
+
+                    <div class="settings-sidebar-section" data-i18n="settings.sec.core">Core &amp; Agent</div>
+                    <button class="settings-sidebar-item active" data-tab="agent" onclick="switchSettingsTab('agent')">
+                        <span class="material-icons-round">smart_toy</span><span
+                            data-i18n="settings.tab.agent">Agent</span>
+                    </button>
+                    <button class="settings-sidebar-item" data-tab="audio" onclick="switchSettingsTab('audio')">
+                        <span class="material-icons-round">mic</span><span data-i18n="settings.tab.audio">Voice &amp;
+                            Audio</span>
+                    </button>
+
+                    <div class="settings-sidebar-section" data-i18n="settings.sec.capabilities">Capabilities &amp;
+                        Extensions</div>
+                    <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')">
+                        <span class="material-icons-round">build</span><span data-i18n="settings.tab.tools">Tools</span>
+                    </button>
+                    <button class="settings-sidebar-item" data-tab="extensions"
+                        onclick="switchSettingsTab('extensions')">
+                        <span class="material-icons-round">extension</span><span
+                            data-i18n="settings.tab.extensions">Extensions</span>
+                    </button>
+
+                    <div class="settings-sidebar-section" data-i18n="settings.sec.system">System &amp; Maintenance</div>
+                    <button class="settings-sidebar-item" data-tab="update" onclick="switchSettingsTab('update')">
+                        <span class="material-icons-round">system_update</span><span
+                            data-i18n="settings.tab.update">Update</span>
+                    </button>
+                </nav>
+
+                <!-- Mobile category list dashboard -->
+                <div class="settings-mobile-dashboard" id="settings-mobile-dashboard">
+                    <div class="mobile-dashboard-grid">
+                        <div class="dashboard-section-label" data-i18n="settings.sec.ai">AI &amp; Models</div>
+                        <button class="dashboard-card" onclick="switchSettingsTab('providers')">
+                            <span class="material-icons-round dash-icon">key</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.provider">Provider</div>
+                                <div class="dash-desc" data-i18n="settings.dash.provider_desc">Configure API keys &amp;
+                                    endpoints</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+                        <button class="dashboard-card" onclick="switchSettingsTab('oauth')">
+                            <span class="material-icons-round dash-icon">lock_open</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.oauth">OAuth</div>
+                                <div class="dash-desc" data-i18n="settings.dash.oauth_desc">Link OpenRouter, GitHub,
+                                    etc.</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+
+                        <div class="dashboard-section-label" data-i18n="settings.sec.connectivity">Connectivity &amp;
+                            Channels</div>
+                        <button class="dashboard-card" onclick="switchSettingsTab('channels')">
+                            <span class="material-icons-round dash-icon">forum</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.channels">Channels</div>
+                                <div class="dash-desc" data-i18n="settings.dash.channels_desc">Progress reporting &amp;
+                                    notifications</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+                        <button class="dashboard-card" onclick="switchSettingsTab('gateway')">
+                            <span class="material-icons-round dash-icon">dns</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.gateway">Gateway</div>
+                                <div class="dash-desc" data-i18n="settings.dash.gateway_desc">Server port, host &amp;
+                                    connection settings</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+
+                        <div class="dashboard-section-label" data-i18n="settings.sec.core">Core &amp; Agent</div>
+                        <button class="dashboard-card" onclick="switchSettingsTab('agent')">
+                            <span class="material-icons-round dash-icon">smart_toy</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.agent">Agent</div>
+                                <div class="dash-desc" data-i18n="settings.dash.agent_desc">Workspace, default model,
+                                    thought settings</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+                        <button class="dashboard-card" onclick="switchSettingsTab('audio')">
+                            <span class="material-icons-round dash-icon">mic</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.audio">Voice &amp; Audio</div>
+                                <div class="dash-desc" data-i18n="settings.dash.audio_desc">Speech to text &amp; audio
+                                    settings</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+
+                        <div class="dashboard-section-label" data-i18n="settings.sec.capabilities">Capabilities &amp;
+                            Extensions</div>
+                        <button class="dashboard-card" onclick="switchSettingsTab('tools')">
+                            <span class="material-icons-round dash-icon">build</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.tools">Tools</div>
+                                <div class="dash-desc" data-i18n="settings.dash.tools_desc">Web search, proxy &amp;
+                                    execution options</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+                        <button class="dashboard-card" onclick="switchSettingsTab('extensions')">
+                            <span class="material-icons-round dash-icon">extension</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.extensions">Extensions</div>
+                                <div class="dash-desc" data-i18n="settings.dash.extensions_desc">Skills, Plugins, and
+                                    MCP Servers</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+
+                        <div class="dashboard-section-label" data-i18n="settings.sec.system">System &amp; Maintenance
+                        </div>
+                        <button class="dashboard-card" onclick="switchSettingsTab('update')">
+                            <span class="material-icons-round dash-icon">system_update</span>
+                            <div class="dash-content">
+                                <div class="dash-title" data-i18n="settings.tab.update">Update</div>
+                                <div class="dash-desc" data-i18n="settings.dash.update_desc">Check for updates &amp;
+                                    onboard wizard</div>
+                            </div>
+                            <span class="material-icons-round dash-arrow">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Content pane -->
+                <div class="settings-content" id="settings-body">
+                    <!-- Mobile detail header back button -->
+                    <button class="settings-mobile-back" id="settings-mobile-back" onclick="backToSettingsDashboard()">
+                        <span class="material-icons-round">arrow_back</span> <span data-i18n="settings.back_list">Back
+                            to settings list</span>
+                    </button>
+
+                    <!-- Loading spinner -->
+                    <div id="settings-loading" class="settings-loader">
+                        <span class="material-icons-round spin">progress_activity</span>
+                        <span data-i18n="settings.loading">Loading settings...</span>
+                    </div>
+
+                    <!-- Tab: Agent -->
+                    <div class="settings-panel" id="panel-agent">
+                        <div class="field-row"><label for="s-agent-workspace"
+                                data-i18n="settings.agent.workspace">Workspace</label><input type="text"
+                                id="s-agent-workspace" class="form-input" placeholder="~/.shibaclaw/workspace"></div>
+                        <div class="field-row field-row-stack">
+                            <label for="s-agent-model-button" data-i18n="settings.agent.default_model">Default Model For
+                                New Sessions</label>
+                            <p class="settings-note" data-i18n="settings.agent.default_model_note">Used when you create
+                                a new chat. Provider routing is inferred
+                                automatically from the selected model.</p>
+                            <div class="settings-model-picker" id="s-agent-model-picker">
+                                <input type="hidden" id="s-agent-model">
+                                <button type="button" class="form-input settings-model-button"
+                                    id="s-agent-model-button">
+                                    <span class="settings-model-button-main">
+                                        <span class="settings-model-button-label" id="s-agent-model-display"
+                                            data-i18n="settings.agent.select_model">Select a
+                                            default model</span>
+                                        <span class="settings-model-button-provider" id="s-agent-model-provider"
+                                            data-i18n="settings.agent.new_sessions">New
+                                            sessions</span>
+                                    </span>
+                                    <span class="material-icons-round">arrow_drop_down</span>
+                                </button>
+                                <div class="settings-model-menu" id="s-agent-model-menu" style="display:none">
+                                    <input type="text" id="s-agent-model-search"
+                                        class="form-input settings-model-search" placeholder="Search models..."
+                                        data-i18n-placeholder="common.search_models"
+                                        data-i18n-aria="common.search_models" autocomplete="off"
+                                        aria-label="Search models...">
+                                    <div class="settings-model-list" id="s-agent-model-list"></div>
                                 </div>
                             </div>
-                            <button class="btn-input-action" id="btn-context" onclick="openModal('context-modal')"
-                                data-i18n-title="chat.context_title" title="View context">
-                                <span class="material-icons-round">psychology</span>
-                                <span data-i18n="chat.context">Context</span>
-                            </button>
-                            <button class="btn-input-action btn-stop" id="btn-stop" disabled data-i18n-title="chat.stop_title"
-                                title="Stop agent">
-                                <span class="material-icons-round">stop_circle</span>
-                                <span data-i18n="chat.stop">Stop</span>
-                            </button>
                         </div>
-                        
-                        <div class="input-footer-right">
-                            <span class="input-hint"><span data-i18n="chat.shift_enter">Shift + ↵ for new line</span></span>
-                            <div class="token-badge" id="token-badge" data-i18n-title="chat.token_badge_title"
-                                title="Click to view full context"
-                                onclick="openModal('context-modal')">
-                                <div class="token-badge-fill" id="token-badge-fill"></div>
-                                <span class="material-icons-round" style="z-index: 1;">data_usage</span>
-                                <span class="token-badge-text" id="token-badge-text" style="z-index: 1;">-- / --</span>
+                        <div class="field-row field-row-stack">
+                            <label for="s-agent-consolidationModel-button"
+                                data-i18n="settings.agent.consolidation">Memory / Consolidation Model</label>
+                            <p class="settings-note" data-i18n="settings.agent.consolidation_note">Optional. Leave it
+                                empty to reuse the default session model for
+                                proactive learning and long-term memory consolidation.</p>
+                            <div class="settings-model-picker" id="s-agent-consolidationModel-picker">
+                                <input type="hidden" id="s-agent-consolidationModel">
+                                <button type="button" class="form-input settings-model-button"
+                                    id="s-agent-consolidationModel-button">
+                                    <span class="settings-model-button-main">
+                                        <span class="settings-model-button-label"
+                                            id="s-agent-consolidationModel-display"
+                                            data-i18n="settings.agent.same_default">Same as default session model</span>
+                                        <span
+                                            class="settings-model-button-provider settings-model-button-provider-placeholder"
+                                            id="s-agent-consolidationModel-provider"
+                                            data-i18n="settings.agent.inherits">Inherits</span>
+                                    </span>
+                                    <span class="material-icons-round">arrow_drop_down</span>
+                                </button>
+                                <div class="settings-model-menu" id="s-agent-consolidationModel-menu"
+                                    style="display:none">
+                                    <input type="text" id="s-agent-consolidationModel-search"
+                                        class="form-input settings-model-search" placeholder="Search models..."
+                                        data-i18n-placeholder="common.search_models"
+                                        data-i18n-aria="common.search_models" autocomplete="off"
+                                        aria-label="Search models...">
+                                    <div class="settings-model-list" id="s-agent-consolidationModel-list"></div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    </div>
-                    <div class="workspace-composer-note"><span><span class="material-icons-round" aria-hidden="true">verified_user</span><span data-i18n="workspace.control">You stay in control</span></span><span data-i18n="chat.shift_enter">Shift + ↵ for new line</span></div>
-            </div>
-    </div>
-    </main>
-
-    <!-- Settings View (Dedicated Page) -->
-    <div id="settings-view" class="settings-view" style="display:none">
-        <header class="settings-header">
-            <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)" data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round" aria-hidden="true">menu</span></button>
-            <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar"><span class="material-icons-round" aria-hidden="true">menu_open</span></button>
-            <div class="settings-header-left">
-                <button class="settings-back-btn" onclick="closeSettingsView()" data-i18n-title="settings.back_chat"
-                    data-i18n-aria="settings.back_chat" title="Back to Chat" aria-label="Back to Chat">
-                    <span class="material-icons-round">arrow_back</span>
-                </button>
-                <div>
-                    <h2 data-i18n="settings.title">Settings</h2>
-                    <span class="settings-subtitle" id="settings-current-tab-title" data-i18n="settings.tab.agent">Agent</span>
-                </div>
-            </div>
-            <div class="workspace-theme-control"><label for="workspace-theme" data-i18n="workspace.theme">Appearance</label><select id="workspace-theme" data-i18n-aria="workspace.theme" aria-label="Appearance"><option value="system" data-i18n="workspace.theme_system">System</option><option value="light" data-i18n="workspace.theme_light">Light</option><option value="dark" data-i18n="workspace.theme_dark">Dark</option></select></div>
-            <button class="btn-primary" onclick="saveSettings()">
-                <span class="material-icons-round" style="font-size:1rem;vertical-align:middle">save</span> <span data-i18n="settings.save_changes">Save Changes</span>
-            </button>
-        </header>
-
-        <div class="settings-layout">
-            <!-- Vertical sidebar nav -->
-            <nav class="settings-sidebar" id="settings-sidebar">
-                <div class="settings-sidebar-section" data-i18n="settings.sec.ai">AI &amp; Models</div>
-                <button class="settings-sidebar-item" data-tab="providers" onclick="switchSettingsTab('providers')">
-                    <span class="material-icons-round">key</span><span data-i18n="settings.tab.provider">Provider</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="oauth" onclick="switchSettingsTab('oauth')">
-                    <span class="material-icons-round">lock_open</span><span data-i18n="settings.tab.oauth">OAuth</span>
-                </button>
-
-                <div class="settings-sidebar-section" data-i18n="settings.sec.connectivity">Connectivity &amp; Channels</div>
-                <button class="settings-sidebar-item" data-tab="channels" onclick="switchSettingsTab('channels')">
-                    <span class="material-icons-round">forum</span><span data-i18n="settings.tab.channels">Channels</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="gateway" onclick="switchSettingsTab('gateway')">
-                    <span class="material-icons-round">dns</span><span data-i18n="settings.tab.gateway">Gateway</span>
-                </button>
-
-                <div class="settings-sidebar-section" data-i18n="settings.sec.core">Core &amp; Agent</div>
-                <button class="settings-sidebar-item active" data-tab="agent" onclick="switchSettingsTab('agent')">
-                    <span class="material-icons-round">smart_toy</span><span data-i18n="settings.tab.agent">Agent</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="audio" onclick="switchSettingsTab('audio')">
-                    <span class="material-icons-round">mic</span><span data-i18n="settings.tab.audio">Voice &amp; Audio</span>
-                </button>
-
-                <div class="settings-sidebar-section" data-i18n="settings.sec.capabilities">Capabilities &amp; Extensions</div>
-                <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')">
-                    <span class="material-icons-round">build</span><span data-i18n="settings.tab.tools">Tools</span>
-                </button>
-                <button class="settings-sidebar-item" data-tab="extensions" onclick="switchSettingsTab('extensions')">
-                    <span class="material-icons-round">extension</span><span data-i18n="settings.tab.extensions">Extensions</span>
-                </button>
-
-                <div class="settings-sidebar-section" data-i18n="settings.sec.system">System &amp; Maintenance</div>
-                <button class="settings-sidebar-item" data-tab="update" onclick="switchSettingsTab('update')">
-                    <span class="material-icons-round">system_update</span><span data-i18n="settings.tab.update">Update</span>
-                </button>
-            </nav>
-
-            <!-- Mobile category list dashboard -->
-            <div class="settings-mobile-dashboard" id="settings-mobile-dashboard">
-                <div class="mobile-dashboard-grid">
-                    <div class="dashboard-section-label" data-i18n="settings.sec.ai">AI &amp; Models</div>
-                    <button class="dashboard-card" onclick="switchSettingsTab('providers')">
-                        <span class="material-icons-round dash-icon">key</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.provider">Provider</div>
-                            <div class="dash-desc" data-i18n="settings.dash.provider_desc">Configure API keys &amp; endpoints</div>
+                        <div class="field-row"><label for="s-agent-maxTokens" data-i18n="settings.agent.max_tokens">Max
+                                Tokens</label><input type="number" id="s-agent-maxTokens" class="form-input"
+                                value="8192"></div>
+                        <div class="field-row"><label for="s-agent-ctxTokens"
+                                data-i18n="settings.agent.ctx_tokens">Context Window Tokens</label><input type="number"
+                                id="s-agent-ctxTokens" class="form-input" value="65536"></div>
+                        <div class="field-row"><label for="s-agent-temp"
+                                data-i18n="settings.agent.temperature">Temperature</label><input type="text"
+                                id="s-agent-temp" class="form-input" value="0.1"></div>
+                        <div class="field-row"><label for="s-agent-maxIter" data-i18n="settings.agent.max_iter">Max Tool
+                                Iterations</label><input type="number" id="s-agent-maxIter" class="form-input"
+                                value="40" min="0" title="Max tool iterations (0 for no limit)"></div>
+                        <div class="field-row"><label for="s-agent-toolTimeout"><span
+                                    data-i18n="settings.agent.tool_timeout">Tool Timeout (s)</span> <span
+                                    class="field-info-trigger" title="0 = no timeout (infinito)"><span
+                                        class="material-icons-round">info</span><span class="field-info-bubble"
+                                        data-i18n="settings.agent.timeout_zero">0 = no timeout
+                                        (infinito)</span></span></label><input type="number" id="s-agent-toolTimeout"
+                                class="form-input" value="0" min="0"
+                                title="Max seconds for all tool executions combined (0 for no timeout)"></div>
+                        <div class="field-row"><label for="s-agent-loopWallTimeout"><span
+                                    data-i18n="settings.agent.loop_timeout">Agent Loop Timeout (s)</span> <span
+                                    class="field-info-trigger" title="0 = no timeout (infinito)"><span
+                                        class="material-icons-round">info</span><span class="field-info-bubble"
+                                        data-i18n="settings.agent.timeout_zero">0 = no timeout
+                                        (infinito)</span></span></label><input type="number"
+                                id="s-agent-loopWallTimeout" class="form-input" value="0" min="0"
+                                title="Max seconds for the entire agent loop (0 for no timeout)"></div>
+                        <div class="field-row"><label for="s-agent-subagentTimeout"><span
+                                    data-i18n="settings.agent.subagent_timeout">Subagent Timeout (s)</span> <span
+                                    class="field-info-trigger" title="0 = no timeout (infinito)"><span
+                                        class="material-icons-round">info</span><span class="field-info-bubble"
+                                        data-i18n="settings.agent.timeout_zero">0 = no timeout
+                                        (infinito)</span></span></label><input type="number"
+                                id="s-agent-subagentTimeout" class="form-input" value="0" min="0"
+                                title="Max seconds for a single subagent execution (0 for no timeout)"></div>
+                        <div class="field-row"><label for="s-agent-reasoning"
+                                data-i18n="settings.agent.reasoning">Reasoning Effort</label>
+                            <select id="s-agent-reasoning" class="form-input">
+                                <option value="" data-i18n="settings.agent.reasoning_default">Default (Inherit /
+                                    Provider default)</option>
+                                <option value="low" data-i18n="settings.agent.reasoning_low">Low</option>
+                                <option value="medium" data-i18n="settings.agent.reasoning_med">Medium</option>
+                                <option value="high" data-i18n="settings.agent.reasoning_high">High</option>
+                            </select>
                         </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('oauth')">
-                        <span class="material-icons-round dash-icon">lock_open</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.oauth">OAuth</div>
-                            <div class="dash-desc" data-i18n="settings.dash.oauth_desc">Link OpenRouter, GitHub, etc.</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
 
-                    <div class="dashboard-section-label" data-i18n="settings.sec.connectivity">Connectivity &amp; Channels</div>
-                    <button class="dashboard-card" onclick="switchSettingsTab('channels')">
-                        <span class="material-icons-round dash-icon">forum</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.channels">Channels</div>
-                            <div class="dash-desc" data-i18n="settings.dash.channels_desc">Progress reporting &amp; notifications</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('gateway')">
-                        <span class="material-icons-round dash-icon">dns</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.gateway">Gateway</div>
-                            <div class="dash-desc" data-i18n="settings.dash.gateway_desc">Server port, host &amp; connection settings</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-
-                    <div class="dashboard-section-label" data-i18n="settings.sec.core">Core &amp; Agent</div>
-                    <button class="dashboard-card" onclick="switchSettingsTab('agent')">
-                        <span class="material-icons-round dash-icon">smart_toy</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.agent">Agent</div>
-                            <div class="dash-desc" data-i18n="settings.dash.agent_desc">Workspace, default model, thought settings</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('audio')">
-                        <span class="material-icons-round dash-icon">mic</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.audio">Voice &amp; Audio</div>
-                            <div class="dash-desc" data-i18n="settings.dash.audio_desc">Speech to text &amp; audio settings</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-
-                    <div class="dashboard-section-label" data-i18n="settings.sec.capabilities">Capabilities &amp; Extensions</div>
-                    <button class="dashboard-card" onclick="switchSettingsTab('tools')">
-                        <span class="material-icons-round dash-icon">build</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.tools">Tools</div>
-                            <div class="dash-desc" data-i18n="settings.dash.tools_desc">Web search, proxy &amp; execution options</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                    <button class="dashboard-card" onclick="switchSettingsTab('extensions')">
-                        <span class="material-icons-round dash-icon">extension</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.extensions">Extensions</div>
-                            <div class="dash-desc" data-i18n="settings.dash.extensions_desc">Skills, Plugins, and MCP Servers</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-
-                    <div class="dashboard-section-label" data-i18n="settings.sec.system">System &amp; Maintenance</div>
-                    <button class="dashboard-card" onclick="switchSettingsTab('update')">
-                        <span class="material-icons-round dash-icon">system_update</span>
-                        <div class="dash-content">
-                            <div class="dash-title" data-i18n="settings.tab.update">Update</div>
-                            <div class="dash-desc" data-i18n="settings.dash.update_desc">Check for updates &amp; onboard wizard</div>
-                        </div>
-                        <span class="material-icons-round dash-arrow">chevron_right</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Content pane -->
-            <div class="settings-content" id="settings-body">
-                <!-- Mobile detail header back button -->
-                <button class="settings-mobile-back" id="settings-mobile-back" onclick="backToSettingsDashboard()">
-                    <span class="material-icons-round">arrow_back</span> <span data-i18n="settings.back_list">Back to settings list</span>
-                </button>
-
-                <!-- Loading spinner -->
-                <div id="settings-loading" class="settings-loader">
-                    <span class="material-icons-round spin">progress_activity</span>
-                    <span data-i18n="settings.loading">Loading settings...</span>
-                </div>
-
-                <!-- Tab: Agent -->
-                <div class="settings-panel" id="panel-agent">
-                    <div class="field-row"><label for="s-agent-workspace" data-i18n="settings.agent.workspace">Workspace</label><input type="text"
-                            id="s-agent-workspace" class="form-input" placeholder="~/.shibaclaw/workspace"></div>
-                    <div class="field-row field-row-stack">
-                        <label for="s-agent-model-button" data-i18n="settings.agent.default_model">Default Model For New Sessions</label>
-                        <p class="settings-note" data-i18n="settings.agent.default_model_note">Used when you create a new chat. Provider routing is inferred
-                            automatically from the selected model.</p>
-                        <div class="settings-model-picker" id="s-agent-model-picker">
-                            <input type="hidden" id="s-agent-model">
-                            <button type="button" class="form-input settings-model-button" id="s-agent-model-button">
-                                <span class="settings-model-button-main">
-                                    <span class="settings-model-button-label" id="s-agent-model-display" data-i18n="settings.agent.select_model">Select a
-                                        default model</span>
-                                    <span class="settings-model-button-provider" id="s-agent-model-provider" data-i18n="settings.agent.new_sessions">New
-                                        sessions</span>
-                                </span>
-                                <span class="material-icons-round">arrow_drop_down</span>
-                            </button>
-                            <div class="settings-model-menu" id="s-agent-model-menu" style="display:none">
-                                <input type="text" id="s-agent-model-search" class="form-input settings-model-search"
-                                    placeholder="Search models..." data-i18n-placeholder="common.search_models"
-                                    data-i18n-aria="common.search_models" autocomplete="off" aria-label="Search models...">
-                                <div class="settings-model-list" id="s-agent-model-list"></div>
+                        <div class="field-row">
+                            <label for="s-ui-hide-thoughts" data-i18n="settings.agent.thoughts">Thought Blocks
+                                (Reasoning Models)</label>
+                            <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+                                <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                                    <label class="toggle" title="Hide &lt;think&gt; blocks"><input type="checkbox"
+                                            id="s-ui-hide-thoughts"><span class="toggle-slider"></span></label>
+                                    <span class="settings-note" data-i18n="settings.agent.hide_thoughts">Hide reasoning
+                                        content (&lt;think&gt; tags)</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                                    <label class="toggle"><input type="checkbox" id="s-ui-collapse-thoughts"><span
+                                            class="toggle-slider"></span></label>
+                                    <span class="settings-note" data-i18n="settings.agent.collapse_thoughts">Collapse
+                                        reasoning blocks by default</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="field-row field-row-stack">
-                        <label for="s-agent-consolidationModel-button" data-i18n="settings.agent.consolidation">Memory / Consolidation Model</label>
-                        <p class="settings-note" data-i18n="settings.agent.consolidation_note">Optional. Leave it empty to reuse the default session model for
-                            proactive learning and long-term memory consolidation.</p>
-                        <div class="settings-model-picker" id="s-agent-consolidationModel-picker">
-                            <input type="hidden" id="s-agent-consolidationModel">
-                            <button type="button" class="form-input settings-model-button"
-                                id="s-agent-consolidationModel-button">
-                                <span class="settings-model-button-main">
-                                    <span class="settings-model-button-label"
-                                        id="s-agent-consolidationModel-display" data-i18n="settings.agent.same_default">Same as default session model</span>
-                                    <span
-                                        class="settings-model-button-provider settings-model-button-provider-placeholder"
-                                        id="s-agent-consolidationModel-provider" data-i18n="settings.agent.inherits">Inherits</span>
-                                </span>
-                                <span class="material-icons-round">arrow_drop_down</span>
-                            </button>
-                            <div class="settings-model-menu" id="s-agent-consolidationModel-menu" style="display:none">
-                                <input type="text" id="s-agent-consolidationModel-search"
-                                    class="form-input settings-model-search" placeholder="Search models..."
-                                    data-i18n-placeholder="common.search_models" data-i18n-aria="common.search_models"
-                                    autocomplete="off" aria-label="Search models...">
-                                <div class="settings-model-list" id="s-agent-consolidationModel-list"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="field-row"><label for="s-agent-maxTokens" data-i18n="settings.agent.max_tokens">Max Tokens</label><input type="number"
-                            id="s-agent-maxTokens" class="form-input" value="8192"></div>
-                    <div class="field-row"><label for="s-agent-ctxTokens" data-i18n="settings.agent.ctx_tokens">Context Window Tokens</label><input
-                            type="number" id="s-agent-ctxTokens" class="form-input" value="65536"></div>
-                    <div class="field-row"><label for="s-agent-temp" data-i18n="settings.agent.temperature">Temperature</label><input type="text"
-                            id="s-agent-temp" class="form-input" value="0.1"></div>
-                    <div class="field-row"><label for="s-agent-maxIter" data-i18n="settings.agent.max_iter">Max Tool Iterations</label><input type="number"
-                            id="s-agent-maxIter" class="form-input" value="40" min="0"
-                            title="Max tool iterations (0 for no limit)"></div>
-                    <div class="field-row"><label for="s-agent-toolTimeout"><span data-i18n="settings.agent.tool_timeout">Tool Timeout (s)</span> <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble" data-i18n="settings.agent.timeout_zero">0 = no timeout (infinito)</span></span></label><input type="number"
-                            id="s-agent-toolTimeout" class="form-input" value="0" min="0"
-                            title="Max seconds for all tool executions combined (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-loopWallTimeout"><span data-i18n="settings.agent.loop_timeout">Agent Loop Timeout (s)</span> <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble" data-i18n="settings.agent.timeout_zero">0 = no timeout (infinito)</span></span></label><input
-                            type="number" id="s-agent-loopWallTimeout" class="form-input" value="0" min="0"
-                            title="Max seconds for the entire agent loop (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-subagentTimeout"><span data-i18n="settings.agent.subagent_timeout">Subagent Timeout (s)</span> <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble" data-i18n="settings.agent.timeout_zero">0 = no timeout (infinito)</span></span></label><input
-                            type="number" id="s-agent-subagentTimeout" class="form-input" value="0" min="0"
-                            title="Max seconds for a single subagent execution (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-agent-reasoning" data-i18n="settings.agent.reasoning">Reasoning Effort</label>
-                        <select id="s-agent-reasoning" class="form-input">
-                            <option value="" data-i18n="settings.agent.reasoning_default">Default (Inherit / Provider default)</option>
-                            <option value="low" data-i18n="settings.agent.reasoning_low">Low</option>
-                            <option value="medium" data-i18n="settings.agent.reasoning_med">Medium</option>
-                            <option value="high" data-i18n="settings.agent.reasoning_high">High</option>
-                        </select>
-                    </div>
 
-                    <div class="field-row">
-                        <label for="s-ui-hide-thoughts" data-i18n="settings.agent.thoughts">Thought Blocks (Reasoning Models)</label>
-                        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
-                            <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                                <label class="toggle" title="Hide &lt;think&gt; blocks"><input type="checkbox"
-                                        id="s-ui-hide-thoughts"><span class="toggle-slider"></span></label>
-                                <span class="settings-note" data-i18n="settings.agent.hide_thoughts">Hide reasoning content (&lt;think&gt; tags)</span>
-                            </div>
-                            <div style="display:flex;align-items:center;gap:8px;min-width:0">
-                                <label class="toggle"><input type="checkbox" id="s-ui-collapse-thoughts"><span
+
+                        <div class="field-row">
+                            <label for="s-ui-mobile-enter-newline" data-i18n="settings.agent.mobile_enter">Mobile: Enter
+                                inserts newline</label>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                                <label class="toggle"><input type="checkbox" id="s-ui-mobile-enter-newline"><span
                                         class="toggle-slider"></span></label>
-                                <span class="settings-note" data-i18n="settings.agent.collapse_thoughts">Collapse reasoning blocks by default</span>
+                                <span class="settings-note" style="margin-left:6px"
+                                    data-i18n="settings.agent.mobile_enter_note">On mobile devices, pressing Enter
+                                    inserts a newline instead of sending the message</span>
                             </div>
+                        </div>
+
+                    </div>
+
+
+                    <!-- Tab: Providers (card grid) -->
+                    <div class="settings-panel" id="panel-providers" style="display:none">
+                        <div class="provider-stats-bar">
+                            <div class="provider-search-wrap">
+                                <span class="material-icons-round">search</span>
+                                <input type="text" id="provider-search" class="provider-search-input"
+                                    placeholder="Filter providers..." data-i18n-placeholder="settings.provider.filter"
+                                    data-i18n-aria="settings.provider.filter" aria-label="Filter providers...">
+                            </div>
+                            <div class="provider-stats-count" id="provider-stats"></div>
+                        </div>
+                        <div class="provider-grid" id="providers-list"></div>
+                    </div>
+
+
+                    <!-- Tab: OAuth Providers -->
+                    <div class="settings-panel" id="panel-oauth" style="display:none">
+                        <div class="oauth-list" id="oauth-list">
+                            <div class="field-row" style="grid-template-columns:1fr" data-i18n="settings.oauth.loading">
+                                Loading OAuth providers...</div>
                         </div>
                     </div>
 
 
-                    <div class="field-row">
-                        <label for="s-ui-mobile-enter-newline" data-i18n="settings.agent.mobile_enter">Mobile: Enter inserts newline</label>
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                            <label class="toggle"><input type="checkbox" id="s-ui-mobile-enter-newline"><span
+                    <!-- Tab: Audio -->
+                    <div class="settings-panel" id="panel-audio" style="display:none">
+                        <div class="field-row field-row-stack">
+                            <label for="s-audio-providerUrl" data-i18n="settings.audio.stt_url">STT Provider URL</label>
+                            <p class="settings-note" data-i18n="settings.audio.stt_url_note">
+                                Leave empty to use OpenAI official endpoint. For <strong>Groq</strong> (free tier,
+                                ultra-fast)
+                                use: <code>https://api.groq.com/openai/v1</code>
+                            </p>
+                            <input type="text" id="s-audio-providerUrl" class="form-input"
+                                placeholder="https://api.groq.com/openai/v1">
+                        </div>
+                        <div class="field-row"><label for="s-audio-apiKey" data-i18n="settings.audio.stt_key">STT API
+                                Key</label><input type="password" id="s-audio-apiKey" class="form-input"
+                                placeholder="gsk_... (Groq) or sk-... (OpenAI)">
+                        </div>
+                        <div class="field-row"><label for="s-audio-model" data-i18n="settings.audio.stt_model">STT
+                                Model</label><input type="text" id="s-audio-model" class="form-input"
+                                placeholder="whisper-large-v3-turbo"></div>
+                        <div class="field-row"><label for="tts-toggle" data-i18n="settings.audio.tts">Text-To-Speech
+                                (Bot Voice)</label><label class="toggle"><input type="checkbox" id="tts-toggle"><span
+                                    class="toggle-slider"></span></label></div>
+                        <div class="field-row" id="tts-provider-row" style="display:none">
+                            <label for="s-audio-ttsProvider" data-i18n="settings.audio.tts_provider">TTS
+                                Provider</label>
+                            <select id="s-audio-ttsProvider" class="form-input">
+                                <option value="browser" data-i18n="settings.audio.tts_browser">Browser Native Synthesis
+                                </option>
+                                <option value="supertonic" data-i18n="settings.audio.tts_supertonic">Supertonic TTS
+                                    (Local ONNX)</option>
+                            </select>
+                        </div>
+                        <div class="field-row" id="tts-voice-row" style="display:none">
+                            <label for="s-audio-ttsVoice" data-i18n="settings.audio.tts_voice">TTS Voice</label>
+                            <select id="s-audio-ttsVoice" class="form-input">
+                                <option value="F1">Female 1 (en_female)</option>
+                                <option value="M1">Male 1 (en_male)</option>
+                            </select>
+                        </div>
+                        <div class="field-row" id="tts-lang-row" style="display:none">
+                            <label for="s-audio-ttsLang" data-i18n="settings.audio.tts_lang">TTS Language</label>
+                            <select id="s-audio-ttsLang" class="form-input">
+                                <option value="en">English (en)</option>
+                                <option value="it">Italiano (it)</option>
+                                <option value="es">Español (es)</option>
+                                <option value="fr">Français (fr)</option>
+                                <option value="de">Deutsch (de)</option>
+                                <option value="ja">日本語 (ja)</option>
+                                <option value="na" data-i18n="settings.audio.lang_auto">Auto-detect (na)</option>
+                            </select>
+                        </div>
+                        <div class="field-row" id="tts-speed-row" style="display:none">
+                            <label for="s-audio-ttsSpeed" data-i18n="settings.audio.tts_speed">TTS Speed</label>
+                            <input type="number" id="s-audio-ttsSpeed" class="form-input" min="0.5" max="2.0" step="0.1"
+                                value="1.0">
+                        </div>
+                    </div>
+
+                    <!-- Tab: Tools -->
+                    <div class="settings-panel" id="panel-tools" style="display:none">
+                        <div class="field-row"><label for="s-tool-searchProvider"
+                                data-i18n="settings.tools.search_provider">Search Provider</label><input type="text"
+                                id="s-tool-searchProvider" class="form-input" placeholder="brave, tavily..."></div>
+                        <div class="field-row"><label for="s-tool-searchKey"
+                                data-i18n="settings.tools.search_key">Search API Key</label><input type="password"
+                                id="s-tool-searchKey" class="form-input" placeholder="API key"
+                                data-i18n-placeholder="settings.tools.search_key_ph"></div>
+                        <div class="field-row"><label for="s-tool-searchMax" data-i18n="settings.tools.search_max">Max
+                                Search Results</label><input type="number" id="s-tool-searchMax" class="form-input"
+                                value="5"></div>
+                        <div class="field-row"><label for="s-tool-proxy" data-i18n="settings.tools.proxy">Proxy
+                                URL</label><input type="text" id="s-tool-proxy" class="form-input"
+                                placeholder="(optional)" data-i18n-placeholder="settings.tools.proxy_ph"></div>
+                        <div class="field-row"><label for="s-tool-execEnable"
+                                data-i18n="settings.tools.exec_enable">Shell Exec Enabled</label><label
+                                class="toggle"><input type="checkbox" id="s-tool-execEnable"><span
                                     class="toggle-slider"></span></label>
-                            <span class="settings-note" style="margin-left:6px" data-i18n="settings.agent.mobile_enter_note">On mobile devices, pressing Enter
-                                inserts a newline instead of sending the message</span>
+                        </div>
+                        <div class="field-row"><label for="s-tool-execTimeout"><span
+                                    data-i18n="settings.tools.exec_timeout">Exec Timeout (s)</span> <span
+                                    class="field-info-trigger" title="0 = no timeout (infinito)"><span
+                                        class="material-icons-round">info</span><span class="field-info-bubble"
+                                        data-i18n="settings.agent.timeout_zero">0 = no timeout
+                                        (infinito)</span></span></label><input type="number" id="s-tool-execTimeout"
+                                class="form-input" value="0" min="0"
+                                title="Max seconds for shell execution (0 for no timeout)"></div>
+                        <div class="field-row"><label for="s-tool-restrict" data-i18n="settings.tools.restrict">Restrict
+                                to Workspace</label><label class="toggle toggle-danger"><input type="checkbox"
+                                    id="s-tool-restrict"><span class="toggle-slider"></span></label>
                         </div>
                     </div>
 
-                </div>
-
-
-                <!-- Tab: Providers (card grid) -->
-                <div class="settings-panel" id="panel-providers" style="display:none">
-                    <div class="provider-stats-bar">
-                        <div class="provider-search-wrap">
-                            <span class="material-icons-round">search</span>
-                            <input type="text" id="provider-search" class="provider-search-input"
-                                placeholder="Filter providers..." data-i18n-placeholder="settings.provider.filter"
-                                data-i18n-aria="settings.provider.filter" aria-label="Filter providers...">
+                    <!-- Tab: Extensions (Skills, Plugins, MCP) -->
+                    <div class="settings-panel" id="panel-extensions" style="display:none">
+                        <div class="extensions-inner-tabs">
+                            <button class="extensions-inner-tab active" data-subtab="skills"
+                                onclick="switchExtensionsSubTab('skills')">
+                                <span class="material-icons-round">menu_book</span> <span
+                                    data-i18n="settings.ext.skills">Skills</span>
+                            </button>
+                            <button class="extensions-inner-tab" data-subtab="plugins"
+                                onclick="switchExtensionsSubTab('plugins')">
+                                <span class="material-icons-round">extension</span> <span
+                                    data-i18n="settings.ext.plugins">Plugins</span>
+                            </button>
+                            <button class="extensions-inner-tab" data-subtab="mcp"
+                                onclick="switchExtensionsSubTab('mcp')">
+                                <span class="material-icons-round">hub</span> <span data-i18n="settings.ext.mcp">MCP
+                                    Servers</span>
+                            </button>
                         </div>
-                        <div class="provider-stats-count" id="provider-stats"></div>
-                    </div>
-                    <div class="provider-grid" id="providers-list"></div>
-                </div>
 
+                        <!-- Subpanel: Skills -->
+                        <div class="extensions-subpanel active" id="subpanel-skills">
+                            <!-- Skills toolbar -->
+                            <div class="skills-toolbar">
+                                <input type="text" id="skills-search" class="form-input"
+                                    placeholder="Filter skills by name or description..."
+                                    data-i18n-placeholder="settings.skills.filter"
+                                    aria-label="Filter skills by name or description...">
+                                <div class="skills-toolbar-actions">
+                                    <select id="skills-profile-select" class="form-select"
+                                        style="min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); margin-right: 8px;"
+                                        aria-label="Select profile for skills" onchange="loadSkillsPanel()">
+                                        <option value="default" data-i18n="settings.skills.profile">Default Profile
+                                        </option>
+                                    </select>
+                                    <button type="button" class="btn-secondary" onclick="loadSkillsPanel()">
+                                        <span class="material-icons-round"
+                                            style="font-size:16px;vertical-align:middle">refresh</span> <span
+                                            data-i18n="common.refresh">Refresh</span>
+                                    </button>
+                                    <button type="button" class="btn-secondary"
+                                        onclick="window.open('https://clawhub.ai/','_blank')">
+                                        <span class="material-icons-round"
+                                            style="font-size:16px;vertical-align:middle">store</span> ClawHub
+                                    </button>
+                                </div>
+                            </div>
 
-                <!-- Tab: OAuth Providers -->
-                <div class="settings-panel" id="panel-oauth" style="display:none">
-                    <div class="oauth-list" id="oauth-list">
-                        <div class="field-row" style="grid-template-columns:1fr" data-i18n="settings.oauth.loading">Loading OAuth providers...</div>
-                    </div>
-                </div>
+                            <!-- Always Active pinning section -->
+                            <div class="skills-pinned-section">
+                                <div class="skills-section-header">
+                                    <span class="material-icons-round">push_pin</span>
+                                    <span data-i18n="settings.skills.always_active">Always Active</span>
+                                    <span class="skills-pin-counter" id="skills-pin-counter">0 / 5</span>
+                                </div>
+                                <p class="settings-note" data-i18n="settings.skills.always_note">Skills marked always:
+                                    true in SKILL.md and manually pinned skills.
+                                    Injected every turn.</p>
+                                <div id="skills-pinned-list" class="skills-pinned-list"></div>
+                            </div>
 
+                            <!-- All skills browse -->
+                            <div class="skills-browse-section">
+                                <div class="skills-section-header">
+                                    <span class="material-icons-round">menu_book</span>
+                                    <span data-i18n="settings.skills.installed">Installed Skills</span>
+                                </div>
+                                <div id="skills-list" class="skills-list">
+                                    <div class="settings-loader"><span
+                                            class="material-icons-round spin">progress_activity</span> <span
+                                            data-i18n="settings.skills.loading">Loading skills...</span>
+                                    </div>
+                                </div>
+                            </div>
 
-                <!-- Tab: Audio -->
-                <div class="settings-panel" id="panel-audio" style="display:none">
-                    <div class="field-row field-row-stack">
-                        <label for="s-audio-providerUrl" data-i18n="settings.audio.stt_url">STT Provider URL</label>
-                        <p class="settings-note" data-i18n="settings.audio.stt_url_note">
-                            Leave empty to use OpenAI official endpoint. For <strong>Groq</strong> (free tier,
-                            ultra-fast)
-                            use: <code>https://api.groq.com/openai/v1</code>
-                        </p>
-                        <input type="text" id="s-audio-providerUrl" class="form-input"
-                            placeholder="https://api.groq.com/openai/v1">
-                    </div>
-                    <div class="field-row"><label for="s-audio-apiKey" data-i18n="settings.audio.stt_key">STT API Key</label><input type="password"
-                            id="s-audio-apiKey" class="form-input" placeholder="gsk_... (Groq) or sk-... (OpenAI)">
-                    </div>
-                    <div class="field-row"><label for="s-audio-model" data-i18n="settings.audio.stt_model">STT Model</label><input type="text"
-                            id="s-audio-model" class="form-input" placeholder="whisper-large-v3-turbo"></div>
-                    <div class="field-row"><label for="tts-toggle" data-i18n="settings.audio.tts">Text-To-Speech (Bot Voice)</label><label
-                            class="toggle"><input type="checkbox" id="tts-toggle"><span
-                                class="toggle-slider"></span></label></div>
-                    <div class="field-row" id="tts-provider-row" style="display:none">
-                        <label for="s-audio-ttsProvider" data-i18n="settings.audio.tts_provider">TTS Provider</label>
-                        <select id="s-audio-ttsProvider" class="form-input">
-                            <option value="browser" data-i18n="settings.audio.tts_browser">Browser Native Synthesis</option>
-                            <option value="supertonic" data-i18n="settings.audio.tts_supertonic">Supertonic TTS (Local ONNX)</option>
-                        </select>
-                    </div>
-                    <div class="field-row" id="tts-voice-row" style="display:none">
-                        <label for="s-audio-ttsVoice" data-i18n="settings.audio.tts_voice">TTS Voice</label>
-                        <select id="s-audio-ttsVoice" class="form-input">
-                            <option value="F1">Female 1 (en_female)</option>
-                            <option value="M1">Male 1 (en_male)</option>
-                        </select>
-                    </div>
-                    <div class="field-row" id="tts-lang-row" style="display:none">
-                        <label for="s-audio-ttsLang" data-i18n="settings.audio.tts_lang">TTS Language</label>
-                        <select id="s-audio-ttsLang" class="form-input">
-                            <option value="en">English (en)</option>
-                            <option value="it">Italiano (it)</option>
-                            <option value="es">Español (es)</option>
-                            <option value="fr">Français (fr)</option>
-                            <option value="de">Deutsch (de)</option>
-                            <option value="ja">日本語 (ja)</option>
-                            <option value="na" data-i18n="settings.audio.lang_auto">Auto-detect (na)</option>
-                        </select>
-                    </div>
-                    <div class="field-row" id="tts-speed-row" style="display:none">
-                        <label for="s-audio-ttsSpeed" data-i18n="settings.audio.tts_speed">TTS Speed</label>
-                        <input type="number" id="s-audio-ttsSpeed" class="form-input" min="0.5" max="2.0" step="0.1"
-                            value="1.0">
-                    </div>
-                </div>
-
-                <!-- Tab: Tools -->
-                <div class="settings-panel" id="panel-tools" style="display:none">
-                    <div class="field-row"><label for="s-tool-searchProvider" data-i18n="settings.tools.search_provider">Search Provider</label><input type="text"
-                            id="s-tool-searchProvider" class="form-input" placeholder="brave, tavily..."></div>
-                    <div class="field-row"><label for="s-tool-searchKey" data-i18n="settings.tools.search_key">Search API Key</label><input type="password"
-                            id="s-tool-searchKey" class="form-input" placeholder="API key" data-i18n-placeholder="settings.tools.search_key_ph"></div>
-                    <div class="field-row"><label for="s-tool-searchMax" data-i18n="settings.tools.search_max">Max Search Results</label><input type="number"
-                            id="s-tool-searchMax" class="form-input" value="5"></div>
-                    <div class="field-row"><label for="s-tool-proxy" data-i18n="settings.tools.proxy">Proxy URL</label><input type="text"
-                            id="s-tool-proxy" class="form-input" placeholder="(optional)" data-i18n-placeholder="settings.tools.proxy_ph"></div>
-                    <div class="field-row"><label for="s-tool-execEnable" data-i18n="settings.tools.exec_enable">Shell Exec Enabled</label><label
-                            class="toggle"><input type="checkbox" id="s-tool-execEnable"><span
-                                class="toggle-slider"></span></label>
-                    </div>
-                    <div class="field-row"><label for="s-tool-execTimeout"><span data-i18n="settings.tools.exec_timeout">Exec Timeout (s)</span> <span class="field-info-trigger" title="0 = no timeout (infinito)"><span class="material-icons-round">info</span><span class="field-info-bubble" data-i18n="settings.agent.timeout_zero">0 = no timeout (infinito)</span></span></label><input type="number"
-                            id="s-tool-execTimeout" class="form-input" value="0" min="0" title="Max seconds for shell execution (0 for no timeout)"></div>
-                    <div class="field-row"><label for="s-tool-restrict" data-i18n="settings.tools.restrict">Restrict to Workspace</label><label
-                            class="toggle toggle-danger"><input type="checkbox" id="s-tool-restrict"><span
-                                class="toggle-slider"></span></label>
-                    </div>
-                </div>
-
-                <!-- Tab: Extensions (Skills, Plugins, MCP) -->
-                <div class="settings-panel" id="panel-extensions" style="display:none">
-                    <div class="extensions-inner-tabs">
-                        <button class="extensions-inner-tab active" data-subtab="skills" onclick="switchExtensionsSubTab('skills')">
-                            <span class="material-icons-round">menu_book</span> <span data-i18n="settings.ext.skills">Skills</span>
-                        </button>
-                        <button class="extensions-inner-tab" data-subtab="plugins" onclick="switchExtensionsSubTab('plugins')">
-                            <span class="material-icons-round">extension</span> <span data-i18n="settings.ext.plugins">Plugins</span>
-                        </button>
-                        <button class="extensions-inner-tab" data-subtab="mcp" onclick="switchExtensionsSubTab('mcp')">
-                            <span class="material-icons-round">hub</span> <span data-i18n="settings.ext.mcp">MCP Servers</span>
-                        </button>
-                    </div>
-
-                    <!-- Subpanel: Skills -->
-                    <div class="extensions-subpanel active" id="subpanel-skills">
-                        <!-- Skills toolbar -->
-                        <div class="skills-toolbar">
-                            <input type="text" id="skills-search" class="form-input"
-                                placeholder="Filter skills by name or description..."
-                                data-i18n-placeholder="settings.skills.filter"
-                                aria-label="Filter skills by name or description...">
-                            <div class="skills-toolbar-actions">
-                                <select id="skills-profile-select" class="form-select"
-                                    style="min-width: 150px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--bg-primary); color: var(--text-primary); margin-right: 8px;"
-                                    aria-label="Select profile for skills" onchange="loadSkillsPanel()">
-                                    <option value="default" data-i18n="settings.skills.profile">Default Profile</option>
-                                </select>
-                                <button type="button" class="btn-secondary" onclick="loadSkillsPanel()">
-                                    <span class="material-icons-round"
-                                        style="font-size:16px;vertical-align:middle">refresh</span> <span data-i18n="common.refresh">Refresh</span>
-                                </button>
-                                <button type="button" class="btn-secondary"
-                                    onclick="window.open('https://clawhub.ai/','_blank')">
-                                    <span class="material-icons-round"
-                                        style="font-size:16px;vertical-align:middle">store</span> ClawHub
-                                </button>
+                            <!-- Import section -->
+                            <div class="skills-import-section">
+                                <div class="skills-section-header">
+                                    <span class="material-icons-round">upload_file</span>
+                                    <span data-i18n="settings.skills.import">Import Skills (.zip)</span>
+                                </div>
+                                <div class="skills-import-form">
+                                    <input type="file" id="skills-import-file" accept=".zip" style="display:none"
+                                        onchange="handleSkillsFileSelect(event)">
+                                    <button type="button" class="btn-secondary"
+                                        onclick="document.getElementById('skills-import-file').click()">
+                                        <span class="material-icons-round"
+                                            style="font-size:16px;vertical-align:middle">folder_zip</span> <span
+                                            data-i18n="settings.skills.select_zip">Select .zip</span>
+                                    </button>
+                                    <span id="skills-import-filename" class="skills-import-filename"
+                                        data-i18n="settings.skills.no_file">No file selected</span>
+                                    <button type="button" class="btn-primary" id="skills-import-btn"
+                                        onclick="importSkills()" disabled>
+                                        <span data-i18n="settings.skills.import_btn">Import</span>
+                                    </button>
+                                </div>
+                                <div id="skills-import-result" class="skills-import-result" style="display:none"></div>
                             </div>
                         </div>
 
-                        <!-- Always Active pinning section -->
-                        <div class="skills-pinned-section">
-                            <div class="skills-section-header">
-                                <span class="material-icons-round">push_pin</span>
-                                <span data-i18n="settings.skills.always_active">Always Active</span>
-                                <span class="skills-pin-counter" id="skills-pin-counter">0 / 5</span>
+                        <!-- Subpanel: Plugins -->
+                        <div class="extensions-subpanel" id="subpanel-plugins">
+                            <div class="skills-toolbar">
+                                <input type="text" id="plugin-install-name" class="form-input"
+                                    placeholder="Plugin package name (e.g. shibaclaw-tts-supertonic) or Git URL..."
+                                    data-i18n-placeholder="settings.plugins.install_ph"
+                                    aria-label="Plugin package name or Git URL">
+                                <div class="skills-toolbar-actions">
+                                    <button type="button" class="btn-primary" onclick="installPlugin()">
+                                        <span class="material-icons-round"
+                                            style="font-size:16px;vertical-align:middle">download</span> <span
+                                            data-i18n="common.install">Install</span>
+                                    </button>
+                                </div>
                             </div>
-                            <p class="settings-note" data-i18n="settings.skills.always_note">Skills marked always: true in SKILL.md and manually pinned skills.
-                                Injected every turn.</p>
-                            <div id="skills-pinned-list" class="skills-pinned-list"></div>
+                            <div id="plugin-action-log" class="console-box"
+                                style="display:none; font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--text-secondary)">
+                            </div>
+                            <div class="skills-browse-section">
+                                <div class="skills-section-header">
+                                    <span class="material-icons-round">extension</span>
+                                    <span data-i18n="settings.plugins.installed">Installed Plugins</span>
+                                </div>
+                                <div id="installed-plugins-list" class="skills-list"></div>
+                            </div>
+                            <div class="skills-browse-section" style="margin-top: 1.5rem;">
+                                <div class="skills-section-header">
+                                    <span class="material-icons-round">cloud_download</span>
+                                    <span data-i18n="settings.plugins.available">Available Plugins</span>
+                                </div>
+                                <div id="available-plugins-list" class="skills-list"></div>
+                            </div>
                         </div>
 
-                        <!-- All skills browse -->
-                        <div class="skills-browse-section">
-                            <div class="skills-section-header">
-                                <span class="material-icons-round">menu_book</span>
-                                <span data-i18n="settings.skills.installed">Installed Skills</span>
+                        <!-- Subpanel: MCP -->
+                        <div class="extensions-subpanel" id="subpanel-mcp">
+                            <div id="mcp-manager-container"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tab: Gateway -->
+                    <div class="settings-panel" id="panel-gateway" style="display:none">
+                        <div class="field-row"><label for="s-gw-host"
+                                data-i18n="settings.gateway.host">Host</label><input type="text" id="s-gw-host"
+                                class="form-input" placeholder="127.0.0.1"></div>
+                        <div class="field-row"><label for="s-gw-port"
+                                data-i18n="settings.gateway.port">Port</label><input type="number" id="s-gw-port"
+                                class="form-input" value="19999"></div>
+
+                        <div class="settings-section-divider" style="margin-top: 2rem;">
+                            <span class="material-icons-round">security</span>
+                            <span data-i18n="settings.gateway.security">Security</span>
+                        </div>
+                        <div class="field-row field-row-stack">
+                            <p class="settings-note" data-i18n="settings.gateway.password_note">Change the admin
+                                password used to login to the Web UI and encrypt your credential vault.</p>
+                            <button type="button" class="btn-secondary" onclick="openChangePasswordModal()">
+                                <span class="material-icons-round"
+                                    style="font-size:16px;vertical-align:middle">password</span>
+                                <span data-i18n="settings.gateway.change_password">Change Password</span>
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- Tab: Channels (split layout) -->
+                    <div class="settings-panel" id="panel-channels" style="display:none">
+                        <div class="channel-top-bar">
+                            <div class="channel-top-chip">
+                                <span data-i18n="settings.channels.send_progress">Send Progress</span>
+                                <label class="toggle"><input type="checkbox" id="s-ch-sendProgress"><span
+                                        class="toggle-slider"></span></label>
                             </div>
-                            <div id="skills-list" class="skills-list">
-                                <div class="settings-loader"><span
-                                        class="material-icons-round spin">progress_activity</span> <span data-i18n="settings.skills.loading">Loading skills...</span>
+                            <div class="channel-top-chip">
+                                <span data-i18n="settings.channels.send_tool_hints">Send Tool Hints</span>
+                                <label class="toggle"><input type="checkbox" id="s-ch-sendToolHints"><span
+                                        class="toggle-slider"></span></label>
+                            </div>
+                            <div class="channel-top-stats" id="channel-stats"></div>
+                        </div>
+                        <div class="channel-split">
+                            <div class="channel-list" id="channel-list"></div>
+                            <div class="channel-detail-pane" id="channel-detail-pane">
+                                <div class="channel-detail-empty">
+                                    <span class="material-icons-round">touch_app</span>
+                                    <span data-i18n="settings.channels.select">Select a channel to configure</span>
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Import section -->
-                        <div class="skills-import-section">
-                            <div class="skills-section-header">
-                                <span class="material-icons-round">upload_file</span>
-                                <span data-i18n="settings.skills.import">Import Skills (.zip)</span>
-                            </div>
-                            <div class="skills-import-form">
-                                <input type="file" id="skills-import-file" accept=".zip" style="display:none"
-                                    onchange="handleSkillsFileSelect(event)">
-                                <button type="button" class="btn-secondary"
-                                    onclick="document.getElementById('skills-import-file').click()">
-                                    <span class="material-icons-round"
-                                        style="font-size:16px;vertical-align:middle">folder_zip</span> <span data-i18n="settings.skills.select_zip">Select .zip</span>
-                                </button>
-                                <span id="skills-import-filename" class="skills-import-filename" data-i18n="settings.skills.no_file">No file selected</span>
-                                <button type="button" class="btn-primary" id="skills-import-btn" onclick="importSkills()"
-                                    disabled>
-                                    <span data-i18n="settings.skills.import_btn">Import</span>
-                                </button>
-                            </div>
-                            <div id="skills-import-result" class="skills-import-result" style="display:none"></div>
-                        </div>
+                        <div id="channels-detail" style="display:none"></div>
                     </div>
 
-                    <!-- Subpanel: Plugins -->
-                    <div class="extensions-subpanel" id="subpanel-plugins">
-                        <div class="skills-toolbar">
-                            <input type="text" id="plugin-install-name" class="form-input"
-                                placeholder="Plugin package name (e.g. shibaclaw-tts-supertonic) or Git URL..."
-                                data-i18n-placeholder="settings.plugins.install_ph"
-                                aria-label="Plugin package name or Git URL">
-                            <div class="skills-toolbar-actions">
-                                <button type="button" class="btn-primary" onclick="installPlugin()">
-                                    <span class="material-icons-round"
-                                        style="font-size:16px;vertical-align:middle">download</span> <span data-i18n="common.install">Install</span>
-                                </button>
+                    <!-- Tab: Update -->
+                    <div class="settings-panel" id="panel-update" style="display:none">
+                        <div id="update-status-container">
+                            <div class="update-checking"><span
+                                    class="material-icons-round spin">progress_activity</span>
+                                <span data-i18n="update.checking">Checking for updates...</span>
                             </div>
                         </div>
-                        <div id="plugin-action-log" class="console-box"
-                            style="display:none; font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--text-secondary)">
+
+                        <div class="settings-section-divider" style="margin-top: 2rem;">
+                            <span class="material-icons-round">rocket_launch</span>
+                            <span data-i18n="settings.update.setup">Setup Wizard</span>
                         </div>
-                        <div class="skills-browse-section">
-                            <div class="skills-section-header">
-                                <span class="material-icons-round">extension</span>
-                                <span data-i18n="settings.plugins.installed">Installed Plugins</span>
-                            </div>
-                            <div id="installed-plugins-list" class="skills-list"></div>
+                        <div class="field-row field-row-stack">
+                            <p class="settings-note" data-i18n="settings.update.setup_note">Reopen the guided setup to
+                                configure provider, credentials, model
+                                and workspace templates.</p>
+                            <button type="button" class="btn-secondary settings-onboard-btn"
+                                onclick="openOnboardFromSettings()">
+                                <span class="material-icons-round"
+                                    style="font-size:16px;vertical-align:middle">rocket_launch</span>
+                                <span data-i18n="settings.update.open_wizard">Open onboarding wizard</span>
+                            </button>
                         </div>
-                        <div class="skills-browse-section" style="margin-top: 1.5rem;">
-                            <div class="skills-section-header">
-                                <span class="material-icons-round">cloud_download</span>
-                                <span data-i18n="settings.plugins.available">Available Plugins</span>
-                            </div>
-                            <div id="available-plugins-list" class="skills-list"></div>
-                        </div>
-                    </div>
-
-                    <!-- Subpanel: MCP -->
-                    <div class="extensions-subpanel" id="subpanel-mcp">
-                        <div id="mcp-manager-container"></div>
-                    </div>
-                </div>
-
-                <!-- Tab: Gateway -->
-                <div class="settings-panel" id="panel-gateway" style="display:none">
-                    <div class="field-row"><label for="s-gw-host" data-i18n="settings.gateway.host">Host</label><input type="text" id="s-gw-host"
-                            class="form-input" placeholder="127.0.0.1"></div>
-                    <div class="field-row"><label for="s-gw-port" data-i18n="settings.gateway.port">Port</label><input type="number" id="s-gw-port"
-                            class="form-input" value="19999"></div>
-
-                    <div class="settings-section-divider" style="margin-top: 2rem;">
-                        <span class="material-icons-round">security</span>
-                        <span data-i18n="settings.gateway.security">Security</span>
-                    </div>
-                    <div class="field-row field-row-stack">
-                        <p class="settings-note" data-i18n="settings.gateway.password_note">Change the admin password used to login to the Web UI and encrypt your credential vault.</p>
-                        <button type="button" class="btn-secondary" onclick="openChangePasswordModal()">
-                            <span class="material-icons-round" style="font-size:16px;vertical-align:middle">password</span>
-                            <span data-i18n="settings.gateway.change_password">Change Password</span>
-                        </button>
-                    </div>
-
-                </div>
-
-                <!-- Tab: Channels (split layout) -->
-                <div class="settings-panel" id="panel-channels" style="display:none">
-                    <div class="channel-top-bar">
-                        <div class="channel-top-chip">
-                            <span data-i18n="settings.channels.send_progress">Send Progress</span>
-                            <label class="toggle"><input type="checkbox" id="s-ch-sendProgress"><span
-                                    class="toggle-slider"></span></label>
-                        </div>
-                        <div class="channel-top-chip">
-                            <span data-i18n="settings.channels.send_tool_hints">Send Tool Hints</span>
-                            <label class="toggle"><input type="checkbox" id="s-ch-sendToolHints"><span
-                                    class="toggle-slider"></span></label>
-                        </div>
-                        <div class="channel-top-stats" id="channel-stats"></div>
-                    </div>
-                    <div class="channel-split">
-                        <div class="channel-list" id="channel-list"></div>
-                        <div class="channel-detail-pane" id="channel-detail-pane">
-                            <div class="channel-detail-empty">
-                                <span class="material-icons-round">touch_app</span>
-                                <span data-i18n="settings.channels.select">Select a channel to configure</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="channels-detail" style="display:none"></div>
-                </div>
-
-                <!-- Tab: Update -->
-                <div class="settings-panel" id="panel-update" style="display:none">
-                    <div id="update-status-container">
-                        <div class="update-checking"><span class="material-icons-round spin">progress_activity</span>
-                            <span data-i18n="update.checking">Checking for updates...</span></div>
-                    </div>
-
-                    <div class="settings-section-divider" style="margin-top: 2rem;">
-                        <span class="material-icons-round">rocket_launch</span>
-                        <span data-i18n="settings.update.setup">Setup Wizard</span>
-                    </div>
-                    <div class="field-row field-row-stack">
-                        <p class="settings-note" data-i18n="settings.update.setup_note">Reopen the guided setup to configure provider, credentials, model
-                            and workspace templates.</p>
-                        <button type="button" class="btn-secondary settings-onboard-btn"
-                            onclick="openOnboardFromSettings()">
-                            <span class="material-icons-round"
-                                style="font-size:16px;vertical-align:middle">rocket_launch</span>
-                            <span data-i18n="settings.update.open_wizard">Open onboarding wizard</span>
-                        </button>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    <section id="workspace-view" class="workspace-view" style="display:none" aria-labelledby="workspace-view-title">
-        <header class="workspace-header">
-            <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)" data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round" aria-hidden="true">menu</span></button>
-            <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar"><span class="material-icons-round" aria-hidden="true">menu_open</span></button>
-            <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span aria-hidden="true">/</span><h1 id="workspace-view-title"></h1></div>
-            <button type="button" class="btn-secondary workspace-back" onclick="showWorkspaceChat()" data-i18n-title="workspace.back_chat" data-i18n-aria="workspace.back_chat"><span class="material-icons-round" aria-hidden="true">arrow_back</span><span data-i18n="workspace.back_chat">Back to conversation</span></button>
-        </header>
-        <div class="workspace-page-intro"><h2 id="workspace-page-heading"></h2><p id="workspace-page-description"></p></div>
-        <div id="workspace-app-actions" class="workspace-app-actions" hidden>
-            <button type="button" class="btn-secondary" onclick="openWorkspaceTools(false)"><span class="material-icons-round" aria-hidden="true">build</span><span data-i18n="settings.tab.tools">Tools</span></button>
-            <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
-        </div>
-        <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library" data-i18n-aria="workspace.library" hidden>
-            <button type="button" data-workspace-modal="fs-modal" onclick="openModal('fs-modal')" data-i18n="nav.files">Files</button>
-            <button type="button" data-workspace-modal="knowledge-modal" onclick="openModal('knowledge-modal')" data-i18n="nav.knowledge">Knowledge Base</button>
-            <button type="button" data-workspace-modal="memory-modal" onclick="openModal('memory-modal')" data-i18n="memory.tab_memory">Memory</button>
-        </nav>
-        <div id="workspace-stage" class="workspace-stage">
-            <div id="workspace-agents" class="workspace-agents" hidden>
-                <div class="workspace-page-actions"><button type="button" class="btn-secondary" onclick="refreshWorkspaceAgents()" data-i18n-aria="common.refresh" aria-label="Refresh"><span class="material-icons-round" aria-hidden="true">refresh</span></button><button type="button" class="btn-primary" onclick="openProfileModal()"><span class="material-icons-round" aria-hidden="true">add</span><span data-i18n="profiles.create">Create custom profile</span></button></div>
-                <div id="workspace-agent-grid" class="workspace-agent-grid" aria-live="polite"></div>
+        <section id="workspace-view" class="workspace-view" style="display:none" aria-labelledby="workspace-view-title">
+            <header class="workspace-header">
+                <button type="button" class="workspace-mobile-menu btn-icon" onclick="setSidebarOpen(true)"
+                    data-i18n-aria="chrome.open_menu" aria-label="Open mobile menu"><span class="material-icons-round"
+                        aria-hidden="true">menu</span></button>
+                <button type="button" class="workspace-sidebar-expand btn-icon" onclick="toggleWorkspaceSidebar()"
+                    data-i18n-title="chrome.toggle_sidebar" data-i18n-aria="chrome.toggle_sidebar"
+                    aria-label="Toggle sidebar"><span class="material-icons-round"
+                        aria-hidden="true">menu_open</span></button>
+                <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span
+                        aria-hidden="true">/</span>
+                    <h1 id="workspace-view-title"></h1>
+                </div>
+                <button type="button" class="btn-secondary workspace-back" onclick="showWorkspaceChat()"
+                    data-i18n-title="workspace.back_chat" data-i18n-aria="workspace.back_chat"><span
+                        class="material-icons-round" aria-hidden="true">arrow_back</span><span
+                        data-i18n="workspace.back_chat">Back to conversation</span></button>
+            </header>
+            <div class="workspace-page-intro">
+                <h2 id="workspace-page-heading"></h2>
+                <p id="workspace-page-description"></p>
             </div>
-        </div>
-    </section>
+            <div id="workspace-app-actions" class="workspace-app-actions" hidden>
+                <button type="button" class="btn-secondary" onclick="openWorkspaceTools(false)"><span
+                        class="material-icons-round" aria-hidden="true">build</span><span
+                        data-i18n="settings.tab.tools">Tools</span></button>
+                <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span
+                        class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
+            </div>
+            <div id="workspace-evolve-actions" class="workspace-page-actions workspace-app-actions" hidden>
+                <button type="button" class="btn-secondary" onclick="loadEvolve()" data-i18n-aria="common.refresh"
+                    aria-label="Refresh"><span class="material-icons-round"
+                        aria-hidden="true">refresh</span></button>
+            </div>
+            <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library"
+                data-i18n-aria="workspace.library" hidden>
+                <button type="button" data-workspace-modal="fs-modal" onclick="openModal('fs-modal')"
+                    data-i18n="nav.files">Files</button>
+                <button type="button" data-workspace-modal="knowledge-modal" onclick="openModal('knowledge-modal')"
+                    data-i18n="nav.knowledge">Knowledge Base</button>
+                <button type="button" data-workspace-modal="memory-modal" onclick="openModal('memory-modal')"
+                    data-i18n="memory.tab_memory">Memory</button>
+            </nav>
+            <div id="workspace-stage" class="workspace-stage">
+                <div id="workspace-agents" class="workspace-agents" hidden>
+                    <div class="workspace-page-actions"><button type="button" class="btn-secondary"
+                            onclick="refreshWorkspaceAgents()" data-i18n-aria="common.refresh"
+                            aria-label="Refresh"><span class="material-icons-round"
+                                aria-hidden="true">refresh</span></button><button type="button" class="btn-primary"
+                            onclick="openProfileModal()"><span class="material-icons-round"
+                                aria-hidden="true">add</span><span data-i18n="profiles.create">Create custom
+                                profile</span></button></div>
+                    <div id="workspace-agent-grid" class="workspace-agent-grid" aria-live="polite"></div>
+                </div>
+            </div>
+        </section>
     </div>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
@@ -1001,8 +1223,7 @@
             <div class="modal-header">
                 <h2 data-i18n="password.title">Change Admin Password</h2>
                 <button class="modal-close" onclick="closeModal('change-password-modal')" data-i18n-title="common.close"
-                    data-i18n-aria="common.close" title="Close"><span
-                        class="material-icons-round">close</span></button>
+                    data-i18n-aria="common.close" title="Close"><span class="material-icons-round">close</span></button>
             </div>
             <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
                 <div class="field-row" style="flex-direction:column; align-items:stretch;">
@@ -1023,8 +1244,10 @@
                 <div id="cp-error" class="login-error" style="display:none; margin-top:8px;"></div>
             </div>
             <div class="modal-footer" style="justify-content: flex-end;">
-                <button type="button" class="btn-secondary" onclick="closeModal('change-password-modal')" data-i18n="common.cancel">Cancel</button>
-                <button type="button" class="btn-primary" onclick="submitChangePassword()" data-i18n="password.submit">Change Password</button>
+                <button type="button" class="btn-secondary" onclick="closeModal('change-password-modal')"
+                    data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn-primary" onclick="submitChangePassword()"
+                    data-i18n="password.submit">Change Password</button>
             </div>
         </div>
     </div>
@@ -1033,7 +1256,8 @@
     <div id="automation-modal" class="modal-backdrop">
         <div class="modal modal-automation">
             <div class="modal-header">
-                <h2><span class="material-icons-round">event_repeat</span> <span data-i18n="auto.title">Automation</span></h2>
+                <h2><span class="material-icons-round">event_repeat</span> <span
+                        data-i18n="auto.title">Automation</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('automation-modal')">
                     <span class="material-icons-round">close</span>
@@ -1065,7 +1289,8 @@
                     <span class="material-icons-round">bolt</span> <span data-i18n="auto.tab_active">Active</span>
                 </button>
                 <button class="auto-tab" data-tab="completed" onclick="switchAutoTab('completed')">
-                    <span class="material-icons-round">check_circle</span> <span data-i18n="auto.tab_inactive">Inactive</span>
+                    <span class="material-icons-round">check_circle</span> <span
+                        data-i18n="auto.tab_inactive">Inactive</span>
                 </button>
             </div>
 
@@ -1074,7 +1299,8 @@
                 <div id="automation-job-list">
                     <div class="automation-empty-state">
                         <span class="material-icons-round">event_repeat</span>
-                        <p data-i18n="auto.empty">No automation jobs yet.<br>Click <strong>New Job</strong> to create one.</p>
+                        <p data-i18n="auto.empty">No automation jobs yet.<br>Click <strong>New Job</strong> to create
+                            one.</p>
                     </div>
                 </div>
 
@@ -1096,7 +1322,8 @@
 
                         <div class="field-row field-row-stack">
                             <label for="ajf-message" data-i18n="auto.message">Message to agent</label>
-                            <p class="settings-note" data-i18n="auto.message_note">What should the agent do when this job runs?</p>
+                            <p class="settings-note" data-i18n="auto.message_note">What should the agent do when this
+                                job runs?</p>
                             <textarea id="ajf-message" class="form-input" rows="3"
                                 placeholder="E.g. Check my latest emails and summarize them..."></textarea>
                         </div>
@@ -1209,6 +1436,39 @@
         </div>
     </div>
 
+    <!-- ══ Evolution ══════════════════════════════════════════════════════ -->
+    <div id="evolve-modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <span class="material-icons-round" aria-hidden="true">auto_awesome</span>
+                    <h2 id="evolve-title" data-i18n="workspace.evolution">Evolution</h2>
+                </div>
+                <div class="modal-header-actions">
+                    <button class="btn-icon" aria-label="Refresh" title="Refresh" onclick="loadEvolve()">
+                        <span class="material-icons-round">refresh</span>
+                    </button>
+                    <button class="btn-icon" aria-label="Close" title="Close" onclick="closeModal('evolve-modal')">
+                        <span class="material-icons-round">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body" id="evolve-content"></div>
+        </div>
+    </div>
+    <style>
+        .evolve-status { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; margin-bottom: 8px; }
+        .evolve-chip { padding: 2px 8px; border-radius: 12px; background: rgba(212, 175, 55, 0.15); color: var(--shiba-gold, #d4af37); }
+        .evolve-repo { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+        .evolve-block { margin: 0 0 14px; }
+        .evolve-block h3 { margin: 0 0 6px; font-size: 13px; }
+        .evolve-block pre { white-space: pre-wrap; margin: 0; font-size: 12px; line-height: 1.45; max-height: 220px; overflow: auto; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+        .evolve-commits { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+        .evolve-commits li { padding: 4px 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+        .evolve-commits span { color: var(--text-muted); margin-left: 6px; }
+        .evolve-loading, .evolve-error { padding: 2rem; text-align: center; }
+    </style>
+
     <!-- ══ Memory Manager Modal ══════════════════════════════════════════ -->
     <div id="memory-modal" class="modal-backdrop">
         <div class="modal" style="width: 800px; max-width: 95vw; height: 85vh; display: flex; flex-direction: column;">
@@ -1216,40 +1476,57 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <span class="material-icons-round" style="color: var(--shiba-gold);">psychology</span>
                     <h2 data-i18n="memory.title">Memory Manager</h2>
-                    <div id="memory-token-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); margin-left: 8px; font-weight: 500;"></div>
+                    <div id="memory-token-badge"
+                        style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(255,255,255,0.05); margin-left: 8px; font-weight: 500;">
+                    </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <button class="btn-icon" data-i18n-aria="common.refresh" data-i18n-title="common.refresh" aria-label="Refresh"
-                        title="Refresh" onclick="loadMemoryData()">
+                    <button class="btn-icon" data-i18n-aria="common.refresh" data-i18n-title="common.refresh"
+                        aria-label="Refresh" title="Refresh" onclick="loadMemoryData()">
                         <span class="material-icons-round">refresh</span>
                     </button>
-                    <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
-                        title="Close" onclick="closeModal('memory-modal')">
+                    <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close"
+                        aria-label="Close" title="Close" onclick="closeModal('memory-modal')">
                         <span class="material-icons-round">close</span>
                     </button>
                 </div>
             </div>
 
             <!-- Toolbar with Forget Search and Tabs -->
-            <div class="memory-toolbar" style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; background: rgba(0,0,0,0.1);">
+            <div class="memory-toolbar"
+                style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; flex-shrink: 0; background: rgba(0,0,0,0.1);">
                 <div class="memory-tabs" style="display: flex; gap: 4px;">
-                    <button class="auto-tab memory-tab-btn active" data-tab="memory" data-i18n-aria="memory.tab_memory" aria-label="Memory" title="MEMORY.md" onclick="switchMemoryTab('memory')">
-                        <span class="material-icons-round" style="font-size: 15px;">memory</span> <span data-i18n="memory.tab_memory">Memory</span>
+                    <button class="auto-tab memory-tab-btn active" data-tab="memory" data-i18n-aria="memory.tab_memory"
+                        aria-label="Memory" title="MEMORY.md" onclick="switchMemoryTab('memory')">
+                        <span class="material-icons-round" style="font-size: 15px;">memory</span> <span
+                            data-i18n="memory.tab_memory">Memory</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="user" data-i18n-aria="memory.tab_user" aria-label="User profile" title="USER.md" onclick="switchMemoryTab('user')">
-                        <span class="material-icons-round" style="font-size: 15px;">person</span> <span data-i18n="memory.tab_user">User profile</span>
+                    <button class="auto-tab memory-tab-btn" data-tab="user" data-i18n-aria="memory.tab_user"
+                        aria-label="User profile" title="USER.md" onclick="switchMemoryTab('user')">
+                        <span class="material-icons-round" style="font-size: 15px;">person</span> <span
+                            data-i18n="memory.tab_user">User profile</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="history" data-i18n-aria="memory.tab_history" aria-label="History" title="HISTORY.md" onclick="switchMemoryTab('history')">
-                        <span class="material-icons-round" style="font-size: 15px;">history</span> <span data-i18n="memory.tab_history">History</span>
+                    <button class="auto-tab memory-tab-btn" data-tab="history" data-i18n-aria="memory.tab_history"
+                        aria-label="History" title="HISTORY.md" onclick="switchMemoryTab('history')">
+                        <span class="material-icons-round" style="font-size: 15px;">history</span> <span
+                            data-i18n="memory.tab_history">History</span>
                     </button>
-                    <button class="auto-tab memory-tab-btn" data-tab="diary" data-i18n-aria="memory.tab_diary" aria-label="Dreams and quarantine" onclick="switchMemoryTab('diary')">
-                        <span class="material-icons-round" style="font-size: 15px;">bedtime</span> <span data-i18n="memory.tab_diary">Dreams &amp; quarantine</span>
+                    <button class="auto-tab memory-tab-btn" data-tab="diary" data-i18n-aria="memory.tab_diary"
+                        aria-label="Dreams and quarantine" onclick="switchMemoryTab('diary')">
+                        <span class="material-icons-round" style="font-size: 15px;">bedtime</span> <span
+                            data-i18n="memory.tab_diary">Dreams &amp; quarantine</span>
                     </button>
                 </div>
 
                 <div style="display: flex; align-items: center; gap: 6px;">
-                    <input type="text" id="memory-forget-input" class="form-input" style="font-size: 12px; padding: 4px 8px; width: 180px;" data-i18n-placeholder="memory.forget_placeholder" data-i18n-aria="memory.forget_placeholder" aria-label="Search or redact a fact" placeholder="Search or redact a fact…" onkeydown="if(event.key==='Enter')searchForgetMemory()">
-                    <button type="button" class="btn-secondary btn-sm" onclick="searchForgetMemory()" data-i18n-title="memory.forget_search" data-i18n-aria="memory.forget_search" aria-label="Search for lines to redact" title="Search for lines to redact">
+                    <input type="text" id="memory-forget-input" class="form-input"
+                        style="font-size: 12px; padding: 4px 8px; width: 180px;"
+                        data-i18n-placeholder="memory.forget_placeholder" data-i18n-aria="memory.forget_placeholder"
+                        aria-label="Search or redact a fact" placeholder="Search or redact a fact…"
+                        onkeydown="if(event.key==='Enter')searchForgetMemory()">
+                    <button type="button" class="btn-secondary btn-sm" onclick="searchForgetMemory()"
+                        data-i18n-title="memory.forget_search" data-i18n-aria="memory.forget_search"
+                        aria-label="Search for lines to redact" title="Search for lines to redact">
                         <span class="material-icons-round" style="font-size: 14px;">search</span>
                     </button>
                 </div>
@@ -1261,13 +1538,16 @@
             </div>
 
             <!-- Footer with Edit/Save actions -->
-            <div class="modal-footer" style="flex-shrink: 0; justify-content: space-between; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border-color);">
+            <div class="modal-footer"
+                style="flex-shrink: 0; justify-content: space-between; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border-color);">
                 <div id="memory-save-status" role="status" aria-live="polite" style="font-size: 12px;"></div>
                 <div style="display: flex; gap: 8px;">
-                    <button type="button" class="btn-secondary btn-sm" id="btn-memory-edit-toggle" data-i18n-aria="common.edit" aria-label="Edit" onclick="toggleMemoryEdit()">
+                    <button type="button" class="btn-secondary btn-sm" id="btn-memory-edit-toggle"
+                        data-i18n-aria="common.edit" aria-label="Edit" onclick="toggleMemoryEdit()">
                         <span class="material-icons-round">edit</span> <span data-i18n="common.edit">Edit</span>
                     </button>
-                    <button type="button" class="btn-primary btn-sm" id="btn-memory-save" data-i18n-aria="common.save" aria-label="Save" onclick="saveCurrentMemoryFile()" style="display: none;">
+                    <button type="button" class="btn-primary btn-sm" id="btn-memory-save" data-i18n-aria="common.save"
+                        aria-label="Save" onclick="saveCurrentMemoryFile()" style="display: none;">
                         <span class="material-icons-round">save</span> <span data-i18n="common.save">Save</span>
                     </button>
                 </div>
@@ -1279,7 +1559,8 @@
     <div id="connected-apps-modal" class="modal-backdrop">
         <div class="modal" style="width: 720px; max-width: 95vw;">
             <div class="modal-header">
-                <h2><span class="material-icons-round">apps</span> <span data-i18n="apps.title">Connected Apps</span></h2>
+                <h2><span class="material-icons-round">apps</span> <span data-i18n="apps.title">Connected Apps</span>
+                </h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('connected-apps-modal')">
                     <span class="material-icons-round">close</span>
@@ -1295,7 +1576,8 @@
     <div id="context-modal" class="modal-backdrop">
         <div class="modal large">
             <div class="modal-header">
-                <h2><span class="material-icons-round" aria-hidden="true">psychology</span> <span data-i18n="workspace.context">Conversation context</span></h2>
+                <h2><span class="material-icons-round" aria-hidden="true">psychology</span> <span
+                        data-i18n="workspace.context">Conversation context</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('context-modal')">
                     <span class="material-icons-round">close</span>
@@ -1311,7 +1593,8 @@
     <div id="changelog-modal" class="modal-backdrop">
         <div class="modal large">
             <div class="modal-header">
-                <h2><span class="material-icons-round">new_releases</span> <span data-i18n="changelog.title">What's New</span></h2>
+                <h2><span class="material-icons-round">new_releases</span> <span data-i18n="changelog.title">What's
+                        New</span></h2>
                 <div style="flex:1"></div>
                 <a id="changelog-github-btn" href="#" target="_blank" class="btn-secondary"
                     style="margin-right: 12px; display: none; text-decoration: none;">
@@ -1335,7 +1618,8 @@
     <div id="fs-modal" class="modal-backdrop" data-backdrop-close="false">
         <div class="modal large">
             <div class="modal-header">
-                <h2><span class="material-icons-round">folder_open</span> <span data-i18n="files.title">File Explorer</span></h2>
+                <h2><span class="material-icons-round">folder_open</span> <span data-i18n="files.title">File
+                        Explorer</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.refresh" data-i18n-title="common.refresh"
                     aria-label="Refresh" onclick="loadFs(state.currentFsPath || '.')" title="Refresh">
                     <span class="material-icons-round">refresh</span>
@@ -1365,22 +1649,25 @@
     <div id="onboard-modal" class="modal-backdrop" data-backdrop-close="false" style="z-index: 2000;">
         <div class="modal modal-onboard">
             <div class="modal-header">
-                <h2><span class="material-icons-round">rocket_launch</span> <span data-i18n="onboard.title">Welcome to ShibaClaw</span></h2>
+                <h2><span class="material-icons-round">rocket_launch</span> <span data-i18n="onboard.title">Welcome to
+                        ShibaClaw</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('onboard-modal')"><span
                         class="material-icons-round">close</span></button>
             </div>
             <div class="ob-steps">
-                <div class="ob-step active" data-step="1"><span class="ob-dot">1</span><span
-                        class="ob-label" data-i18n="onboard.step.provider">Provider</span></div>
+                <div class="ob-step active" data-step="1"><span class="ob-dot">1</span><span class="ob-label"
+                        data-i18n="onboard.step.provider">Provider</span></div>
                 <div class="ob-line"></div>
-                <div class="ob-step" data-step="2"><span class="ob-dot">2</span><span
-                        class="ob-label" data-i18n="onboard.step.credentials">Credentials</span></div>
+                <div class="ob-step" data-step="2"><span class="ob-dot">2</span><span class="ob-label"
+                        data-i18n="onboard.step.credentials">Credentials</span></div>
                 <div class="ob-line"></div>
-                <div class="ob-step" data-step="3"><span class="ob-dot">3</span><span class="ob-label" data-i18n="onboard.step.model">Model</span>
+                <div class="ob-step" data-step="3"><span class="ob-dot">3</span><span class="ob-label"
+                        data-i18n="onboard.step.model">Model</span>
                 </div>
                 <div class="ob-line"></div>
-                <div class="ob-step" data-step="4"><span class="ob-dot">4</span><span class="ob-label" data-i18n="onboard.step.finish">Finish</span>
+                <div class="ob-step" data-step="4"><span class="ob-dot">4</span><span class="ob-label"
+                        data-i18n="onboard.step.finish">Finish</span>
                 </div>
             </div>
             <div class="modal-body ob-body" id="ob-body">
@@ -1390,8 +1677,9 @@
                         <div style="text-align:center;padding:2rem;color:var(--text-muted)"><span
                                 class="material-icons-round spin">progress_activity</span></div>
                     </div>
-                    <p class="ob-extra-note"><span class="material-icons-round">info</span><span data-i18n="onboard.more_providers">More providers can be
-                        configured later in Settings > Provider.</span></p>
+                    <p class="ob-extra-note"><span class="material-icons-round">info</span><span
+                            data-i18n="onboard.more_providers">More providers can be
+                            configured later in Settings > Provider.</span></p>
                 </div>
                 <div class="ob-panel" id="ob-step-2" style="display:none">
                     <p class="ob-subtitle" id="ob-key-title" data-i18n="onboard.enter_key">Enter your API key</p>
@@ -1409,13 +1697,15 @@
                         <p class="ob-hint" data-i18n="onboard.oauth_hint">This provider uses OAuth authentication.</p>
                         <button class="btn-primary" id="ob-oauth-btn" style="margin-top:1rem"><span
                                 class="material-icons-round"
-                                style="font-size:16px;vertical-align:middle">lock_open</span> <span data-i18n="onboard.oauth_login">Login with OAuth</span></button>
+                                style="font-size:16px;vertical-align:middle">lock_open</span> <span
+                                data-i18n="onboard.oauth_login">Login with OAuth</span></button>
                         <div id="ob-oauth-status" style="margin-top:1rem"></div>
                     </div>
                     <div id="ob-local-section" style="display:none">
                         <div style="text-align:center;padding:2rem">
                             <span class="material-icons-round" style="font-size:48px;color:var(--shiba-gold)">dns</span>
-                            <p style="margin-top:1rem;color:var(--text-secondary)" data-i18n="onboard.local_ok">No API key needed for local
+                            <p style="margin-top:1rem;color:var(--text-secondary)" data-i18n="onboard.local_ok">No API
+                                key needed for local
                                 providers.<br>Make sure the server is running locally.</p>
                         </div>
                     </div>
@@ -1436,7 +1726,8 @@
                 <div class="ob-panel" id="ob-step-4" style="display:none">
                     <div id="ob-tpl-section" style="display:none">
                         <p class="ob-subtitle" data-i18n="onboard.templates">Workspace Templates</p>
-                        <p class="ob-hint" style="margin-bottom:0.8rem" data-i18n="onboard.templates_hint">These template files already exist in your
+                        <p class="ob-hint" style="margin-bottom:0.8rem" data-i18n="onboard.templates_hint">These
+                            template files already exist in your
                             workspace. Check any you'd like to reset to defaults:</p>
                         <div id="ob-tpl-list" class="ob-tpl-list"></div>
                     </div>
@@ -1444,8 +1735,10 @@
                         <span class="material-icons-round"
                             style="font-size:48px;color:var(--shiba-gold)">check_circle</span>
                         <h3 style="margin:0.5rem 0" data-i18n="onboard.ready">Ready to go!</h3>
-                        <div class="ob-summary-row"><span data-i18n="onboard.summary_provider">Provider</span><strong id="ob-sum-provider"></strong></div>
-                        <div class="ob-summary-row"><span data-i18n="onboard.summary_model">Model</span><strong id="ob-sum-model"></strong></div>
+                        <div class="ob-summary-row"><span data-i18n="onboard.summary_provider">Provider</span><strong
+                                id="ob-sum-provider"></strong></div>
+                        <div class="ob-summary-row"><span data-i18n="onboard.summary_model">Model</span><strong
+                                id="ob-sum-model"></strong></div>
                     </div>
                 </div>
             </div>
@@ -1454,12 +1747,13 @@
                         class="material-icons-round" style="font-size:16px;vertical-align:middle">arrow_back</span>
                     <span data-i18n="onboard.back">Back</span></button>
                 <div style="flex:1"></div>
-                <button class="btn-primary" id="ob-btn-next" onclick="obGoStep(1)"><span data-i18n="onboard.next">Next</span> <span
-                        class="material-icons-round"
+                <button class="btn-primary" id="ob-btn-next" onclick="obGoStep(1)"><span
+                        data-i18n="onboard.next">Next</span> <span class="material-icons-round"
                         style="font-size:16px;vertical-align:middle">arrow_forward</span></button>
                 <button class="btn-primary" id="ob-btn-finish" onclick="obSubmit()" style="display:none"><span
-                        class="material-icons-round" style="font-size:16px;vertical-align:middle">check</span> <span data-i18n="onboard.finish">Finish
-                    Setup</span></button>
+                        class="material-icons-round" style="font-size:16px;vertical-align:middle">check</span> <span
+                        data-i18n="onboard.finish">Finish
+                        Setup</span></button>
             </div>
         </div>
     </div>
@@ -1487,11 +1781,14 @@
         </div>
         <div class="gh-star-content">
             <div class="gh-star-title" data-i18n="feedback.title">Do you like ShibaClaw?</div>
-            <div class="gh-star-text" data-i18n="feedback.body">Let us know how we can make ShibaClaw better for you!</div>
+            <div class="gh-star-text" data-i18n="feedback.body">Let us know how we can make ShibaClaw better for you!
+            </div>
         </div>
         <div class="gh-star-actions">
-            <button class="gh-star-btn" id="feedback-link" data-tally-open="WO6dqP" data-tally-emoji-text="👋" data-tally-emoji-animation="wave">
-                <span class="material-icons-round" style="font-size:14px">sentiment_satisfied_alt</span> <span data-i18n="feedback.btn">Feedback</span>
+            <button class="gh-star-btn" id="feedback-link" data-tally-open="WO6dqP" data-tally-emoji-text="👋"
+                data-tally-emoji-animation="wave">
+                <span class="material-icons-round" style="font-size:14px">sentiment_satisfied_alt</span> <span
+                    data-i18n="feedback.btn">Feedback</span>
             </button>
             <button class="gh-star-close" id="feedback-dismiss" data-i18n="feedback.later">Maybe later</button>
         </div>
@@ -1511,7 +1808,8 @@
                 </button>
             </div>
             <div class="modal-body" style="padding: 20px;">
-                <p style="margin-bottom:16px; color:var(--text-muted)" data-i18n="kb.desc">Manage collections of documents for the agent to
+                <p style="margin-bottom:16px; color:var(--text-muted)" data-i18n="kb.desc">Manage collections of
+                    documents for the agent to
                     reference.</p>
                 <div style="display:flex; gap:8px; margin-bottom: 16px;">
                     <input type="text" id="kb-new-name" class="form-input" placeholder="New collection name"
@@ -1544,8 +1842,9 @@
                 </button>
             </div>
             <div class="modal-body" style="padding: 20px;">
-                <p style="margin-bottom:16px; color:var(--text-muted)" data-i18n="rag.desc">Configure the Knowledge Base embedding provider.</p>
-                
+                <p style="margin-bottom:16px; color:var(--text-muted)" data-i18n="rag.desc">Configure the Knowledge Base
+                    embedding provider.</p>
+
                 <div class="field-row">
                     <label for="s-rag-provider" data-i18n="rag.provider">Embedding Provider</label>
                     <select id="s-rag-provider" class="form-input">
@@ -1554,7 +1853,8 @@
                         <option value="openrouter">OpenRouter (nomic-embed-text)</option>
                         <option value="openai">OpenAI (text-embedding-3-small)</option>
                     </select>
-                    <p class="settings-note" data-i18n="rag.provider_note">Select 'Local' to process documents locally. Select 'Gemini' to use cloud embeddings with zero RAM impact.</p>
+                    <p class="settings-note" data-i18n="rag.provider_note">Select 'Local' to process documents locally.
+                        Select 'Gemini' to use cloud embeddings with zero RAM impact.</p>
                 </div>
                 <div class="field-row">
                     <label for="s-rag-apiKey" data-i18n="rag.api_key">RAG Dedicated API Key (Optional)</label>
@@ -1572,13 +1872,15 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-primary" onclick="saveSettings(); closeModal('rag-settings-modal');" data-i18n="rag.save">Save Settings</button>
+                <button class="btn-primary" onclick="saveSettings(); closeModal('rag-settings-modal');"
+                    data-i18n="rag.save">Save Settings</button>
             </div>
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1790775928747"></script>
-    <script src="/static/js/chat_history_window.js?v=1790775928747"></script>
+    <script src="/static/bundle.js?v=1791292676074"></script>
+    <script src="/static/js/evolve.js?v=1791292676074"></script>
+    <script src="/static/js/chat_history_window.js?v=1791292676074"></script>
 </body>
 
 </html>

@@ -1,5 +1,5 @@
 /* ── Responsive Settings & Dedicated View ──────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .settings-view .settings-layout {
         flex-direction: column;
     }

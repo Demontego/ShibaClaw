@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added
