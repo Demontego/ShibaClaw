@@ -36,3 +36,17 @@ def test_fd_guard_detect_socket_leak():
     assert status["leak_detected"] is True
     assert "open_sockets" in status
 
+def test_fd_guard_get_active_connections():
+    guard = FDGuard()
+    connections = guard.get_active_connections()
+    assert isinstance(connections, list)
+
+def test_fd_guard_detect_connection_leak():
+    guard = FDGuard()
+    # Set a very low limit to trigger connection leak detection
+    status = guard.check_and_resolve_connection_leaks(max_connections=-1)
+    
+    assert status["leak_detected"] is True
+    assert "active_connections" in status
+
+

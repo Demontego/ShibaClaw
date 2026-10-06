@@ -105,3 +105,50 @@ class FDGuard:
             
         return {"leak_detected": False, "num_sockets": num_sockets}
 
+    def get_active_connections(self) -> List[int]:
+        """Returns a list of currently active network connection file descriptors for the current process."""
+        connections = []
+        try:
+            import socket
+            for fd in self.get_open_sockets():
+                try:
+                    s = socket.fromfd(fd, socket.AF_INET, socket.SOCK_STREAM)
+                    s.getpeername()
+                    connections.append(fd)
+                except Exception:
+                    try:
+                        s = socket.fromfd(fd, socket.AF_INET, socket.SOCK_DGRAM)
+                        s.getpeername()
+                        connections.append(fd)
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.error("FDGuard: Failed to get active connections: %s", e)
+        return connections
+
+    def check_and_resolve_connection_leaks(self, max_connections: int = 30) -> Dict[str, Any]:
+        """
+        Checks if the number of active network connections exceeds the safe limit.
+        If so, logs a warning and returns diagnostic information.
+        """
+        active_connections = self.get_active_connections()
+        num_connections = len(active_connections)
+        
+        logger.info("FDGuard: Currently active network connections: %d", num_connections)
+        
+        if num_connections > max_connections:
+            logger.warning(
+                "FDGuard: Network connection leak detected! Active connections: %d (limit: %d)",
+                num_connections,
+                max_connections
+            )
+            return {
+                "leak_detected": True,
+                "num_connections": num_connections,
+                "active_connections": active_connections,
+                "message": f"Network connection leak detected: {num_connections} active connections exceeds limit of {max_connections}."
+            }
+            
+        return {"leak_detected": False, "num_connections": num_connections}
+
+

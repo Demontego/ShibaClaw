@@ -13,12 +13,13 @@ class OSResourceGuard:
     (file descriptors, sockets, threads, child processes, and heap memory)
     by running individual specialized guards and aggregating their diagnostics.
     """
-    def __init__(self, max_fds: int = 100, max_sockets: int = 50, max_threads: int = 20, max_processes: int = 10, max_memory_mb: float = 500.0):
+    def __init__(self, max_fds: int = 100, max_sockets: int = 50, max_threads: int = 20, max_processes: int = 10, max_memory_mb: float = 500.0, max_connections: int = 30):
         self.fd_guard = FDGuard(max_fds=max_fds)
         self.thread_guard = ThreadGuard(max_threads=max_threads)
         self.process_guard = ProcessGuard(max_processes=max_processes)
         self.heap_memory_guard = HeapMemoryGuard(max_memory_mb=max_memory_mb)
         self.max_sockets = max_sockets
+        self.max_connections = max_connections
 
     def check_and_resolve_all_leaks(self) -> Dict[str, Any]:
         """
@@ -26,6 +27,7 @@ class OSResourceGuard:
         """
         fd_status = self.fd_guard.check_and_resolve_leaks()
         socket_status = self.fd_guard.check_and_resolve_socket_leaks(max_sockets=self.max_sockets)
+        connection_status = self.fd_guard.check_and_resolve_connection_leaks(max_connections=self.max_connections)
         thread_status = self.thread_guard.check_and_resolve_leaks()
         process_status = self.process_guard.check_and_resolve_leaks()
         memory_status = self.heap_memory_guard.check_and_resolve_leaks()
@@ -33,6 +35,7 @@ class OSResourceGuard:
         leak_detected = (
             fd_status.get("leak_detected", False) or
             socket_status.get("leak_detected", False) or
+            connection_status.get("leak_detected", False) or
             thread_status.get("leak_detected", False) or
             process_status.get("leak_detected", False) or
             memory_status.get("leak_detected", False)
@@ -42,6 +45,7 @@ class OSResourceGuard:
             "leak_detected": leak_detected,
             "fd_status": fd_status,
             "socket_status": socket_status,
+            "connection_status": connection_status,
             "thread_status": thread_status,
             "process_status": process_status,
             "memory_status": memory_status,
