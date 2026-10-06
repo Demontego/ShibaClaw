@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import time
+import pytest
 from shibaclaw.agent.process_guard import ProcessGuard
 
 def test_process_guard_get_child_pids():
@@ -8,6 +9,7 @@ def test_process_guard_get_child_pids():
     pids = guard.get_child_pids()
     assert isinstance(pids, list)
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Process tree inspection via pgrep/ps is unix-only")
 def test_process_guard_detect_leak():
     guard = ProcessGuard(max_processes=0)
     
