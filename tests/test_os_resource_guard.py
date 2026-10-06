@@ -1,3 +1,5 @@
+import sys
+import pytest
 from shibaclaw.agent.os_resource_guard import OSResourceGuard
 
 def test_os_resource_guard_check_all_no_leak():
@@ -18,6 +20,7 @@ def test_os_resource_guard_check_all_no_leak():
     assert "process_status" in status
     assert "memory_status" in status
 
+@pytest.mark.skipif(sys.platform == "win32", reason="FD checking is unix-only")
 def test_os_resource_guard_detect_leak():
     # Set a very low limit to trigger leak detection
     guard = OSResourceGuard(

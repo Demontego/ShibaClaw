@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.sre_monitor import SREMonitor
-from shibaclaw.agent.checkpoint_manager import CheckpointManager
+from shibaclaw.agent.checkpoint_manager import CheckpointManager, TaskCheckpointManager
 from shibaclaw.agent.semantic_tool_circuit_breaker import SemanticToolCircuitBreaker
 from shibaclaw.agent.tool_profiler import ToolProfiler
 from shibaclaw.agent.race_condition_guard import RaceConditionGuard
@@ -14,12 +14,17 @@ from shibaclaw.agent.heap_memory_guard import HeapMemoryGuard
 from shibaclaw.agent.os_resource_guard import OSResourceGuard
 from shibaclaw.agent.supervisor_tree import SupervisorTree
 from shibaclaw.agent.idempotent_saga import IdempotentSaga
+from shibaclaw.agent.graceful_degradation import GracefulDegradation
+from shibaclaw.agent.exponential_backoff import ExponentialBackoff
+from shibaclaw.agent.infinite_loop_detector import InfiniteLoopDetector
+from shibaclaw.agent.context_overflow_guard import ContextOverflowGuard, ContextWindowRecovery
+from shibaclaw.agent.idempotency_guard import IdempotencyGuard
 
 logger = logging.getLogger(__name__)
 
 class LayeredDefense:
     """
-    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard, FDGuard, ThreadGuard, ProcessGuard, HeapMemoryGuard, OSResourceGuard, SupervisorTree, IdempotentSaga)
+    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard, FDGuard, ThreadGuard, ProcessGuard, HeapMemoryGuard, OSResourceGuard, SupervisorTree, IdempotentSaga, GracefulDegradation, ExponentialBackoff, InfiniteLoopDetector, ContextWindowRecovery, IdempotencyGuard)
     into a single, cohesive, layered defense system.
     """
     def __init__(self, workspace: Path, session_key: str | None = None):
@@ -30,6 +35,7 @@ class LayeredDefense:
         self.stuck_detector = StuckDetector()
         self.sre_monitor = SREMonitor()
         self.checkpoint_mgr = CheckpointManager(workspace)
+        self.task_checkpoint_mgr = TaskCheckpointManager(workspace)
         self.semantic_tool_breaker = SemanticToolCircuitBreaker(workspace)
         self.tool_profiler = ToolProfiler(workspace)
         self.race_guard = RaceConditionGuard()
@@ -40,6 +46,12 @@ class LayeredDefense:
         self.os_resource_guard = OSResourceGuard()
         self.supervisor_tree = SupervisorTree()
         self.idempotent_saga = IdempotentSaga()
+        self.graceful_degradation = GracefulDegradation()
+        self.exponential_backoff = ExponentialBackoff()
+        self.infinite_loop_detector = InfiniteLoopDetector()
+        self.context_overflow_guard = ContextOverflowGuard(workspace)
+        self.context_window_recovery = ContextWindowRecovery(self.context_overflow_guard)
+        self.idempotency_guard = IdempotencyGuard()
 
     def record_iteration(
         self,

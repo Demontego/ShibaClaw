@@ -83,3 +83,53 @@ class CheckpointManager:
             except Exception as e:
                 logger.error("CheckpointManager: Failed to delete checkpoint for session %s: %s", session_key, e)
         return False
+
+class TaskCheckpointManager:
+    """
+    Manages checkpoints for specific long-running multi-step tasks,
+    allowing them to be resumed from the last successful step.
+    """
+    def __init__(self, workspace: Path):
+        self.workspace = workspace
+        self.checkpoints_dir = workspace / "memory" / "task_checkpoints"
+
+    def _get_checkpoint_path(self, task_id: str) -> Path:
+        return self.checkpoints_dir / f"{task_id}.json"
+
+    def save_task_checkpoint(self, task_id: str, current_step: str, state: Dict[str, Any]) -> bool:
+        if not task_id:
+            return False
+        try:
+            self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_path = self._get_checkpoint_path(task_id)
+            
+            data = {
+                "task_id": task_id,
+                "current_step": current_step,
+                "state": state,
+            }
+            
+            temp_path = checkpoint_path.with_suffix(".tmp")
+            temp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            temp_path.rename(checkpoint_path)
+            
+            logger.info("TaskCheckpointManager: Saved checkpoint for task %s at step %s", task_id, current_step)
+            return True
+        except Exception as e:
+            logger.error("TaskCheckpointManager: Failed to save checkpoint for task %s: %s", task_id, e)
+            return False
+
+    def load_task_checkpoint(self, task_id: str) -> Dict[str, Any] | None:
+        if not task_id:
+            return None
+        checkpoint_path = self._get_checkpoint_path(task_id)
+        if not checkpoint_path.is_file():
+            return None
+        try:
+            data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            logger.info("TaskCheckpointManager: Loaded checkpoint for task %s at step %s", task_id, data.get("current_step"))
+            return data
+        except Exception as e:
+            logger.error("TaskCheckpointManager: Failed to load checkpoint for task %s: %s", task_id, e)
+            return None
+
