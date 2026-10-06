@@ -1284,6 +1284,11 @@ class ShibaBrain:
                 if process_status.get("leak_detected"):
                     logger.warning("ProcessGuard: Process leak detected: {}", process_status.get("message"))
 
+                # Memory Guard: check and resolve heap memory leaks
+                memory_status = layered_defense.heap_memory_guard.check_and_resolve_leaks()
+                if memory_status.get("leak_detected"):
+                    logger.warning("MemoryGuard: Heap memory leak detected: {}", memory_status.get("message"))
+
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,
