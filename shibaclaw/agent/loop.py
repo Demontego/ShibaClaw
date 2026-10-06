@@ -1274,6 +1274,11 @@ class ShibaBrain:
                 if socket_status.get("leak_detected"):
                     logger.warning("FDGuard: Socket leak detected: {}", socket_status.get("message"))
 
+                # Thread Guard: check and resolve thread leaks
+                thread_status = layered_defense.thread_guard.check_and_resolve_leaks()
+                if thread_status.get("leak_detected"):
+                    logger.warning("ThreadGuard: Thread leak detected: {}", thread_status.get("message"))
+
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,
