@@ -112,6 +112,66 @@ def test_check_refuses_default_branch_and_env(tmp_path):
     assert check_repo(repo) is None
 
 
+def test_check_blocks_merge_until_ci_is_green(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "evolve",
+        "GIT_AUTHOR_EMAIL": "evolve@example.com",
+        "GIT_COMMITTER_NAME": "evolve",
+        "GIT_COMMITTER_EMAIL": "evolve@example.com",
+    }
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], check=True, env=env)
+
+    git("init", "-b", "main")
+    (repo / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    git("add", "ok.py")
+    git("commit", "-m", "init")
+    git("checkout", "-b", "evolve/demo")
+    (repo / "ok.py").write_text("x = 2\n", encoding="utf-8")
+    git("add", "ok.py")
+    git("commit", "-m", "fix")
+
+    monkeypatch.setattr(
+        "shibaclaw.evolve.switch.run_local_ci",
+        lambda _repo: "refuse: uv run pytest tests/ -q: 1 failed",
+    )
+    monkeypatch.setattr("shibaclaw.evolve.switch.github_ci", lambda _repo: None)
+    text, code = handle("check", workspace=tmp_path, repo=repo, tz=UTC)
+    assert code == 1
+    assert "pytest" in text
+
+    monkeypatch.setattr("shibaclaw.evolve.switch.run_local_ci", lambda _repo: None)
+    monkeypatch.setattr(
+        "shibaclaw.evolve.switch.github_ci",
+        lambda _repo: "refuse: CI pending Desktop Smoke Test (Windows)",
+    )
+    text, code = handle("check", workspace=tmp_path, repo=repo, tz=UTC)
+    assert code == 1
+    assert "CI pending" in text
+
+    monkeypatch.setattr("shibaclaw.evolve.switch.github_ci", lambda _repo: None)
+    text, code = handle("check", workspace=tmp_path, repo=repo, tz=UTC)
+    assert code == 0
+    assert text == "evolve check ok"
+
+
+def test_rollup_refuses_failed_and_pending_checks():
+    from shibaclaw.evolve.ci_gate import _rollup_reason
+
+    assert _rollup_reason([]) == "refuse: CI pending"
+    assert _rollup_reason([{"name": "Run Tests and Linters (3.14)", "status": "COMPLETED", "conclusion": "SUCCESS"}]) is None
+    pending = _rollup_reason([{"name": "Desktop Smoke Test (Windows)", "status": "IN_PROGRESS", "conclusion": ""}])
+    assert pending is not None
+    assert "CI pending" in pending
+    failed = _rollup_reason([{"name": "Desktop Smoke Test (Windows)", "status": "COMPLETED", "conclusion": "FAILURE"}])
+    assert failed is not None
+    assert "FAILURE" in failed
+
+
 def test_snapshot_reads_gate_and_job(tmp_path, monkeypatch):
     monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
     handle("on", workspace=tmp_path, tz=UTC)

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from shibaclaw.automation.types import AutomationPayload, AutomationSchedule
+from shibaclaw.evolve.ci_gate import github_ci, run_local_ci
+from shibaclaw.evolve.diffcheck import check_repo
 from shibaclaw.evolve.gate import (
     ALARM_MS,
     CAMPAIGN,
@@ -162,11 +164,9 @@ def handle(
         note_apply(workspace, data, zone)
         return status_line(load(workspace), zone), 0
     if action == "check":
-        from shibaclaw.evolve.diffcheck import check_repo
-
         if repo is None:
             return "evolve check needs --repo", 64
-        reason = check_repo(repo)
+        reason = check_repo(repo) or run_local_ci(repo) or github_ci(repo)
         if reason:
             return reason, 1
         return "evolve check ok", 0

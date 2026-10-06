@@ -5,7 +5,7 @@ description: "Opt-in self-evolution. One backlog class per alarm, evolve/* branc
 
 # Evolve
 
-One alarm tick. Do not edit this skill to skip the gate. Do not commit the default branch. Do not change the model provider. Do not ask the owner between steps. Push the branch only to the fork remote and open the pull request on the fork. After `VERDICT: PASS`, merge that pull request on the fork. Never open or merge a pull request against upstream.
+One alarm tick. Do not edit this skill to skip the gate. Do not commit the default branch. Do not push or force-push `main` or `master`. Do not change the model provider. Do not ask the owner between steps. Push `evolve/*` only to the fork remote and open the pull request on the fork. `VERDICT: PASS` does not authorize a merge. Merge that fork pull request only after `shibaclaw evolve check` prints `evolve check ok`. Never open or merge a pull request against upstream.
 
 State: `shibaclaw evolve` (`on|off|status|panic|gate|end|note-apply|check`).
 Review checklist: the evolve `CHECKLIST.md` next to this file.
@@ -33,8 +33,7 @@ Dirty tree, or `checkout -b evolve/<slug>` failed → `shibaclaw evolve end` and
 `<slug>` is the class name: letters, digits, hyphen.
 
 Touch only that class. Do not touch secrets, `.env`, credentials, or the owner allowlist.
-A test must pass, or the commit message contains `NOT_RUN:` and why.
-Commit on `evolve/<slug>` only. Do not push.
+Commit on `evolve/<slug>` only. Do not push yet. `NOT_RUN` does not skip tests.
 
 ## 3. Reviewer
 
@@ -48,11 +47,17 @@ No `VERDICT: PASS` line → record FAIL, leave the item Open, `shibaclaw evolve 
 
 ## 4. Check
 
+Push `evolve/<slug>` to the fork only. Open the pull request on the fork. Never push the default branch.
+
 ```bash
 shibaclaw evolve check --repo <git-repo>
 ```
 
-Non-zero → `shibaclaw evolve end` and send the reason to the owner. Do not install. Do not restart the process from this turn.
+The command runs `uv run ruff check .`, `uv run pytest tests/`, then requires the open pull request's GitHub checks to be green (including the Windows smoke job).
+
+Non-zero → do not merge. `shibaclaw evolve end` and send the reason to the owner. Leave the item Open. CI still running → the next alarm retries this same branch, not a new class. Do not install. Do not restart the process from this turn.
+
+`evolve check ok` → merge that fork pull request. That is the only merge.
 
 This package does not restart itself. Installing the reviewed commit is the operator's deploy step. After that deploy, `shibaclaw evolve note-apply` counts it against the daily budget (3 applies, 45 minutes between them).
 

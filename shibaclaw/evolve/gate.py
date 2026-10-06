@@ -16,7 +16,10 @@ COOLDOWN_MIN = 45
 CAMPAIGN = """Shiba evolve alarm. Read the evolve skill and follow it exactly.
 This wake is one consciousness tick. Decide. Do not ask the owner between steps.
 One class this wake. Do not message other chats.
-Do not push the upstream remote. After VERDICT: PASS, merge the pull request on the fork only. Do not commit to the default branch. Do not change the model provider.
+Do not push the upstream remote. Do not commit, push, or force-push the default branch.
+VERDICT: PASS does not authorize a merge. Merge the fork pull request only after `shibaclaw evolve check --repo <git-repo>` prints `evolve check ok`.
+That check runs ruff, pytest, and requires the pull request CI to be green. CI pending or red → do not merge.
+Do not change the model provider.
 If `shibaclaw evolve gate` exits 2, 3, or 5, reply exactly EVOLVE_SKIP and stop.
 If the code backlog is empty, study one world topic from USER.md and memory/people. Do not EVOLVE_SKIP just because there is no code class.
 """
