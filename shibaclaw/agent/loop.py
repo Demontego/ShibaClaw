@@ -1264,30 +1264,10 @@ class ShibaBrain:
                 elapsed = time.monotonic() - loop_start
                 sre_status = sre_monitor.get_status()
 
-                # FD Guard: check and resolve file descriptor leaks
-                fd_status = layered_defense.fd_guard.check_and_resolve_leaks()
-                if fd_status.get("leak_detected"):
-                    logger.warning("FDGuard: File descriptor leak detected: {}", fd_status.get("message"))
-
-                # Socket Guard: check and resolve socket leaks
-                socket_status = layered_defense.fd_guard.check_and_resolve_socket_leaks()
-                if socket_status.get("leak_detected"):
-                    logger.warning("FDGuard: Socket leak detected: {}", socket_status.get("message"))
-
-                # Thread Guard: check and resolve thread leaks
-                thread_status = layered_defense.thread_guard.check_and_resolve_leaks()
-                if thread_status.get("leak_detected"):
-                    logger.warning("ThreadGuard: Thread leak detected: {}", thread_status.get("message"))
-
-                # Process Guard: check and resolve process leaks
-                process_status = layered_defense.process_guard.check_and_resolve_leaks()
-                if process_status.get("leak_detected"):
-                    logger.warning("ProcessGuard: Process leak detected: {}", process_status.get("message"))
-
-                # Memory Guard: check and resolve heap memory leaks
-                memory_status = layered_defense.heap_memory_guard.check_and_resolve_leaks()
-                if memory_status.get("leak_detected"):
-                    logger.warning("MemoryGuard: Heap memory leak detected: {}", memory_status.get("message"))
+                # OS Resource Guard: check and resolve all OS resource leaks (FDs, sockets, threads, processes, heap memory)
+                os_resource_status = layered_defense.os_resource_guard.check_and_resolve_all_leaks()
+                if os_resource_status.get("leak_detected"):
+                    logger.warning("OSResourceGuard: OS resource leak detected!")
 
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
