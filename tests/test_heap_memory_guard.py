@@ -1,3 +1,5 @@
+import sys
+import pytest
 from shibaclaw.agent.heap_memory_guard import HeapMemoryGuard
 
 def test_memory_guard_get_memory_usage():
@@ -6,6 +8,7 @@ def test_memory_guard_get_memory_usage():
     assert isinstance(usage, float)
     assert usage >= 0.0
 
+@pytest.mark.skipif(sys.platform == "win32", reason="resource module is unix-only")
 def test_memory_guard_detect_leak():
     # Set a very low limit to trigger leak detection
     guard = HeapMemoryGuard(max_memory_mb=0.01)
