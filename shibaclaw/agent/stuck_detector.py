@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 from typing import Any, List, Dict
@@ -142,11 +143,21 @@ class StuckDetector:
 
         try:
             active_model = model or "google/gemini-2.5-flash"
-            response = await provider.chat_with_retry(
+            chat_fn = getattr(provider, "chat_with_retry", None)
+            if not callable(chat_fn):
+                return {"intent": "unknown", "is_loop": False, "confidence": 0.0}
+            call_res = chat_fn(
                 messages=[{"role": "user", "content": prompt}],
                 model=active_model,
             )
-            content = response.content.strip()
+            if inspect.isawaitable(call_res):
+                response = await call_res
+            else:
+                response = call_res
+            content = getattr(response, "content", "")
+            if not isinstance(content, str):
+                return {"intent": "unknown", "is_loop": False, "confidence": 0.0}
+            content = content.strip()
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
