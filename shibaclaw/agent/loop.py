@@ -39,6 +39,9 @@ from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.evolve.switch import handle as evolve_handle
+from shibaclaw.evolve.switch import is_owner_surface, owner_chat
+from shibaclaw.integrations.telegram_labels import telegram_owner_ids
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
@@ -1057,7 +1060,10 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
-            if cmd == "/stop":
+            head = cmd.split()[0].split("@", 1)[0] if cmd else ""
+            if head in {"/evolve", "/panic"}:
+                await self.bus.publish_outbound(await self._handle_evolve_cmd(msg))
+            elif cmd == "/stop":
                 await self._handle_stop(msg)
             elif cmd == "/restart":
                 await self._handle_restart(msg)
@@ -1077,6 +1083,41 @@ class ShibaBrain:
                 lock = self._session_locks.get(session_key)
                 if lock and not lock.locked():
                     self._session_locks.pop(session_key, None)
+
+    async def _handle_evolve_cmd(self, msg: InboundMessage) -> OutboundMessage:
+        """Owner /evolve and /panic. Does not restart the process."""
+        parts = msg.content.strip().split()
+        head = parts[0].lower().split("@", 1)[0] if parts else ""
+        owners = telegram_owner_ids(self.channels_config)
+        if not is_owner_surface(msg.channel, str(msg.sender_id), msg.metadata, owners):
+            content = "Evolution commands are owner-only."
+        else:
+            if head == "/panic":
+                tasks = self._active_tasks.pop(msg.session_key, [])
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                for task in tasks:
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                try:
+                    await self.subagents.cancel_by_session(msg.session_key)
+                except Exception:
+                    pass
+                action = "panic"
+            else:
+                action = parts[1].lower() if len(parts) > 1 else "status"
+                if action not in {"on", "off", "status"}:
+                    action = "status"
+            content, _code = evolve_handle(
+                action,
+                workspace=self.workspace,
+                automation=self.automation_service,
+                owner=owner_chat(self.channels_config),
+            )
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""
@@ -1375,6 +1416,8 @@ class ShibaBrain:
             lines = [
                 "🐕 shibaclaw commands:",
                 "/new — Start a new conversation",
+                "/evolve — Evolution on/off/status (owner)",
+                "/panic — Stop evolution, no restart",
                 "/stop — Stop the current task",
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",

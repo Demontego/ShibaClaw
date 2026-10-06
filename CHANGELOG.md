@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Opt-in self-evolution** — `/evolve on|off|status` and `/panic` (owner DM, CLI, or WebUI). An alarm takes one backlog class on an `evolve/*` branch. A separate `shibaclaw agent --model` process reviews. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself. `GET /api/evolve` shows the gate, chronicle, and recent commits.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added
