@@ -1269,6 +1269,11 @@ class ShibaBrain:
                 if fd_status.get("leak_detected"):
                     logger.warning("FDGuard: File descriptor leak detected: {}", fd_status.get("message"))
 
+                # Socket Guard: check and resolve socket leaks
+                socket_status = layered_defense.fd_guard.check_and_resolve_socket_leaks()
+                if socket_status.get("leak_detected"):
+                    logger.warning("FDGuard: Socket leak detected: {}", socket_status.get("message"))
+
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,
