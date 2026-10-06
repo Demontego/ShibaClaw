@@ -58,4 +58,5 @@ dependencies {
     implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.27.0")
     implementation("com.mikepenz:multiplatform-markdown-renderer-code:0.27.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }

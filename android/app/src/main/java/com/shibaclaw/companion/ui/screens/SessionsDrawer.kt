@@ -1,5 +1,6 @@
 package com.shibaclaw.companion.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,7 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.shibaclaw.companion.data.ShibaRepo
@@ -46,7 +49,10 @@ fun SessionsDrawer(onClose: () -> Unit) {
     var renameKey by remember { mutableStateOf<String?>(null) }
     var renameText by remember { mutableStateOf("") }
 
-    ModalDrawerSheet(modifier = Modifier.width(320.dp)) {
+    ModalDrawerSheet(
+        modifier = Modifier.width(264.dp),
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
         Column(
             Modifier
                 .fillMaxHeight()
@@ -78,18 +84,21 @@ fun SessionsDrawer(onClose: () -> Unit) {
                 singleLine = true,
             )
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
             LazyColumn(Modifier.weight(1f)) {
                 items(sessions, key = { it.key }) { s ->
                     val selected = s.key == current
                     Column(
                         Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                            )
                             .clickable {
                                 ShibaRepo.switchSession(s.key)
                                 onClose()
                             }
-                            .padding(vertical = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                     ) {
                         val agent = profiles.firstOrNull { it.id == s.profileId }?.title()
                             ?: s.profileId
@@ -97,11 +106,7 @@ fun SessionsDrawer(onClose: () -> Unit) {
                             s.nickname?.takeIf { it.isNotBlank() }
                                 ?: "Chat " + s.key.substringAfterLast(':').take(8),
                             style = MaterialTheme.typography.titleSmall,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -136,7 +141,6 @@ fun SessionsDrawer(onClose: () -> Unit) {
                             }
                         }
                     }
-                    HorizontalDivider()
                 }
             }
         }

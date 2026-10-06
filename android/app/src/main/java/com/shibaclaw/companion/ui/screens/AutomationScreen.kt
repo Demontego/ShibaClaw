@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.shibaclaw.companion.ui.theme.shibaBarColors
 import com.shibaclaw.companion.data.ShibaRepo
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +53,7 @@ fun AutomationScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = shibaBarColors(),
                 title = { Text("Automation") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

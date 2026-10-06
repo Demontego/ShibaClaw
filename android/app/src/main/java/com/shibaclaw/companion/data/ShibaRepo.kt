@@ -11,14 +11,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -87,7 +80,7 @@ object ShibaRepo {
     val events: SharedFlow<String> = _events.asSharedFlow()
 
     private val phoneNotifCounts = ConcurrentHashMap<String, Int>()
-    private var streamId: String? = null
+    private var transcript = ChatTranscript()
 
     @Volatile var client: ShibaClient? = null
 
@@ -140,120 +133,57 @@ object ShibaRepo {
         phoneNotifCounts.putAll(counts)
     }
 
-    fun phoneNotifLine(): String? {
-        if (phoneNotifCounts.isEmpty()) return null
-        val parts = phoneNotifCounts.entries
-            .sortedByDescending { it.value }
-            .take(3)
-            .map { "${it.value} in ${it.key}" }
-        return parts.joinToString(", ").let { "$it unread" }
-    }
+    fun phoneNotifLine(): String? = notifLine(phoneNotifCounts)
 
     fun pickLine(): String {
-        val d = _digest.value
-        val options = buildList {
-            phoneNotifLine()?.let { add(it) }
-            d.news.filter { it.isNotBlank() }.forEach { add(it) }
-            if (d.fact.isNotBlank()) add(d.fact)
-            if (d.moodLine.isNotBlank()) add(d.moodLine)
-        }
-        if (options.isEmpty()) {
-            return when (_mood.value) {
-                Mood.SLEEP -> "Zzz… wake me with a pair."
-                Mood.ERROR -> "Something broke. Check the server."
-                Mood.THINK -> "Thinking…"
-                Mood.ALERT -> "Heads up!"
-                Mood.BOOP -> "Boop!"
-                Mood.IDLE -> "Woof. Tap me again."
-            }
-        }
+        val options = widgetChoices(phoneNotifCounts, _digest.value)
+        if (options.isEmpty()) return moodCopy(_mood.value)
         val idx = if (::app.isInitialized) Prefs.pickIndex(app) else 0
         val next = (idx + 1) % options.size
         if (::app.isInitialized) Prefs.setPickIndex(app, next)
         return options[idx % options.size]
     }
 
+    private fun apply(next: ChatTranscript) {
+        transcript = next
+        _messages.value = next.items
+    }
+
+    private fun freshId(prefix: String): String = prefix + UUID.randomUUID().toString().take(8)
+
     fun appendUser(text: String, attachments: List<AttachmentRef> = emptyList()) {
-        val id = "u" + UUID.randomUUID().toString().take(8)
-        _messages.update { it + ChatItem.Message(id, true, text, attachments) }
+        apply(transcript.addUser(text, attachments, freshId("u")))
     }
 
     fun onChatDelta(text: String) {
-        val id = streamId ?: ("s" + UUID.randomUUID().toString().take(8)).also { streamId = it }
-        _messages.update { list ->
-            val existing = list.indexOfLast { it is ChatItem.Message && it.id == id }
-            if (existing >= 0) {
-                val msg = list[existing] as ChatItem.Message
-                list.toMutableList().also {
-                    it[existing] = msg.copy(text = msg.text + text, streaming = true)
-                }
-            } else {
-                list + ChatItem.Message(id, false, text, streaming = true)
-            }
-        }
+        apply(transcript.delta(text, transcript.streamId ?: freshId("s")))
         setProcessing(true)
     }
 
     fun onChatDone(text: String) {
-        val id = streamId
-        streamId = null
-        _messages.update { list ->
-            if (id != null) {
-                val idx = list.indexOfLast { it is ChatItem.Message && it.id == id }
-                if (idx >= 0) {
-                    val msg = list[idx] as ChatItem.Message
-                    list.toMutableList().also {
-                        it[idx] = msg.copy(text = text.ifBlank { msg.text }, streaming = false)
-                    }
-                } else if (text.isNotBlank()) {
-                    list + ChatItem.Message("d" + UUID.randomUUID().toString().take(8), false, text)
-                } else {
-                    list
-                }
-            } else if (text.isNotBlank()) {
-                list + ChatItem.Message("d" + UUID.randomUUID().toString().take(8), false, text)
-            } else {
-                list
-            }
-        }
+        apply(transcript.done(text, freshId("d")))
         setProcessing(false)
         if (text.isNotBlank()) setBubble(text)
     }
 
     fun onThinking(text: String) {
-        val id = "t" + UUID.randomUUID().toString().take(8)
-        _messages.update { it + ChatItem.Thinking(id, text) }
+        apply(transcript.thinking(text, freshId("t")))
         setMood(Mood.THINK)
         setProcessing(true)
     }
 
     fun onTool(name: String, detail: String = "") {
-        val id = "tool" + UUID.randomUUID().toString().take(8)
-        _messages.update { it + ChatItem.Tool(id, name, detail) }
+        apply(transcript.tool(name, detail, freshId("tool")))
         setMood(Mood.ALERT)
         setProcessing(true)
     }
 
     fun onInteractive(card: ChatItem.Interactive) {
-        if (card.kind == "progress_card") {
-            onSystem(listOf(card.prompt, card.hint).filter { it.isNotBlank() }.joinToString(" — "))
-            return
-        }
-        _messages.update {
-            it.filterNot { item -> item is ChatItem.Interactive && item.requestId == card.requestId } + card
-        }
+        apply(transcript.interactive(card, freshId("sys")))
     }
 
     fun markInteractiveAnswered(requestId: String) {
-        _messages.update { list ->
-            list.map {
-                if (it is ChatItem.Interactive && it.requestId == requestId) {
-                    it.copy(answered = true)
-                } else {
-                    it
-                }
-            }
-        }
+        apply(transcript.answered(requestId))
     }
 
     fun onQueued(position: Int) {
@@ -261,26 +191,15 @@ object ShibaRepo {
     }
 
     fun onSystem(text: String) {
-        _messages.update {
-            it + ChatItem.System("sys" + UUID.randomUUID().toString().take(8), text)
-        }
+        apply(transcript.copy(items = transcript.items + ChatItem.System(freshId("sys"), text)))
     }
 
     fun toggleCollapse(id: String) {
-        _messages.update { list ->
-            list.map {
-                when {
-                    it is ChatItem.Thinking && it.id == id -> it.copy(collapsed = !it.collapsed)
-                    it is ChatItem.Tool && it.id == id -> it.copy(collapsed = !it.collapsed)
-                    else -> it
-                }
-            }
-        }
+        apply(transcript.toggle(id))
     }
 
     fun clearMessages() {
-        _messages.value = emptyList()
-        streamId = null
+        apply(ChatTranscript())
     }
 
     fun ensureHistory() = scope.launch(Dispatchers.IO) {
@@ -295,52 +214,7 @@ object ShibaRepo {
         _sessionModel.value = detail.model
         _sessionProfile.value = detail.profile_id
         _sessionNick.value = detail.nickname.orEmpty()
-        val items = detail.messages.mapNotNull { m ->
-            val role = m.role.lowercase()
-            val text = contentToText(m.content)
-            if (text.isBlank() && m.metadata?.attachments.isNullOrEmpty()) return@mapNotNull null
-            val fromUser = role == "user" || role == "human"
-            if (role == "system" || role == "tool") return@mapNotNull null
-            ChatItem.Message(
-                id = "h" + UUID.randomUUID().toString().take(8),
-                fromUser = fromUser,
-                text = text,
-                attachments = m.metadata?.attachments?.map {
-                    AttachmentRef(it.name, it.url, it.type)
-                } ?: emptyList(),
-                time = shortStamp(m.timestamp),
-            )
-        }
-        _messages.value = items
-    }
-
-    private fun shortStamp(raw: String): String {
-        if (raw.isBlank()) return ""
-        val fmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
-        return runCatching { java.time.OffsetDateTime.parse(raw).format(fmt) }
-            .recoverCatching { java.time.LocalDateTime.parse(raw).format(fmt) }
-            .getOrDefault("")
-    }
-
-    private fun contentToText(content: JsonElement?): String {
-        if (content == null) return ""
-        return when (content) {
-            is JsonPrimitive -> content.contentOrNull ?: content.toString()
-            is JsonArray -> content.joinToString("\n") { el ->
-                when (el) {
-                    is JsonObject -> {
-                        val t = el["text"]?.jsonPrimitive?.contentOrNull
-                        t ?: el["content"]?.jsonPrimitive?.contentOrNull ?: ""
-                    }
-                    is JsonPrimitive -> el.contentOrNull ?: ""
-                    else -> ""
-                }
-            }
-            is JsonObject -> content["text"]?.jsonPrimitive?.contentOrNull
-                ?: content["content"]?.jsonPrimitive?.contentOrNull
-                ?: content.toString()
-            else -> content.toString()
-        }.trim()
+        apply(ChatTranscript(items = historyMessages(detail.messages) { freshId("h") }))
     }
 
     fun refreshSessions() = scope.launch(Dispatchers.IO) {

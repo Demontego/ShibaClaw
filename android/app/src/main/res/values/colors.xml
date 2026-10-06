@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg">#0D0D0D</color>
-    <color name="bubble_bg">#E61F1F1F</color>
-    <color name="bubble_text">#EEEEEE</color>
-    <color name="shiba_gold">#E8A317</color>
+    <color name="bg">#191918</color>
+    <color name="bubble_bg">#352B22</color>
+    <color name="bubble_text">#EEEEE8</color>
+    <color name="shiba_gold">#DBAA79</color>
 </resources>

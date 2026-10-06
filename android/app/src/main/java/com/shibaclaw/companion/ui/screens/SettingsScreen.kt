@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.shibaclaw.companion.ui.theme.shibaBarColors
 import com.shibaclaw.companion.Prefs
 import com.shibaclaw.companion.R
 import com.shibaclaw.companion.data.ShibaRepo
@@ -42,6 +43,7 @@ fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = shibaBarColors(),
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -62,10 +64,11 @@ fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
             Text(Prefs.baseUrl(ctx).ifBlank { "—" })
             Text(Prefs.username(ctx))
             Spacer(Modifier.height(8.dp))
-            Button(onClick = onRePair, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onRePair, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
                 Text("Re-pair account")
             }
             OutlinedButton(
+                shape = MaterialTheme.shapes.medium,
                 onClick = {
                     Prefs.clearPair(ctx)
                     onRePair()
@@ -78,6 +81,7 @@ fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
             Text("Theme", style = MaterialTheme.typography.titleMedium)
             ThemeMode.entries.forEach { mode ->
                 OutlinedButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = { ShibaRepo.setTheme(mode) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -89,6 +93,7 @@ fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
             Text(stringResource(R.string.add_widget_hint))
             Spacer(Modifier.height(8.dp))
             Button(
+                shape = MaterialTheme.shapes.medium,
                 onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                 },

@@ -99,6 +99,7 @@ fun PairScreen(onPaired: () -> Unit) {
         )
         Spacer(Modifier.height(20.dp))
         Button(
+            shape = MaterialTheme.shapes.medium,
             onClick = {
                 if (url.isBlank()) return@Button
                 Prefs.savePair(ctx, url, username, password)

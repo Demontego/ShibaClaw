@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.shibaclaw.companion.data.ShibaRepo
+import com.shibaclaw.companion.ui.theme.shibaBarColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +35,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = shibaBarColors(),
                 title = { Text("Notifications") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

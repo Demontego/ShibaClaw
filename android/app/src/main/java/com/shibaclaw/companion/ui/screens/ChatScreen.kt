@@ -89,7 +89,7 @@ import com.shibaclaw.companion.data.AttachmentRef
 import com.shibaclaw.companion.data.ChatItem
 import com.shibaclaw.companion.data.ShibaApi
 import com.shibaclaw.companion.data.ShibaRepo
-import com.shibaclaw.companion.ui.theme.ShibaGold
+import com.shibaclaw.companion.ui.theme.shibaBarColors
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -209,6 +209,7 @@ fun ChatScreen(
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 TopAppBar(
+                    colors = shibaBarColors(),
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Image(
@@ -345,6 +346,7 @@ fun ChatScreen(
                         value = input,
                         onValueChange = { input = it },
                         modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium,
                         placeholder = { Text("Tell Shiba…") },
                         maxLines = 5,
                     )
@@ -367,7 +369,11 @@ fun ChatScreen(
                                 )
                             },
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = ShibaGold)
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
                         }
                     }
                 }
@@ -403,9 +409,9 @@ private fun ChatBubble(
             val align = if (item.fromUser) Alignment.CenterEnd else Alignment.CenterStart
             Box(Modifier.fillMaxWidth(), contentAlignment = align) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = if (item.fromUser) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
@@ -473,7 +479,7 @@ private fun ChatBubble(
             var draft by remember(item.requestId) { mutableStateOf("") }
             val secret = item.kind == "credential"
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -521,6 +527,7 @@ private fun ChatBubble(
                                 singleLine = true,
                             )
                             Button(
+                                shape = MaterialTheme.shapes.medium,
                                 onClick = {
                                     if (draft.isBlank()) return@Button
                                     val body = JSONObject().put("ok", true)
