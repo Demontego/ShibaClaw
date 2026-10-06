@@ -24,7 +24,7 @@ window.openSettingsView = async function () {
         let startTab = "agent";
         try { startTab = localStorage.getItem("shibaclaw_settings_tab") || "agent"; } catch (e) { }
         
-        const isMobile = window.matchMedia("(max-width: 768px)").matches;
+        const isMobile = window.matchMedia("(max-width: 900px)").matches;
         if (isMobile) {
             document.getElementById("settings-mobile-dashboard").style.display = "block";
             document.getElementById("settings-body").style.display = "none";
@@ -82,7 +82,7 @@ window.switchSettingsTab = function (tab, options = {}) {
     }
     try { localStorage.setItem("shibaclaw_settings_tab", tab); } catch (e) { }
 
-    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    const isMobile = window.matchMedia("(max-width: 900px)").matches;
     const subtitleEl = document.getElementById("settings-current-tab-title");
     if (subtitleEl) {
         const label = sidebarEl ? sidebarEl.querySelector("span:last-child")?.textContent || tab : tab;
