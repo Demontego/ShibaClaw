@@ -14,12 +14,14 @@ from shibaclaw.agent.heap_memory_guard import HeapMemoryGuard
 from shibaclaw.agent.os_resource_guard import OSResourceGuard
 from shibaclaw.agent.supervisor_tree import SupervisorTree
 from shibaclaw.agent.idempotent_saga import IdempotentSaga
+from shibaclaw.agent.graceful_degradation import GracefulDegradation
+from shibaclaw.agent.exponential_backoff import ExponentialBackoff
 
 logger = logging.getLogger(__name__)
 
 class LayeredDefense:
     """
-    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard, FDGuard, ThreadGuard, ProcessGuard, HeapMemoryGuard, OSResourceGuard, SupervisorTree, IdempotentSaga)
+    Coordinates all reliability and safety mechanisms (StuckDetector, SREMonitor, CheckpointManager, SemanticToolCircuitBreaker, ToolProfiler, RaceConditionGuard, FDGuard, ThreadGuard, ProcessGuard, HeapMemoryGuard, OSResourceGuard, SupervisorTree, IdempotentSaga, GracefulDegradation, ExponentialBackoff)
     into a single, cohesive, layered defense system.
     """
     def __init__(self, workspace: Path, session_key: str | None = None):
@@ -40,6 +42,8 @@ class LayeredDefense:
         self.os_resource_guard = OSResourceGuard()
         self.supervisor_tree = SupervisorTree()
         self.idempotent_saga = IdempotentSaga()
+        self.graceful_degradation = GracefulDegradation()
+        self.exponential_backoff = ExponentialBackoff()
 
     def record_iteration(
         self,
