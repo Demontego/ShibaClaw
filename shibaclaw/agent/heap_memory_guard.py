@@ -1,8 +1,41 @@
+import ctypes
 import gc
 import logging
-from typing import Dict, Any
+import sys
+from typing import Any, Dict
+
+try:
+    import resource
+except ImportError:
+    resource = None
 
 logger = logging.getLogger(__name__)
+
+
+class _ProcessMemoryCounters(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_ulong),
+        ("PageFaultCount", ctypes.c_ulong),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+    ]
+
+
+def _windows_rss_mb() -> float:
+    counters = _ProcessMemoryCounters()
+    counters.cb = ctypes.sizeof(counters)
+    get_info = ctypes.windll.psapi.GetProcessMemoryInfo
+    get_info.argtypes = [ctypes.c_void_p, ctypes.POINTER(_ProcessMemoryCounters), ctypes.c_ulong]
+    get_info.restype = ctypes.c_int
+    if not get_info(ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        return 0.0
+    return counters.WorkingSetSize / (1024.0 * 1024.0)
 
 class HeapMemoryGuard:
     """
@@ -15,13 +48,14 @@ class HeapMemoryGuard:
     def get_memory_usage_mb(self) -> float:
         """Returns the current memory usage of the process in megabytes."""
         try:
-            import resource
+            if sys.platform == "win32":
+                return _windows_rss_mb()
+            if resource is None:
+                return 0.0
             usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            import sys
             if sys.platform == "darwin":
                 return usage / (1024.0 * 1024.0)
-            else:
-                return usage / 1024.0
+            return usage / 1024.0
         except Exception as e:
             logger.error("HeapMemoryGuard: Failed to get memory usage: %s", e)
             return 0.0

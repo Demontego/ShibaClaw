@@ -1,8 +1,28 @@
-import os
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict, List
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 logger = logging.getLogger(__name__)
+
+_CRT_FD_SCAN = 512
+
+
+def _windows_open_fds() -> list[int]:
+    if msvcrt is None:
+        return []
+    fds: list[int] = []
+    for fd in range(_CRT_FD_SCAN):
+        try:
+            msvcrt.get_osfhandle(fd)
+        except OSError:
+            continue
+        fds.append(fd)
+    return fds
 
 class FDGuard:
     """
@@ -14,6 +34,8 @@ class FDGuard:
 
     def get_open_fds(self) -> List[int]:
         """Returns a list of currently open file descriptors for the current process."""
+        if os.name == "nt":
+            return _windows_open_fds()
         try:
             fd_dir = f"/proc/{os.getpid()}/fd"
             if os.path.exists(fd_dir):

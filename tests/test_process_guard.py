@@ -1,5 +1,7 @@
 import subprocess
+import sys
 import time
+
 from shibaclaw.agent.process_guard import ProcessGuard
 
 def test_process_guard_get_child_pids():
@@ -11,7 +13,7 @@ def test_process_guard_detect_leak():
     guard = ProcessGuard(max_processes=0)
     
     # Spawn a dummy child process
-    proc = subprocess.Popen(["sleep", "10"])
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         # Give it a tiny bit of time to start
         time.sleep(0.1)
