@@ -83,7 +83,7 @@ class Thinker(ABC):
 
     _CHAT_RETRY_DELAYS = (1, 2, 4)
     _TRANSIENT_ERROR_MARKERS = (
-        "404",
+        "408",
         "429",
         "rate limit",
         "500",
@@ -100,8 +100,47 @@ class Thinker(ABC):
         "json error",
         "empty choices",
     )
+    _PERMANENT_ERROR_MARKERS = (
+        "400",
+        "401",
+        "403",
+        "invalid_api_key",
+        "api_key_invalid",
+        "unauthorized",
+        "forbidden",
+        "permission_denied",
+        "model_not_found",
+        "unknown_model",
+        "invalid_model",
+        "context_length_exceeded",
+        "max_context_length",
+        "token_limit_exceeded",
+        "invalid_request_error",
+        "bad_request",
+    )
 
     _SENTINEL = object()
+    _RESPONSE_CACHE: dict[str, LLMResponse] = {}
+    _RESPONSE_CACHE_MAX = 8
+
+    @classmethod
+    def _remember_response(
+        cls,
+        messages: list[dict[str, Any]],
+        model: str | None,
+        response: LLMResponse,
+    ) -> None:
+        """Keep a few successful replies for outage fallback. Drop the oldest."""
+        key = cls._get_cache_key(messages, model)
+        cls._RESPONSE_CACHE[key] = response
+        while len(cls._RESPONSE_CACHE) > cls._RESPONSE_CACHE_MAX:
+            cls._RESPONSE_CACHE.pop(next(iter(cls._RESPONSE_CACHE)))
+
+    @classmethod
+    def _get_cache_key(cls, messages: list[dict[str, Any]], model: str | None) -> str:
+        # Serialize messages to a stable string
+        clean_msgs = [{"role": m["role"], "content": m.get("content")} for m in messages if "role" in m]
+        return f"{model}:{json.dumps(clean_msgs, sort_keys=True, ensure_ascii=False)}"
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self.api_key = api_key
@@ -246,7 +285,14 @@ class Thinker(ABC):
         return response
 
     @classmethod
+    def _is_permanent_error(cls, content: str | None) -> bool:
+        err = (content or "").lower()
+        return any(marker in err for marker in cls._PERMANENT_ERROR_MARKERS)
+
+    @classmethod
     def _is_transient_error(cls, content: str | None) -> bool:
+        if cls._is_permanent_error(content):
+            return False
         err = (content or "").lower()
         return any(marker in err for marker in cls._TRANSIENT_ERROR_MARKERS)
 
@@ -301,6 +347,7 @@ class Thinker(ABC):
         reasoning_effort: object = _SENTINEL,
         tool_choice: str | dict[str, Any] | None = None,
         log_transient_errors: bool = True,
+        fallback_models: list[str] | None = None,
     ) -> LLMResponse:
         """Call chat() with retry on transient provider failures.
 
@@ -321,7 +368,9 @@ class Thinker(ABC):
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
         )
 
-        for attempt, delay in enumerate(self._CHAT_RETRY_DELAYS, start=1):
+        import random
+        max_retries = len(self._CHAT_RETRY_DELAYS)
+        for attempt in range(1, max_retries + 1):
             response = await self._safe_chat(**kw)
 
             if response.finish_reason != "error":
@@ -338,15 +387,46 @@ class Thinker(ABC):
                     return await self._safe_chat(**{**kw, "messages": stripped})
                 return response
 
+            if attempt == max_retries:
+                break
+
+            # Exponential backoff with Equal Jitter (base_delay/2 + random(0, base_delay/2))
+            base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
+            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
+
             if log_transient_errors:
                 logger.warning(
-                    "LLM transient error (attempt {}/{}), retrying in {}s: {}",
-                    attempt, len(self._CHAT_RETRY_DELAYS), delay,
+                    "LLM transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                    attempt, max_retries, delay,
                     (response.content or "")[:120].lower(),
                 )
             await asyncio.sleep(delay)
 
-        return await self._safe_chat(**kw)
+        response = await self._safe_chat(**kw)
+        if response.finish_reason == "error":
+            fallbacks = [m for m in (fallback_models or []) if m and m != model]
+            if fallbacks:
+                fallback = fallbacks[0]
+                logger.warning("Primary model {} failed. Falling back to {}", model, fallback)
+                kw_fallback = kw.copy()
+                kw_fallback["model"] = fallback
+                kw_fallback["fallback_models"] = fallbacks[1:]
+                return await self.chat_with_retry(**kw_fallback)
+
+            # If all fallbacks failed, try to return a cached response
+            cache_key = self._get_cache_key(messages, model)
+            if cache_key in self._RESPONSE_CACHE:
+                logger.warning("LLM call failed completely. Falling back to cached response.")
+                import copy
+                cached = self._RESPONSE_CACHE[cache_key]
+                if cached.content:
+                    cached = copy.deepcopy(cached)
+                    cached.content += "\n\n[WARNING: This is a cached response returned due to LLM provider outage.]"
+                return cached
+        else:
+            self._remember_response(messages, model, response)
+
+        return response
 
     async def chat_with_retry_streaming(
         self,
@@ -358,6 +438,7 @@ class Thinker(ABC):
         temperature: object = _SENTINEL,
         reasoning_effort: object = _SENTINEL,
         tool_choice: str | dict[str, Any] | None = None,
+        fallback_models: list[str] | None = None,
     ) -> LLMResponse:
         """Like chat_with_retry but uses streaming for the final response."""
         if max_tokens is self._SENTINEL:
@@ -373,7 +454,9 @@ class Thinker(ABC):
             reasoning_effort=reasoning_effort, tool_choice=tool_choice,
         )
 
-        for attempt, delay in enumerate(self._CHAT_RETRY_DELAYS, start=1):
+        import random
+        max_retries = len(self._CHAT_RETRY_DELAYS)
+        for attempt in range(1, max_retries + 1):
             try:
                 response = await asyncio.wait_for(
                     self.chat_streaming(**kw), timeout=self._CHAT_TIMEOUT,
@@ -399,9 +482,16 @@ class Thinker(ABC):
                     continue
                 return response
 
+            if attempt == max_retries:
+                break
+
+            # Exponential backoff with Equal Jitter (base_delay/2 + random(0, base_delay/2))
+            base_delay = self._CHAT_RETRY_DELAYS[attempt - 1]
+            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
+
             logger.warning(
-                "LLM streaming transient error (attempt {}/{}), retrying in {}s: {}",
-                attempt, len(self._CHAT_RETRY_DELAYS), delay,
+                "LLM streaming transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                attempt, max_retries, delay,
                 (response.content or "")[:120].lower(),
             )
             await asyncio.sleep(delay)
@@ -412,16 +502,17 @@ class Thinker(ABC):
                 logger.warning("Falling back to non-streaming due to SSE parser error")
                 kw_chat = kw.copy()
                 kw_chat.pop("on_token", None)
+                kw_chat["fallback_models"] = fallback_models
                 # Delegate entirely to chat_with_retry for the remaining attempts
                 return await self.chat_with_retry(**kw_chat)
 
         # Final attempt
         try:
-            return await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 self.chat_streaming(**kw), timeout=self._CHAT_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            return LLMResponse(
+            response = LLMResponse(
                 content="Error calling LLM: request timed out",
                 finish_reason="error",
             )
@@ -429,7 +520,32 @@ class Thinker(ABC):
             raise
         except Exception as exc:
             logger.exception("LLM Provider encountered an unexpected error during final streaming attempt")
-            return LLMResponse(content=f"Error calling LLM: {exc}", finish_reason="error")
+            response = LLMResponse(content=f"Error calling LLM: {exc}", finish_reason="error")
+
+        if response.finish_reason == "error":
+            fallbacks = [m for m in (fallback_models or []) if m and m != model]
+            if fallbacks:
+                fallback = fallbacks[0]
+                logger.warning("Primary model {} failed during streaming. Falling back to {}", model, fallback)
+                kw_fallback = kw.copy()
+                kw_fallback["model"] = fallback
+                kw_fallback["fallback_models"] = fallbacks[1:]
+                return await self.chat_with_retry_streaming(**kw_fallback)
+
+            # If all fallbacks failed, try to return a cached response
+            cache_key = self._get_cache_key(messages, model)
+            if cache_key in self._RESPONSE_CACHE:
+                logger.warning("LLM call failed completely during streaming. Falling back to cached response.")
+                import copy
+                cached = self._RESPONSE_CACHE[cache_key]
+                if cached.content:
+                    cached = copy.deepcopy(cached)
+                    cached.content += "\n\n[WARNING: This is a cached response returned due to LLM provider outage.]"
+                return cached
+        else:
+            self._remember_response(messages, model, response)
+
+        return response
 
     @abstractmethod
     def get_default_model(self) -> str:

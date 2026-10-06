@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **LLM retry** — equal-jitter backoff, permanent-error classification (no retry on 4xx auth/model/context), optional `fallback_models`, and a small cache used only after every fallback fails. No model is selected unless the caller passes `fallback_models`.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added
