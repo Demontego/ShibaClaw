@@ -1279,6 +1279,11 @@ class ShibaBrain:
                 if thread_status.get("leak_detected"):
                     logger.warning("ThreadGuard: Thread leak detected: {}", thread_status.get("message"))
 
+                # Process Guard: check and resolve process leaks
+                process_status = layered_defense.process_guard.check_and_resolve_leaks()
+                if process_status.get("leak_detected"):
+                    logger.warning("ProcessGuard: Process leak detected: {}", process_status.get("message"))
+
                 logger.info(
                     "🐕 [SRE Health Monitor] Iteration {} | Elapsed: {:.1f}s | Tokens Used: {} | Healthy: {} | Liveness: {} | Progress: {} | Quality: {}",
                     iteration,
