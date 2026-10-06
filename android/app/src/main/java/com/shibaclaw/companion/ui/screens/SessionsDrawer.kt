@@ -40,6 +40,8 @@ import com.shibaclaw.companion.data.ShibaRepo
 fun SessionsDrawer(onClose: () -> Unit) {
     val sessions by ShibaRepo.sessions.collectAsState()
     val current by ShibaRepo.sessionId.collectAsState()
+    val profiles by ShibaRepo.profiles.collectAsState()
+    val currentProfile by ShibaRepo.sessionProfile.collectAsState()
     var query by remember { mutableStateOf("") }
     var renameKey by remember { mutableStateOf<String?>(null) }
     var renameText by remember { mutableStateOf("") }
@@ -55,10 +57,10 @@ fun SessionsDrawer(onClose: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Sessions", style = MaterialTheme.typography.titleLarge)
+                Text("Chats", style = MaterialTheme.typography.titleLarge)
                 IconButton(
                     onClick = {
-                        ShibaRepo.newSession()
+                        ShibaRepo.newSession(currentProfile)
                         onClose()
                     },
                 ) {
@@ -89,8 +91,11 @@ fun SessionsDrawer(onClose: () -> Unit) {
                             }
                             .padding(vertical = 10.dp),
                     ) {
+                        val agent = profiles.firstOrNull { it.id == s.profileId }?.title()
+                            ?: s.profileId
                         Text(
-                            s.nickname?.ifBlank { null } ?: s.key,
+                            s.nickname?.takeIf { it.isNotBlank() }
+                                ?: "Chat " + s.key.substringAfterLast(':').take(8),
                             style = MaterialTheme.typography.titleSmall,
                             color = if (selected) {
                                 MaterialTheme.colorScheme.primary
@@ -109,6 +114,13 @@ fun SessionsDrawer(onClose: () -> Unit) {
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }
+                        Text(
+                            listOf(agent, ago(s.updatedAt)).filter { it.isNotBlank() }.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Row {
                             TextButton(
                                 onClick = {
@@ -153,5 +165,16 @@ fun SessionsDrawer(onClose: () -> Unit) {
                 TextButton(onClick = { renameKey = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+private fun ago(ms: Long): String {
+    if (ms <= 0L) return ""
+    val min = (System.currentTimeMillis() - ms) / 60_000L
+    return when {
+        min < 1 -> "now"
+        min < 60 -> "${min}m"
+        min < 60 * 24 -> "${min / 60}h"
+        else -> "${min / (60 * 24)}d"
     }
 }

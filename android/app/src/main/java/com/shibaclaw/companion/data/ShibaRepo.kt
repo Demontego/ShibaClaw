@@ -62,6 +62,15 @@ object ShibaRepo {
     private val _sessionProfile = MutableStateFlow("default")
     val sessionProfile: StateFlow<String> = _sessionProfile.asStateFlow()
 
+    private val _sessionNick = MutableStateFlow("")
+    val sessionNick: StateFlow<String> = _sessionNick.asStateFlow()
+
+    private val _jobs = MutableStateFlow<List<AutoJob>>(emptyList())
+    val jobs: StateFlow<List<AutoJob>> = _jobs.asStateFlow()
+
+    private val _jobsError = MutableStateFlow("")
+    val jobsError: StateFlow<String> = _jobsError.asStateFlow()
+
     private val _notifications = MutableStateFlow<List<AgentNotification>>(emptyList())
     val notifications: StateFlow<List<AgentNotification>> = _notifications.asStateFlow()
 
@@ -285,6 +294,7 @@ object ShibaRepo {
     fun loadSessionHistory(detail: SessionDetail) {
         _sessionModel.value = detail.model
         _sessionProfile.value = detail.profile_id
+        _sessionNick.value = detail.nickname.orEmpty()
         val items = detail.messages.mapNotNull { m ->
             val role = m.role.lowercase()
             val text = contentToText(m.content)
@@ -298,9 +308,18 @@ object ShibaRepo {
                 attachments = m.metadata?.attachments?.map {
                     AttachmentRef(it.name, it.url, it.type)
                 } ?: emptyList(),
+                time = shortStamp(m.timestamp),
             )
         }
         _messages.value = items
+    }
+
+    private fun shortStamp(raw: String): String {
+        if (raw.isBlank()) return ""
+        val fmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        return runCatching { java.time.OffsetDateTime.parse(raw).format(fmt) }
+            .recoverCatching { java.time.LocalDateTime.parse(raw).format(fmt) }
+            .getOrDefault("")
     }
 
     private fun contentToText(content: JsonElement?): String {
@@ -364,6 +383,7 @@ object ShibaRepo {
         client?.newSession(profileId)
         clearMessages()
         _sessionProfile.value = profileId
+        _sessionNick.value = ""
         refreshSessions()
     }
 
@@ -374,6 +394,7 @@ object ShibaRepo {
                 if (id == _sessionId.value) {
                     fields["model"]?.let { _sessionModel.value = it.toString() }
                     fields["profile_id"]?.let { _sessionProfile.value = it.toString() }
+                    fields["nickname"]?.let { _sessionNick.value = it.toString() }
                 }
                 refreshSessions()
             }
@@ -391,6 +412,56 @@ object ShibaRepo {
     fun archiveSession(id: String) = scope.launch(Dispatchers.IO) {
         runCatching { ShibaApi.archiveSession(id) }
             .onSuccess { refreshSessions() }
+    }
+
+    fun refreshJobs() = scope.launch(Dispatchers.IO) {
+        runCatching { ShibaApi.listJobs() }
+            .onSuccess {
+                _jobs.value = it
+                _jobsError.value = ""
+            }
+            .onFailure { _jobsError.value = it.message ?: "jobs failed" }
+    }
+
+    fun createJob(
+        name: String,
+        message: String,
+        kind: String,
+        everyMin: Int,
+        cron: String,
+        atMs: Long,
+    ) = scope.launch(Dispatchers.IO) {
+        runCatching {
+            ShibaApi.createJob(
+                name,
+                message,
+                kind,
+                everyMin,
+                cron,
+                atMs,
+                _sessionProfile.value,
+                _sessionId.value.orEmpty(),
+            )
+        }.onSuccess { refreshJobs() }
+            .onFailure { _jobsError.value = it.message ?: "create failed" }
+    }
+
+    fun setJobEnabled(id: String, enabled: Boolean) = scope.launch(Dispatchers.IO) {
+        runCatching { ShibaApi.setJobEnabled(id, enabled) }
+            .onSuccess { refreshJobs() }
+            .onFailure { _jobsError.value = it.message ?: "update failed" }
+    }
+
+    fun triggerJob(id: String) = scope.launch(Dispatchers.IO) {
+        runCatching { ShibaApi.triggerJob(id) }
+            .onSuccess { refreshJobs() }
+            .onFailure { _jobsError.value = it.message ?: "trigger failed" }
+    }
+
+    fun deleteJob(id: String) = scope.launch(Dispatchers.IO) {
+        runCatching { ShibaApi.deleteJob(id) }
+            .onSuccess { refreshJobs() }
+            .onFailure { _jobsError.value = it.message ?: "delete failed" }
     }
 
     fun clearNotifications() = scope.launch(Dispatchers.IO) {

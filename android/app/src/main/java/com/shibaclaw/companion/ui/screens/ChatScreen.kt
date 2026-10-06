@@ -8,6 +8,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,9 +25,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -49,6 +52,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -97,6 +102,7 @@ import kotlinx.coroutines.withContext
 fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenNotifications: () -> Unit,
+    onOpenAutomation: () -> Unit,
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -108,8 +114,10 @@ fun ChatScreen(
     val queued by ShibaRepo.queued.collectAsState()
     val sessionModel by ShibaRepo.sessionModel.collectAsState()
     val sessionProfile by ShibaRepo.sessionProfile.collectAsState()
+    val sessionNick by ShibaRepo.sessionNick.collectAsState()
     val models by ShibaRepo.models.collectAsState()
     val profiles by ShibaRepo.profiles.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
     var input by remember { mutableStateOf("") }
     val pending = remember { mutableStateListOf<AttachmentRef>() }
     var uploading by remember { mutableStateOf(false) }
@@ -129,6 +137,9 @@ fun ChatScreen(
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
         }
+    }
+    LaunchedEffect(Unit) {
+        ShibaRepo.events.collect { snackbar.showSnackbar(it) }
     }
 
     fun uploadUri(uri: Uri, mime: String, name: String) {
@@ -195,6 +206,7 @@ fun ChatScreen(
         },
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -206,7 +218,11 @@ fun ChatScreen(
                             )
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Text("ShibaClaw", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    sessionNick.ifBlank { "ShibaClaw" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                )
                                 Text(
                                     status,
                                     style = MaterialTheme.typography.bodySmall,
@@ -221,6 +237,9 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = onOpenAutomation) {
+                            Icon(Icons.Default.Schedule, contentDescription = "Automation")
+                        }
                         IconButton(onClick = onOpenNotifications) {
                             Icon(Icons.Default.Notifications, contentDescription = "Notifications")
                         }
@@ -240,20 +259,15 @@ fun ChatScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    AssistChip(
-                        onClick = { showPicker = true },
-                        label = {
-                            Text(
-                                listOfNotNull(
-                                    sessionModel.ifBlank { "model" },
-                                    sessionProfile.takeIf { it.isNotBlank() },
-                                ).joinToString(" · "),
-                            )
-                        },
-                    )
+                    val agent = profiles.firstOrNull { it.id == sessionProfile }?.title()
+                        ?: sessionProfile.ifBlank { "agent" }
+                    val modelLabel = sessionModel.substringAfterLast('/').ifBlank { "model" }
+                    AssistChip(onClick = { showPicker = true }, label = { Text(agent, maxLines = 1) })
+                    AssistChip(onClick = { showPicker = true }, label = { Text(modelLabel, maxLines = 1) })
                     if (processing) {
                         AssistChip(
                             onClick = { ShibaRepo.client?.stop() },
@@ -371,14 +385,8 @@ fun ChatScreen(
                 profiles = profiles,
                 currentModel = sessionModel,
                 currentProfile = sessionProfile,
-                onSelectModel = {
-                    ShibaRepo.patchSession(mapOf("model" to it))
-                    showPicker = false
-                },
-                onSelectProfile = {
-                    ShibaRepo.patchSession(mapOf("profile_id" to it))
-                    showPicker = false
-                },
+                onSelectModel = { ShibaRepo.patchSession(mapOf("model" to it)) },
+                onSelectProfile = { ShibaRepo.patchSession(mapOf("profile_id" to it)) },
             )
         }
     }
@@ -433,6 +441,13 @@ private fun ChatBubble(
                         }
                         if (item.streaming) {
                             Text("…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (item.time.isNotBlank()) {
+                            Text(
+                                item.time,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -553,36 +568,61 @@ fun ModelProfileSheet(
     onSelectModel: (String) -> Unit,
     onSelectProfile: (String) -> Unit,
 ) {
+    var query by remember { mutableStateOf("") }
+    val needle = query.trim()
+    val shownProfiles = profiles.filter {
+        needle.isBlank() || it.title().contains(needle, true) || it.description.contains(needle, true)
+    }
+    val shownModels = models.filter {
+        needle.isBlank() || it.name.contains(needle, true) || it.id.contains(needle, true) ||
+            it.provider.contains(needle, true)
+    }
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(horizontal = 16.dp),
     ) {
-        Text("Profile", style = MaterialTheme.typography.titleMedium)
-        profiles.forEach { p ->
-            TextButton(
-                onClick = { onSelectProfile(p.id) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    (if (p.id == currentProfile) "✓ " else "") +
-                        p.title(),
-                )
+        Text("Agent and model", style = MaterialTheme.typography.titleMedium)
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search") },
+            singleLine = true,
+        )
+        LazyColumn(Modifier.height(420.dp)) {
+            item { Text("Agents", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
+            items(shownProfiles, key = { "p-" + it.id }) { p ->
+                TextButton(onClick = { onSelectProfile(p.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text((if (p.id == currentProfile) "✓ " else "") + p.title())
+                        if (p.description.isNotBlank()) {
+                            Text(
+                                p.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                            )
+                        }
+                    }
+                }
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text("Model", style = MaterialTheme.typography.titleMedium)
-        models.forEach { m ->
-            TextButton(
-                onClick = { onSelectModel(m.id) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    (if (m.id == currentModel) "✓ " else "") +
-                        (m.name.ifBlank { m.id }),
-                )
+            item { Text("Models", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp)) }
+            items(shownModels, key = { "m-" + it.id }) { m ->
+                TextButton(onClick = { onSelectModel(m.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text((if (m.id == currentModel) "✓ " else "") + m.name.ifBlank { m.id.substringAfterLast('/') })
+                        if (m.provider.isNotBlank() || m.id.contains('/')) {
+                            Text(
+                                m.provider.ifBlank { m.id.substringBefore('/') },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
-        Spacer(Modifier.height(24.dp))
     }
 }

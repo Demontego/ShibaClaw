@@ -4,6 +4,8 @@ import com.shibaclaw.companion.Endpoints
 import com.shibaclaw.companion.Prefs
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -116,6 +118,95 @@ object ShibaApi {
         send("POST", "/api/sessions/${java.net.URLEncoder.encode(id, "UTF-8")}/archive")
     }
 
+    fun listJobs(): List<AutoJob> {
+        val raw = get("/api/automation/jobs")
+        val arr = if (raw.trimStart().startsWith("[")) {
+            org.json.JSONArray(raw)
+        } else {
+            JSONObject(raw).optJSONArray("jobs")
+        } ?: return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val payload = o.optJSONObject("payload")
+                val state = o.optJSONObject("state")
+                add(
+                    AutoJob(
+                        id = o.optString("id"),
+                        name = o.optString("name").ifBlank { "Job" },
+                        enabled = o.optBoolean("enabled", true),
+                        schedule = scheduleLabel(o.optJSONObject("schedule")),
+                        message = payload?.optString("message").orEmpty(),
+                        lastStatus = state?.optString("lastStatus").orEmpty(),
+                        profileId = payload?.optString("profileId").orEmpty(),
+                    ),
+                )
+            }
+        }
+    }
+
+    fun createJob(
+        name: String,
+        message: String,
+        kind: String,
+        everyMin: Int,
+        cron: String,
+        atMs: Long,
+        profileId: String,
+        sessionKey: String,
+    ) {
+        val schedule = JSONObject().put("kind", kind)
+        when (kind) {
+            "every" -> schedule.put("everyMs", everyMin.coerceAtLeast(1) * 60_000L)
+            "cron" -> schedule.put("expr", cron)
+            "at" -> schedule.put("atMs", atMs)
+        }
+        val payload = JSONObject()
+            .put("kind", "scheduled")
+            .put("message", message)
+            .put("deliver", false)
+        if (profileId.isNotBlank()) payload.put("profileId", profileId)
+        if (sessionKey.isNotBlank()) payload.put("sessionKey", sessionKey)
+        val body = JSONObject()
+            .put("name", name.ifBlank { "Job" })
+            .put("enabled", true)
+            .put("deleteAfterRun", kind == "at")
+            .put("schedule", schedule)
+            .put("payload", payload)
+        send("POST", "/api/automation/jobs", body.toString())
+    }
+
+    fun setJobEnabled(id: String, enabled: Boolean) {
+        val body = JSONObject().put("enabled", enabled).toString()
+        send("PATCH", "/api/automation/jobs/${java.net.URLEncoder.encode(id, "UTF-8")}", body)
+    }
+
+    fun triggerJob(id: String) {
+        send("POST", "/api/automation/jobs/${java.net.URLEncoder.encode(id, "UTF-8")}/trigger", "{}")
+    }
+
+    fun deleteJob(id: String) {
+        send("DELETE", "/api/automation/jobs/${java.net.URLEncoder.encode(id, "UTF-8")}")
+    }
+
+    private fun scheduleLabel(s: JSONObject?): String {
+        if (s == null) return ""
+        return when (s.optString("kind")) {
+            "every" -> {
+                val min = (s.optLong("everyMs") / 60_000L).coerceAtLeast(1)
+                if (min % 60L == 0L) "every ${min / 60}h" else "every ${min}m"
+            }
+            "cron" -> s.optString("expr").ifBlank { "cron" }
+            "at" -> {
+                val ms = s.optLong("atMs")
+                if (ms <= 0) "once" else Instant.ofEpochMilli(ms)
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("d MMM HH:mm"))
+            }
+            else -> s.optString("kind")
+        }
+    }
+
     fun listModels(): List<ModelEntry> {
         val raw = get("/api/models")
         return try {
@@ -153,6 +244,7 @@ object ShibaApi {
                             id = m.optString("id"),
                             name = m.optString("name"),
                             label = m.optString("label"),
+                            description = m.optString("description"),
                         ),
                     )
                 }
@@ -203,6 +295,8 @@ object ShibaApi {
                         preview = o.optString("preview")
                             .ifBlank { o.optString("snippet") }
                             .ifBlank { o.optString("last_message") },
+                        profileId = o.optString("profile_id").ifBlank { "default" },
+                        model = o.optString("model"),
                     ),
                 )
             }

@@ -25,16 +25,18 @@ enum class Mood {
 enum class Clip(
     val frameDrawables: List<Int>,
     val intervalMs: Int,
-    val durationMs: Long,
+    val restMs: Long,
     val looping: Boolean = true,
 ) {
     IDLE(
         listOf(
             com.shibaclaw.companion.R.drawable.clip_idle_0,
             com.shibaclaw.companion.R.drawable.clip_idle_1,
+            com.shibaclaw.companion.R.drawable.clip_idle_2,
+            com.shibaclaw.companion.R.drawable.clip_idle_3,
         ),
-        700,
-        0,
+        60,
+        2400,
         true,
     ),
     BOOP(
@@ -42,9 +44,14 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_boop_0,
             com.shibaclaw.companion.R.drawable.clip_boop_1,
             com.shibaclaw.companion.R.drawable.clip_boop_2,
+            com.shibaclaw.companion.R.drawable.clip_boop_3,
+            com.shibaclaw.companion.R.drawable.clip_boop_4,
+            com.shibaclaw.companion.R.drawable.clip_boop_5,
+            com.shibaclaw.companion.R.drawable.clip_boop_6,
+            com.shibaclaw.companion.R.drawable.clip_boop_7,
         ),
-        120,
-        480,
+        70,
+        0,
         false,
     ),
     WAG(
@@ -53,9 +60,15 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_wag_1,
             com.shibaclaw.companion.R.drawable.clip_wag_2,
             com.shibaclaw.companion.R.drawable.clip_wag_3,
+            com.shibaclaw.companion.R.drawable.clip_wag_4,
+            com.shibaclaw.companion.R.drawable.clip_wag_5,
+            com.shibaclaw.companion.R.drawable.clip_wag_6,
+            com.shibaclaw.companion.R.drawable.clip_wag_7,
+            com.shibaclaw.companion.R.drawable.clip_wag_8,
+            com.shibaclaw.companion.R.drawable.clip_wag_9,
         ),
-        140,
-        700,
+        72,
+        0,
         false,
     ),
     JUMP(
@@ -63,9 +76,16 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_jump_0,
             com.shibaclaw.companion.R.drawable.clip_jump_1,
             com.shibaclaw.companion.R.drawable.clip_jump_2,
+            com.shibaclaw.companion.R.drawable.clip_jump_3,
+            com.shibaclaw.companion.R.drawable.clip_jump_4,
+            com.shibaclaw.companion.R.drawable.clip_jump_5,
+            com.shibaclaw.companion.R.drawable.clip_jump_6,
+            com.shibaclaw.companion.R.drawable.clip_jump_7,
+            com.shibaclaw.companion.R.drawable.clip_jump_8,
+            com.shibaclaw.companion.R.drawable.clip_jump_9,
         ),
-        130,
-        520,
+        64,
+        0,
         false,
     ),
     THINK(
@@ -117,6 +137,7 @@ sealed class ChatItem {
         val text: String,
         val attachments: List<AttachmentRef> = emptyList(),
         val streaming: Boolean = false,
+        val time: String = "",
     ) : ChatItem()
 
     data class Thinking(
@@ -163,6 +184,8 @@ data class SessionSummary(
     val nickname: String?,
     val updatedAt: Long = 0L,
     val preview: String = "",
+    val profileId: String = "default",
+    val model: String = "",
 )
 
 data class Digest(
@@ -202,6 +225,7 @@ data class SessionMessage(
     val role: String = "",
     val content: JsonElement? = null,
     val metadata: SessionMessageMeta? = null,
+    val timestamp: String = "",
 )
 
 @Serializable
@@ -238,9 +262,20 @@ data class ProfileEntry(
     val id: String = "",
     val name: String = "",
     val label: String = "",
+    val description: String = "",
 ) {
-    fun title(): String = name.ifBlank { label }.ifBlank { id }
+    fun title(): String = label.ifBlank { name }.ifBlank { id }
 }
+
+data class AutoJob(
+    val id: String,
+    val name: String,
+    val enabled: Boolean,
+    val schedule: String,
+    val message: String,
+    val lastStatus: String,
+    val profileId: String,
+)
 
 @Serializable
 data class UploadResponse(

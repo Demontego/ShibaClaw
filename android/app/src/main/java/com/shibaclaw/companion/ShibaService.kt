@@ -150,7 +150,7 @@ class ShibaService : Service(), ShibaClient.Listener {
     private fun arm(clip: Clip) {
         main.removeCallbacks(anim)
         if (clip.frameDrawables.size <= 1) return
-        val delay = if (clip.looping) 2800L else clip.intervalMs.toLong()
+        val delay = if (clip.looping) clip.restMs else clip.intervalMs.toLong()
         main.postDelayed(anim, delay)
     }
 
@@ -160,28 +160,21 @@ class ShibaService : Service(), ShibaClient.Listener {
         val clip = currentClip()
         val count = clip.frameDrawables.size
         if (count <= 1) return
-        val index = Prefs.frameIndex(this)
-        if (!clip.looping) {
-            val next = index + 1
-            if (next >= count) {
+        val next = Prefs.frameIndex(this) + 1
+        if (next >= count) {
+            if (!clip.looping) {
                 oneShot = false
                 onMood(if (client.connected) Mood.IDLE else Mood.SLEEP)
                 return
             }
-            Prefs.setFrame(this, next)
-            ShibaWidget.refresh(this)
-            main.postDelayed(anim, clip.intervalMs.toLong())
-            return
-        }
-        if (index == 0) {
-            Prefs.setFrame(this, 1)
-            ShibaWidget.refresh(this)
-            main.postDelayed(anim, 180)
-        } else {
             Prefs.setFrame(this, 0)
             ShibaWidget.refresh(this)
-            main.postDelayed(anim, 2800)
+            main.postDelayed(anim, clip.restMs)
+            return
         }
+        Prefs.setFrame(this, next)
+        ShibaWidget.refresh(this)
+        main.postDelayed(anim, clip.intervalMs.toLong())
     }
 
     private fun vibrate() {

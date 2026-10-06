@@ -14,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.shibaclaw.companion.data.ShibaRepo
+import com.shibaclaw.companion.ui.screens.AutomationScreen
 import com.shibaclaw.companion.ui.screens.ChatScreen
 import com.shibaclaw.companion.ui.screens.NotificationsScreen
 import com.shibaclaw.companion.ui.screens.PairScreen
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity() {
                             ChatScreen(
                                 onOpenSettings = { nav.navigate("settings") },
                                 onOpenNotifications = { nav.navigate("notifications") },
+                                onOpenAutomation = { nav.navigate("automation") },
                             )
                         }
                         composable("settings") {
@@ -60,6 +62,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("notifications") {
                             NotificationsScreen(onBack = { nav.popBackStack() })
+                        }
+                        composable("automation") {
+                            AutomationScreen(onBack = { nav.popBackStack() })
                         }
                     }
                 }
