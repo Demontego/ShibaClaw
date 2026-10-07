@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Durable turn journal** — Tool calls are recorded before they run, so a crash or a redelivered input does not execute the same call twice. `/stop` still cancels the turn; `/stop idle` lets the current tool finish. Incognito sessions keep this journal in memory.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added

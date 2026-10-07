@@ -1792,6 +1792,8 @@ class TelegramChannel(BaseChannel):
         self._remember_thread_context(message)
         metadata = self._build_message_metadata(message, user)
         metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
+        if update.update_id is not None:
+            metadata["input_id"] = f"telegram:{update.update_id}"
         await self._handle_message(
             sender_id=sender_id,
             chat_id=str(message.chat_id),
@@ -1866,6 +1868,8 @@ class TelegramChannel(BaseChannel):
             content = f"{sender_name}: {content}"
         metadata = self._build_message_metadata(message, user, guest=is_guest)
         metadata["is_allowlisted"] = self._sender_is_allowlisted(sender_id, user.username)
+        if update.update_id is not None:
+            metadata["input_id"] = f"telegram:{update.update_id}"
         if is_guest:
             session_key = f"telegram:guest:{metadata.get('guest_query_id') or chat_id}"
         else:

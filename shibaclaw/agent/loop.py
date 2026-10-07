@@ -19,6 +19,7 @@ from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
+from shibaclaw.agent.turn_journal import REFUSAL, JournalError, TurnJournal
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
 from shibaclaw.agent.tools.interactive import (
@@ -136,6 +137,8 @@ class ShibaBrain:
         self.context = ScentBuilder(workspace)
         self.sessions = session_manager or PackManager(workspace)
         self.tools = SkillVault()
+        self.turn_journal = TurnJournal(workspace / "runtime" / "turns")
+        self._ephemeral_journal = TurnJournal(None)
         self.subagents = SubagentManager(
             provider=provider,
             workspace=workspace,
@@ -704,6 +707,13 @@ class ShibaBrain:
             )
         finally:
             reset_permission_mode(perm_tokens)
+            if session_key:
+                journal = self._journal_for(session_key)
+                if journal is not None:
+                    try:
+                        journal.clear_stop(session_key)
+                    except JournalError as exc:
+                        logger.error("turn journal: {}", exc)
 
     async def _run_agent_loop_inner(
         self,
@@ -914,6 +924,7 @@ class ShibaBrain:
                     thinking_blocks=response.thinking_blocks,
                 )
 
+                stop_turn = False
                 for tool_call in response.tool_calls:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
@@ -942,61 +953,91 @@ class ShibaBrain:
                             ),
                         )
                         continue
-                    try:
-                        tool_future = asyncio.ensure_future(
-                            self.tools.execute(tool_call.name, tool_call.arguments)
-                        )
-                        # Emit periodic "still working" progress while the
-                        # tool runs, so the UI doesn't look stuck.
-                        _heartbeat = 15  # seconds
-                        _waited = 0
-                        while not tool_future.done():
-                            remaining = self.tool_timeout - _waited
-                            if remaining <= 0 and self.tool_timeout > 0:
-                                break
-                            step_timeout = (
-                                max(0.1, min(float(_heartbeat), float(remaining)))
-                                if self.tool_timeout > 0
-                                else _heartbeat
-                            )
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.shield(tool_future),
-                                    timeout=step_timeout,
-                                )
-                            except asyncio.TimeoutError:
-                                _waited += _heartbeat
-                                if self.tool_timeout > 0 and _waited >= self.tool_timeout:
-                                    break
-                                if on_progress:
-                                    await on_progress(
-                                        f"⏳ {tool_call.name} still running ({_waited}s)…",
-                                        tool_hint=True,
-                                    )
-                                continue
 
-                        if not tool_future.done():
-                            tool_future.cancel()
-                            result = (
-                                f"Error: Tool '{tool_call.name}' timed out after "
-                                f"{_waited}s (cap: {self.tool_timeout}s)"
+                    async def _run_tool(call: Any = tool_call) -> str:
+                        try:
+                            tool_future = asyncio.ensure_future(
+                                self.tools.execute(call.name, call.arguments)
+                            )
+                            # Emit periodic "still working" progress while the
+                            # tool runs, so the UI doesn't look stuck.
+                            _heartbeat = 15  # seconds
+                            _waited = 0
+                            while not tool_future.done():
+                                remaining = self.tool_timeout - _waited
+                                if remaining <= 0 and self.tool_timeout > 0:
+                                    break
+                                step_timeout = (
+                                    max(0.1, min(float(_heartbeat), float(remaining)))
+                                    if self.tool_timeout > 0
+                                    else _heartbeat
+                                )
+                                try:
+                                    await asyncio.wait_for(
+                                        asyncio.shield(tool_future),
+                                        timeout=step_timeout,
+                                    )
+                                except asyncio.TimeoutError:
+                                    _waited += _heartbeat
+                                    if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                                        break
+                                    if on_progress:
+                                        await on_progress(
+                                            f"⏳ {tool_call.name} still running ({_waited}s)…",
+                                            tool_hint=True,
+                                        )
+                                    continue
+
+                            if not tool_future.done():
+                                tool_future.cancel()
+                                return (
+                                    f"Error: Tool '{call.name}' timed out after "
+                                    f"{_waited}s (cap: {self.tool_timeout}s)"
+                                )
+                            return tool_future.result()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            return f"Error: Tool '{call.name}' failed: {exc}"
+
+                    journal = self._journal_for(session_key)
+                    halt = False
+                    try:
+                        if journal is not None and session_key:
+                            result, halt = await journal.execute_claimed(
+                                session_key,
+                                str(tool_call.id or tool_call.name),
+                                tool_call.name,
+                                _run_tool,
                             )
                         else:
-                            result = tool_future.result()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:
-                        result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+                            result = await _run_tool()
+                    except JournalError as exc:
+                        logger.error("turn journal: {}", exc)
+                        final_content = REFUSAL
+                        stop_turn = True
+                        break
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
+                        original = len(result)
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
                             result[:half]
-                            + f"\n...[TRUNCATED — {len(result)} chars total]...\n"
+                            + f"\n...[TRUNCATED — {original} chars total]...\n"
                             + result[-half:]
                         )
+                        if journal is not None and session_key:
+                            journal.note_truncation(
+                                session_key, tool_call.name, f"{original} chars"
+                            )
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
+                    if halt:
+                        final_content = result
+                        stop_turn = True
+                        break
+                if stop_turn:
+                    break
             else:
                 # Strip think from logs/debug output, but keep full content for memory (so UI can reload it)
                 clean = self._strip_think(response.content)
@@ -1057,8 +1098,17 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
-            if cmd == "/stop":
-                await self._handle_stop(msg)
+            folded = " ".join(cmd.split())
+            if folded == "/stop":
+                content = await self._handle_stop(msg, msg.session_key, "hard")
+                await self.bus.publish_outbound(
+                    OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+                )
+            elif folded in {"/stop idle", "/stop when_idle"}:
+                content = await self._handle_stop(msg, msg.session_key, "when_idle")
+                await self.bus.publish_outbound(
+                    OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+                )
             elif cmd == "/restart":
                 await self._handle_restart(msg)
             else:
@@ -1078,25 +1128,85 @@ class ShibaBrain:
                 if lock and not lock.locked():
                     self._session_locks.pop(session_key, None)
 
-    async def _handle_stop(self, msg: InboundMessage) -> None:
-        """Cancel all active tasks and subagents for the session."""
-        tasks = self._active_tasks.pop(msg.session_key, [])
-        cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
-        for t in tasks:
+    def _journal_for(self, session_key: str | None) -> TurnJournal | None:
+        if not session_key:
+            return None
+        try:
+            session = self.sessions.get_or_create(session_key)
+            meta = getattr(session, "metadata", None) or {}
+        except Exception:
+            logger.warning("turn journal lookup failed for {}", session_key)
+            return self._ephemeral_journal
+        if meta.get("incognito") or meta.get("ephemeral"):
+            return self._ephemeral_journal
+        return self.turn_journal
+
+    def _screen_turn_input(
+        self,
+        msg: InboundMessage,
+        session_key: str,
+        *,
+        channel: str | None = None,
+        chat_id: str | None = None,
+    ) -> bool | OutboundMessage | None:
+        journal = self._journal_for(session_key)
+        if journal is None:
+            return True
+        input_id = (msg.metadata or {}).get("input_id")
+        try:
+            fresh = journal.accept_input(session_key, None if input_id is None else str(input_id))
+        except JournalError as exc:
+            logger.error("turn journal: {}", exc)
+            return OutboundMessage(
+                channel=channel or msg.channel,
+                chat_id=chat_id or msg.chat_id,
+                content=REFUSAL,
+            )
+        if fresh:
+            return True
+        logger.info("Dropped duplicate input {} for {}", input_id, session_key)
+        return None
+
+    def _with_interrupt_note(self, session_key: str, messages: list[dict]) -> list[dict]:
+        journal = self._journal_for(session_key)
+        if journal is None:
+            return messages
+        note = journal.consume_interruptions(session_key)
+        if not note:
+            return messages
+        messages.insert(max(len(messages) - 1, 0), {"role": "user", "content": note})
+        return messages
+
+    async def _handle_stop(self, msg: InboundMessage, session_key: str, mode: str) -> str:
+        """Hard stop cancels the turn. Idle stop lets the current tool finish."""
+        journal = self._journal_for(session_key)
+        tasks = [task for task in self._active_tasks.get(session_key, []) if not task.done()]
+        if mode == "when_idle":
+            if not tasks:
+                return "No active scent to stop."
+            if journal is not None:
+                journal.request_stop(session_key, "when_idle")
+            return "Stopping when the current tool finishes."
+        if journal is not None:
             try:
-                await t
+                journal.request_stop(session_key, "hard")
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
+        tasks = self._active_tasks.pop(session_key, [])
+        cancelled = sum(1 for task in tasks if not task.done() and task.cancel())
+        for task in tasks:
+            try:
+                await task
             except (asyncio.CancelledError, Exception):
                 pass
-        sub_cancelled = await self.subagents.cancel_by_session(msg.session_key)
+        sub_cancelled = await self.subagents.cancel_by_session(session_key)
+        if journal is not None:
+            try:
+                journal.clear_stop(session_key)
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
         total = cancelled + sub_cancelled
-        content = f"🐕 Halted {total} hunt(s)." if total else "No active scent to stop."
-        await self.bus.publish_outbound(
-            OutboundMessage(
-                channel=msg.channel,
-                chat_id=msg.chat_id,
-                content=content,
-            )
-        )
+        return f"🐕 Halted {total} hunt(s)." if total else "No active scent to stop."
 
     _ALLOWED_SUBCOMMANDS = frozenset({"web", "gateway", "cli"})
 
@@ -1226,6 +1336,9 @@ class ShibaBrain:
             )
             logger.debug("Processing system message from {}", msg.sender_id)
             key = f"{channel}:{chat_id}"
+            screened = self._screen_turn_input(msg, key, channel=channel, chat_id=chat_id)
+            if screened is not True:
+                return screened
             session = self.sessions.get_or_create(key)
             profile_id = session.metadata.get("profile_id") or None
             self._set_tool_context(
@@ -1249,6 +1362,11 @@ class ShibaBrain:
                 profile_id=profile_id,
                 defer_system=True,
             )
+            try:
+                messages = self._with_interrupt_note(key, messages)
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
+                return OutboundMessage(channel=channel, chat_id=chat_id, content=REFUSAL)
             _temp = self._resolve_temperature(
                 profile_id, session.metadata, self.workspace
             )
@@ -1277,6 +1395,9 @@ class ShibaBrain:
             if resolved_key := self.session_router.resolve(key):
                 logger.info("Cross-session route: {} -> {}", key, resolved_key)
                 key = resolved_key
+        screened = self._screen_turn_input(msg, key)
+        if screened is not True:
+            return screened
         logger.debug(
             "Processing inbound message from {}:{} for session {}: {}",
             msg.channel,
@@ -1352,6 +1473,13 @@ class ShibaBrain:
                 )
 
         cmd = msg.content.strip().lower()
+        folded = " ".join(cmd.split())
+        if folded == "/stop":
+            content = await self._handle_stop(msg, key, "hard")
+            return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+        if folded in {"/stop idle", "/stop when_idle"}:
+            content = await self._handle_stop(msg, key, "when_idle")
+            return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
         if cmd == "/new":
             snapshot = session.messages[session.last_consolidated :]
             incognito = bool(
@@ -1376,6 +1504,7 @@ class ShibaBrain:
                 "🐕 shibaclaw commands:",
                 "/new — Start a new conversation",
                 "/stop — Stop the current task",
+                "/stop idle — Finish the current tool, then stop",
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
                 "/help — Show available commands",
@@ -1540,6 +1669,11 @@ class ShibaBrain:
 
         if msg.metadata and msg.metadata.get("no_reply"):
             return None
+        try:
+            initial_messages = self._with_interrupt_note(key, initial_messages)
+        except JournalError as exc:
+            logger.error("turn journal: {}", exc)
+            return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=REFUSAL)
         _pre_saved_count = 1
 
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
