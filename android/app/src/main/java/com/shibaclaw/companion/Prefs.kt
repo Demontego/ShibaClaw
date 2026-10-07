@@ -50,6 +50,8 @@ object Prefs {
     fun pickIndex(ctx: Context? = null): Int = prefs(ctx).getInt("pick_index", 0)
     fun chatForeground(ctx: Context? = null): Boolean =
         prefs(ctx).getBoolean("chat_foreground", false)
+    fun replyLang(ctx: Context? = null): String =
+        prefs(ctx).getString("reply_lang", "ru") ?: "ru"
 
     fun digest(ctx: Context? = null): Digest {
         val raw = prefs(ctx).getString("digest", "") ?: ""
@@ -89,7 +91,7 @@ object Prefs {
     }
 
     fun setBubble(ctx: Context, text: String) {
-        prefs(ctx).edit().putString("bubble", text.take(160)).apply()
+        prefs(ctx).edit().putString("bubble", text.take(4000)).apply()
     }
 
     fun setLastTap(ctx: Context, at: Long) {
@@ -104,6 +106,24 @@ object Prefs {
         prefs(ctx).edit().putString("clip", clip).apply()
     }
 
+    fun restClip(ctx: Context? = null): String = prefs(ctx).getString("rest_clip", "IDLE") ?: "IDLE"
+
+    fun setRestClip(ctx: Context, name: String) {
+        prefs(ctx).edit().putString("rest_clip", name).apply()
+    }
+
+    fun lastGesture(ctx: Context? = null): String = prefs(ctx).getString("last_gesture", "") ?: ""
+
+    fun setLastGesture(ctx: Context, name: String) {
+        prefs(ctx).edit().putString("last_gesture", name).apply()
+    }
+
+    fun awakeUntil(ctx: Context? = null): Long = prefs(ctx).getLong("awake_until", 0L)
+
+    fun setAwakeUntil(ctx: Context, at: Long) {
+        prefs(ctx).edit().putLong("awake_until", at).apply()
+    }
+
     fun setFrame(ctx: Context, index: Int) {
         prefs(ctx).edit().putInt("frame", index).apply()
     }
@@ -114,6 +134,10 @@ object Prefs {
 
     fun setChatForeground(ctx: Context, on: Boolean) {
         prefs(ctx).edit().putBoolean("chat_foreground", on).apply()
+    }
+
+    fun setReplyLang(ctx: Context, lang: String) {
+        prefs(ctx).edit().putString("reply_lang", lang).apply()
     }
 
     fun setDigest(ctx: Context, digest: Digest) {
@@ -153,13 +177,16 @@ object Prefs {
     private fun putSecret(ctx: Context?, key: String, value: String) {
         val box = secrets(ctx)
         if (box != null) {
-            box.edit().putString(key, value).apply()
+            box.edit().putString(key, value).commit()
         } else {
-            prefs(ctx).edit().putString(key, value).apply()
+            prefs(ctx).edit().putString(key, value).commit()
         }
     }
 
+    private var secretBox: SharedPreferences? = null
+
     private fun secrets(ctx: Context?): SharedPreferences? {
+        secretBox?.let { return it }
         val context = ctx?.applicationContext ?: return null
         return try {
             EncryptedSharedPreferences.create(
@@ -168,7 +195,7 @@ object Prefs {
                 context,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
+            ).also { secretBox = it }
         } catch (_: Exception) {
             null
         }

@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,8 +50,10 @@ fun SessionsDrawer(onClose: () -> Unit) {
     var renameKey by remember { mutableStateOf<String?>(null) }
     var renameText by remember { mutableStateOf("") }
 
+    LaunchedEffect(Unit) { ShibaRepo.refreshSessions() }
+
     ModalDrawerSheet(
-        modifier = Modifier.width(264.dp),
+        modifier = Modifier.width(264.dp).fillMaxHeight(),
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
@@ -84,7 +87,14 @@ fun SessionsDrawer(onClose: () -> Unit) {
                 singleLine = true,
             )
             Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.weight(1f)) {
+            if (sessions.isEmpty()) {
+                Text(
+                    "No chats yet",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
+            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(sessions, key = { it.key }) { s ->
                     val selected = s.key == current
                     Column(

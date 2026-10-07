@@ -24,6 +24,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -39,6 +42,7 @@ import com.shibaclaw.companion.data.ThemeMode
 fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
     val ctx = LocalContext.current
     val theme by ShibaRepo.theme.collectAsState()
+    var lang by remember { mutableStateOf(Prefs.replyLang(ctx)) }
 
     Scaffold(
         topBar = {
@@ -86,6 +90,20 @@ fun SettingsScreen(onBack: () -> Unit, onRePair: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text((if (theme == mode) "✓ " else "") + mode.name.lowercase().replaceFirstChar { it.uppercase() })
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+            Text("Reply language", style = MaterialTheme.typography.titleMedium)
+            listOf("ru" to "Русский", "en" to "English").forEach { (code, label) ->
+                OutlinedButton(
+                    shape = MaterialTheme.shapes.medium,
+                    onClick = {
+                        lang = code
+                        Prefs.setReplyLang(ctx, code)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text((if (lang == code) "✓ " else "") + label)
                 }
             }
             Spacer(Modifier.height(24.dp))

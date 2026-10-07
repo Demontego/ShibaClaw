@@ -233,8 +233,8 @@ class ShibaClient(
             "connected" -> {
                 connected = true
                 main.post {
-                    listener.onHello(true, null)
                     listener.onToken(token)
+                    listener.onHello(true, null)
                     listener.onMood(Mood.IDLE)
                 }
             }

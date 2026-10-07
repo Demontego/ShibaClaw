@@ -1,6 +1,7 @@
 package com.shibaclaw.companion.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompanionModelsTest {
@@ -13,6 +14,58 @@ class CompanionModelsTest {
     @Test
     fun moodIgnoresCase() {
         assertEquals(Mood.ALERT, Mood.from("alert"))
+    }
+
+    @Test
+    fun actionsLeaveAndReturnToTheSit() {
+        val rest = Clip.IDLE.playedFrames().first()
+        listOf(Clip.BOOP, Clip.WAG, Clip.JUMP, Clip.SWAY, Clip.BOW, Clip.HOP, Clip.BREATHE).forEach { clip ->
+            val played = clip.playedFrames()
+            assertEquals(rest, played.first())
+            assertEquals(rest, played.last())
+            assertTrue(clip.frameDrawables.all { it in played })
+        }
+        assertEquals(Clip.IDLE.frameDrawables, Clip.IDLE.playedFrames())
+    }
+
+    @Test
+    fun actionFramesLingerAtTheEnds() {
+        assertTrue(frameHoldMs(0, 10, 70) > frameHoldMs(4, 10, 70))
+    }
+
+    @Test
+    fun gestureDoesNotRepeat() {
+        val pool = Clip.tapPool(Clip.BOOP)
+        assertTrue(Clip.BOOP !in pool)
+        assertEquals(6, pool.size)
+        assertEquals(7, Clip.tapPool(null).size)
+    }
+
+    @Test
+    fun gestureReturnsToTheCurrentPose() {
+        val home = Clip.SLEEP.frameDrawables.first()
+        val played = Clip.HOP.playedFrames(home)
+        assertEquals(home, played.first())
+        assertEquals(home, played.last())
+    }
+
+    @Test
+    fun nightSleepsUntilMorning() {
+        assertEquals(Rest.SLEEP, restAt(23, 0, awake = false))
+        assertEquals(Rest.SLEEP, restAt(6, 59, awake = false))
+        assertEquals(Rest.SIT, restAt(7, 0, awake = false))
+        assertEquals(Rest.SIT, restAt(23, 30, awake = true))
+    }
+
+    @Test
+    fun walksAtMorningLunchAndEvening() {
+        assertEquals(Rest.WALK, restAt(8, 15, awake = false))
+        assertEquals(Rest.WALK, restAt(13, 0, awake = false))
+        assertEquals(Rest.WALK, restAt(19, 40, awake = false))
+        assertEquals(Rest.SIT, restAt(9, 0, awake = false))
+        assertEquals(Rest.SIT, restAt(12, 0, awake = false))
+        assertEquals(Clip.WALK, Clip.homeFor(Rest.WALK))
+        assertEquals(Clip.IDLE, Clip.homeFor(Rest.SIT))
     }
 
     @Test

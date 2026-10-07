@@ -148,6 +148,45 @@ class ChatTranscriptTest {
     }
 
     @Test
+    fun shortSpeechStaysWhole() {
+        assertEquals("Акулы древние.", speechLine("Акулы древние."))
+    }
+
+    @Test
+    fun longSpeechKeepsTheLatestWords() {
+        val line = speechLine("начало " + "слово ".repeat(40) + "конец фразы", limit = 72)
+        assertTrue(line.startsWith("… "))
+        assertTrue(line.endsWith("конец фразы"))
+        assertTrue(line.length <= 80)
+    }
+
+    @Test
+    fun speechShowsOnlyTheCurrentSentence() {
+        assertEquals("… Вторая короткая.", speechLine("Первая мысль. Вторая короткая.", limit = 24))
+    }
+
+    @Test
+    fun factPromptNamesTheLanguage() {
+        assertTrue(factPrompt("ru").contains("Russian"))
+        assertTrue(factPrompt("en").contains("English"))
+    }
+
+    @Test
+    fun quietHomeAsksEvenWithoutDigestFact() {
+        assertTrue(quietHome(emptyMap(), Digest(moodLine = "woof")))
+    }
+
+    @Test
+    fun newsKeepsTheBubble() {
+        assertFalse(quietHome(emptyMap(), Digest(news = listOf("quake"))))
+    }
+
+    @Test
+    fun notificationsKeepTheBubble() {
+        assertFalse(quietHome(mapOf("Chat" to 1), Digest()))
+    }
+
+    @Test
     fun emptyWidgetFallsBackToMoodCopy() {
         assertEquals("Something broke. Check the server.", moodCopy(Mood.ERROR))
     }

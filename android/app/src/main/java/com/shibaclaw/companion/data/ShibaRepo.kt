@@ -107,7 +107,7 @@ object ShibaRepo {
     }
 
     fun setBubble(text: String) {
-        val line = text.trim().replace("\n", " ").take(160)
+        val line = text.trim().replace("\n", " ").take(4000)
         _bubble.value = line
         if (::app.isInitialized) Prefs.setBubble(app, line)
     }
@@ -134,6 +134,11 @@ object ShibaRepo {
     }
 
     fun phoneNotifLine(): String? = notifLine(phoneNotifCounts)
+
+    fun askWorldFact(): Boolean {
+        if (_processing.value) return false
+        return quietHome(phoneNotifCounts, _digest.value)
+    }
 
     fun pickLine(): String {
         val options = widgetChoices(phoneNotifCounts, _digest.value)
@@ -205,9 +210,12 @@ object ShibaRepo {
     fun ensureHistory() = scope.launch(Dispatchers.IO) {
         if (_messages.value.isNotEmpty()) return@launch
         val id = _sessionId.value ?: return@launch
-        val detail = runCatching { ShibaApi.getSession(id) }.getOrNull() ?: return@launch
-        if (_messages.value.isNotEmpty() || _sessionId.value != id) return@launch
-        loadSessionHistory(detail)
+        runCatching { ShibaApi.getSession(id) }
+            .onSuccess { detail ->
+                if (_messages.value.isNotEmpty() || _sessionId.value != id) return@onSuccess
+                loadSessionHistory(detail)
+            }
+            .onFailure { _events.emit(it.message ?: "history failed") }
     }
 
     fun loadSessionHistory(detail: SessionDetail) {

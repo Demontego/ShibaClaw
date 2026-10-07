@@ -23,10 +23,11 @@
         android:layout_gravity="bottom"
         android:background="@drawable/bubble_bg"
         android:ellipsize="end"
-        android:gravity="center"
-        android:maxLines="2"
-        android:padding="6dp"
+        android:gravity="start|center_vertical"
+        android:lineSpacingExtra="2dp"
+        android:maxLines="3"
+        android:padding="10dp"
         android:textColor="@color/bubble_text"
-        android:textSize="11sp"
+        android:textSize="14sp"
         android:visibility="gone" />
 </FrameLayout>

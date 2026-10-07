@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.RemoteViews
 import com.shibaclaw.companion.data.Clip
 import com.shibaclaw.companion.data.Mood
+import com.shibaclaw.companion.data.speechLine
 
 class ShibaWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
@@ -26,11 +27,12 @@ class ShibaWidget : AppWidgetProvider() {
             val now = System.currentTimeMillis()
             val last = Prefs.lastTapAt(context)
             Prefs.setLastTap(context, now)
-            if (now - last in 1..DOUBLE_TAP_MS) {
+            val double = now - last in 1..DOUBLE_TAP_MS
+            if (ShibaService.busy) return
+            ShibaService.busy = true
+            if (double) {
                 ShibaService.start(context, ShibaService.ACTION_HEY)
-                val open = Intent(context, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(open)
+                openChat(context)
             } else {
                 ShibaService.start(context, ShibaService.ACTION_BOOP)
             }
@@ -51,7 +53,10 @@ class ShibaWidget : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.shiba_widget)
             val clip = Clip.entries.firstOrNull { it.name == Prefs.clipName(context) }
                 ?: Clip.forMood(Mood.from(Prefs.mood(context)))
-            val frames = clip.frameDrawables
+            val restName = Prefs.restClip(context)
+            val home = Clip.entries.firstOrNull { it.name == restName }?.frameDrawables?.first()
+                ?: Clip.IDLE.frameDrawables.first()
+            val frames = clip.playedFrames(home)
             val index = Prefs.frameIndex(context).coerceIn(0, frames.lastIndex)
             views.setImageViewResource(R.id.shiba_face, frames[index])
             val bubble = Prefs.lastBubble(context)
@@ -59,7 +64,10 @@ class ShibaWidget : AppWidgetProvider() {
                 views.setViewVisibility(R.id.shiba_bubble, View.GONE)
             } else {
                 views.setViewVisibility(R.id.shiba_bubble, View.VISIBLE)
-                views.setTextViewText(R.id.shiba_bubble, bubble)
+                val width = mgr.getAppWidgetOptions(id)
+                    .getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)
+                val limit = if (width <= 0) 72 else (width / 9 * 3).coerceIn(48, 180)
+                views.setTextViewText(R.id.shiba_bubble, speechLine(bubble, limit))
             }
             val tap = Intent(context, ShibaWidget::class.java).setAction(ACTION_TAP)
             val pi = PendingIntent.getBroadcast(
@@ -70,6 +78,12 @@ class ShibaWidget : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_root, pi)
             mgr.updateAppWidget(id, views)
+        }
+
+        private fun openChat(context: Context) {
+            val open = Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(open)
         }
     }
 }

@@ -126,6 +126,19 @@ internal fun clockStamp(raw: String): String {
         .getOrDefault("")
 }
 
+internal fun speechLine(raw: String, limit: Int = 72): String {
+    val text = raw.trim().replace(Regex("\\s+"), " ")
+    if (text.isEmpty() || text.length <= limit) return text
+    val from = Regex("[.!?…]\\s+").findAll(text).lastOrNull()?.range?.last?.plus(1) ?: 0
+    val sentence = text.substring(from).trim()
+    val body = if (sentence.length <= limit) {
+        sentence
+    } else {
+        sentence.takeLast(limit).dropWhile { it != ' ' }.trim().ifBlank { sentence.takeLast(limit).trim() }
+    }
+    return if (from > 0 || sentence.length > limit) "… $body" else body
+}
+
 internal fun notifLine(counts: Map<String, Int>): String? {
     if (counts.isEmpty()) return null
     val parts = counts.entries
@@ -133,6 +146,16 @@ internal fun notifLine(counts: Map<String, Int>): String? {
         .take(3)
         .map { "${it.value} in ${it.key}" }
     return parts.joinToString(", ") + " unread"
+}
+
+internal fun factPrompt(lang: String): String {
+    val name = if (lang == "ru") "Russian" else "English"
+    return "Tell one surprising real-world fact in one or two short sentences. Reply in $name. No tools, no preamble."
+}
+
+internal fun quietHome(counts: Map<String, Int>, digest: Digest): Boolean {
+    if (notifLine(counts) != null) return false
+    return digest.news.none { it.isNotBlank() }
 }
 
 internal fun widgetChoices(counts: Map<String, Int>, digest: Digest): List<String> = buildList {

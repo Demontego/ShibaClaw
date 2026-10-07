@@ -129,13 +129,16 @@ fun ChatScreen(
         Prefs.setChatForeground(ctx, true)
         ShibaService.start(ctx)
         ShibaRepo.refreshSessions()
+        ShibaRepo.ensureHistory()
         ShibaRepo.refreshModelsAndProfiles()
         onDispose { Prefs.setChatForeground(ctx, false) }
     }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+    val tailLen = (messages.lastOrNull() as? ChatItem.Message)?.text?.length ?: 0
+    LaunchedEffect(messages.size, tailLen) {
+        val atTail = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        if (messages.isNotEmpty() && atTail) {
+            listState.scrollToItem(0)
         }
     }
     LaunchedEffect(Unit) {
@@ -284,13 +287,14 @@ fun ChatScreen(
                 }
                 LazyColumn(
                     state = listState,
+                    reverseLayout = true,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(messages, key = { it.id }) { item ->
+                    items(messages.asReversed(), key = { it.id }) { item ->
                         ChatBubble(
                             item = item,
                             onToggle = { ShibaRepo.toggleCollapse(item.id) },
@@ -415,9 +419,13 @@ private fun ChatBubble(
                     } else {
                         MaterialTheme.colorScheme.surfaceVariant
                     },
-                    modifier = Modifier.widthIn(max = 340.dp),
+                    modifier = if (item.fromUser) {
+                        Modifier.widthIn(max = 300.dp)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
                 ) {
-                    Column(Modifier.padding(12.dp)) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         item.attachments.forEach { att ->
                             if (att.type.startsWith("image/")) {
                                 AsyncImage(
@@ -434,19 +442,20 @@ private fun ChatBubble(
                                 Text(att.name, style = MaterialTheme.typography.labelMedium)
                             }
                         }
-                        if (item.fromUser) {
-                            Text(item.text)
+                        if (item.fromUser || !item.text.contains("```")) {
+                            Text(
+                                item.text.ifBlank { if (item.streaming) "…" else "" },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         } else {
                             Markdown(
-                                content = item.text.ifBlank { "…" },
+                                content = item.text,
+                                modifier = Modifier.fillMaxWidth(),
                                 components = markdownComponents(
                                     codeBlock = highlightedCodeBlock,
                                     codeFence = highlightedCodeFence,
                                 ),
                             )
-                        }
-                        if (item.streaming) {
-                            Text("…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (item.time.isNotBlank()) {
                             Text(

@@ -23,6 +23,11 @@ import com.shibaclaw.companion.data.Digest
 import com.shibaclaw.companion.data.Mood
 import com.shibaclaw.companion.data.ShibaClient
 import com.shibaclaw.companion.data.ShibaRepo
+import com.shibaclaw.companion.data.Rest
+import com.shibaclaw.companion.data.factPrompt
+import com.shibaclaw.companion.data.frameHoldMs
+import com.shibaclaw.companion.data.homeFor
+import com.shibaclaw.companion.data.restAt
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +48,16 @@ class ShibaService : Service(), ShibaClient.Listener {
     private val reconnect = Runnable {
         if (running && Prefs.isPaired(this) && !client.connected) connect()
     }
+    private var factLive = false
+    private var factShown = ""
+    private var writing = false
+    private val wakeMs = 10 * 60 * 1000L
+    private val clock = object : Runnable {
+        override fun run() {
+            if (!oneShot) showRest()
+            main.postDelayed(this, 60_000)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -50,26 +65,25 @@ class ShibaService : Service(), ShibaClient.Listener {
         client = ShibaClient(DeviceTools(this), this)
         ShibaRepo.client = client
         Companion.instance = this
-        arm(currentClip())
+        showRest(kick = true)
+        main.postDelayed(clock, 60_000)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notif = buildServiceNotif(getString(R.string.notif_title))
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIF_ID, notif)
-        }
+        dropRunningNotice()
         when (intent?.action) {
-            ACTION_BOOP -> {
+            ACTION_BOOP -> if (!petBusy()) {
                 retries = 0
-                boopLocal()
-                if (!client.connected) connect()
+                val ask = boopLocal(streamFact = true)
+                if (ask) sendOrQueue(factPrompt(Prefs.replyLang(this)), emptyList())
+                else if (!client.connected) connect()
+                syncBusy()
             }
-            ACTION_HEY -> {
+            ACTION_HEY -> if (!petBusy()) {
                 retries = 0
-                boopLocal()
+                boopLocal(streamFact = false)
                 sendOrQueue(getString(R.string.boop_prompt), emptyList())
+                syncBusy()
             }
             ACTION_CHAT -> {
                 val text = intent.getStringExtra(EXTRA_TEXT).orEmpty()
@@ -89,7 +103,9 @@ class ShibaService : Service(), ShibaClient.Listener {
         main.removeCallbacks(digestTick)
         main.removeCallbacks(reconnect)
         main.removeCallbacks(anim)
+        main.removeCallbacks(clock)
         client.disconnect()
+        busy = false
         if (ShibaRepo.client === client) ShibaRepo.client = null
         if (Companion.instance === this) Companion.instance = null
         super.onDestroy()
@@ -97,13 +113,22 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun petBusy(): Boolean =
+        oneShot || factLive || writing || ShibaRepo.processing.value || outbound.isNotEmpty()
+
+    private fun syncBusy() {
+        busy = petBusy()
+    }
+
     private fun sendOrQueue(text: String, atts: List<AttachmentRef>) {
+        writing = true
         if (client.connected) {
             client.sendChat(text, atts)
         } else {
             outbound.addLast(Outbound(text, atts))
             connect()
         }
+        syncBusy()
     }
 
     private fun flushOutbound() {
@@ -128,29 +153,76 @@ class ShibaService : Service(), ShibaClient.Listener {
         )
     }
 
-    private fun boopLocal() {
-        val clip = Clip.randomTap()
+    private fun boopLocal(streamFact: Boolean): Boolean {
+        val now = java.time.LocalTime.now()
+        if (restAt(now.hour, now.minute, awake = false) == Rest.SLEEP) {
+            Prefs.setAwakeUntil(this, System.currentTimeMillis() + wakeMs)
+        }
+        val home = homeClip()
+        Prefs.setRestClip(this, home.name)
+        val last = Clip.entries.firstOrNull { it.name == Prefs.lastGesture(this) }
+        val clip = Clip.tapPool(last).random()
+        Prefs.setLastGesture(this, clip.name)
         oneShot = true
         Prefs.setClip(this, clip.name)
         Prefs.setFrame(this, 0)
         Prefs.setMood(this, Mood.BOOP)
         ShibaRepo.setMood(Mood.BOOP)
-        val line = ShibaRepo.pickLine()
-        Prefs.setBubble(this, line)
-        ShibaRepo.setBubble(line)
+        val ask = streamFact && ShibaRepo.askWorldFact()
+        factLive = ask
+        factShown = ""
+        if (ask) {
+            Prefs.setBubble(this, "")
+            ShibaRepo.setBubble("")
+        } else {
+            val line = ShibaRepo.pickLine()
+            Prefs.setBubble(this, line)
+            ShibaRepo.setBubble(line)
+        }
         ShibaWidget.refresh(this)
         arm(clip)
         vibrate()
+        syncBusy()
+        return ask
     }
 
     private fun currentClip(): Clip =
         Clip.entries.firstOrNull { it.name == Prefs.clipName(this) }
             ?: Clip.forMood(Mood.from(Prefs.mood(this)))
 
+    private fun homeClip(): Clip {
+        val now = java.time.LocalTime.now()
+        val awake = System.currentTimeMillis() < Prefs.awakeUntil(this)
+        return Clip.homeFor(restAt(now.hour, now.minute, awake))
+    }
+
+    private fun played(clip: Clip): List<Int> {
+        val home = Clip.entries.firstOrNull { it.name == Prefs.restClip(this) }
+            ?: Clip.IDLE
+        return clip.playedFrames(home.frameDrawables.first())
+    }
+
+    private fun showRest(kick: Boolean = false) {
+        val clip = homeClip()
+        val mood = if (clip == Clip.SLEEP) Mood.SLEEP else Mood.IDLE
+        Prefs.setMood(this, mood)
+        ShibaRepo.setMood(mood)
+        Prefs.setRestClip(this, clip.name)
+        if (Prefs.clipName(this) == clip.name) {
+            if (kick) arm(clip)
+            return
+        }
+        Prefs.setClip(this, clip.name)
+        Prefs.setFrame(this, 0)
+        ShibaWidget.refresh(this)
+        arm(clip)
+    }
+
     private fun arm(clip: Clip) {
         main.removeCallbacks(anim)
-        if (clip.frameDrawables.size <= 1) return
-        val delay = if (clip.looping) clip.restMs else clip.intervalMs.toLong()
+        val count = played(clip).size
+        if (count <= 1) return
+        val delay = if (clip.looping) clip.restMs else frameHoldMs(0, count, clip.intervalMs)
         main.postDelayed(anim, delay)
     }
 
@@ -158,23 +230,30 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     private fun stepFrame() {
         val clip = currentClip()
-        val count = clip.frameDrawables.size
+        val count = played(clip).size
         if (count <= 1) return
         val next = Prefs.frameIndex(this) + 1
         if (next >= count) {
             if (!clip.looping) {
                 oneShot = false
-                onMood(if (client.connected) Mood.IDLE else Mood.SLEEP)
+                showRest()
+                syncBusy()
                 return
             }
             Prefs.setFrame(this, 0)
             ShibaWidget.refresh(this)
-            main.postDelayed(anim, clip.restMs)
+            val pause = if (clip.restMs > 0) clip.restMs else clip.intervalMs.toLong()
+            main.postDelayed(anim, pause)
             return
         }
         Prefs.setFrame(this, next)
         ShibaWidget.refresh(this)
-        main.postDelayed(anim, clip.intervalMs.toLong())
+        val delay = if (clip.looping) {
+            clip.intervalMs.toLong()
+        } else {
+            frameHoldMs(next, count, clip.intervalMs)
+        }
+        main.postDelayed(anim, delay)
     }
 
     private fun vibrate() {
@@ -191,7 +270,7 @@ class ShibaService : Service(), ShibaClient.Listener {
         ShibaRepo.setConnected(ok)
         if (ok) {
             retries = 0
-            onMood(Mood.IDLE)
+            showRest()
             ShibaRepo.setStatus(getString(R.string.status_online))
             val deviceSession = "android:${Prefs.deviceId(this)}"
             val current = ShibaRepo.sessionId.value
@@ -219,15 +298,24 @@ class ShibaService : Service(), ShibaClient.Listener {
     override fun onMood(mood: Mood) {
         Prefs.setMood(this, mood)
         ShibaRepo.setMood(mood)
-        if (oneShot && mood != Mood.SLEEP && mood != Mood.ERROR) {
+        if (oneShot && mood != Mood.ERROR) {
             ShibaWidget.refresh(this)
             return
         }
-        val clip = Clip.forMood(mood)
-        Prefs.setClip(this, clip.name)
-        Prefs.setFrame(this, 0)
-        ShibaWidget.refresh(this)
-        arm(clip)
+        if (mood == Mood.ERROR) {
+            Prefs.setClip(this, Clip.ERROR.name)
+            Prefs.setFrame(this, 0)
+            ShibaWidget.refresh(this)
+            arm(Clip.ERROR)
+            return
+        }
+        if (mood == Mood.THINK && !oneShot) {
+            Prefs.setClip(this, Clip.THINK.name)
+            Prefs.setFrame(this, 0)
+            ShibaWidget.refresh(this)
+            return
+        }
+        showRest()
     }
 
     override fun onBubble(text: String) {
@@ -237,17 +325,25 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     override fun onChatDelta(text: String) {
         ShibaRepo.onChatDelta(text)
+        if (!factLive || text.isEmpty()) return
+        factShown += text
+        ShibaRepo.setBubble(factShown)
+        ShibaWidget.refresh(this)
     }
 
     override fun onChatDone(text: String) {
+        val fromFact = factLive
+        factLive = false
+        writing = false
         ShibaRepo.onChatDone(text)
         onMood(Mood.ALERT)
-        if (!Prefs.chatForeground(this) && text.isNotBlank()) {
+        if (!fromFact && !Prefs.chatForeground(this) && text.isNotBlank()) {
             notifyReply(text)
         }
         main.postDelayed({
             if (Prefs.mood(this) == Mood.ALERT.name) onMood(Mood.IDLE)
         }, 2500)
+        syncBusy()
     }
 
     override fun onThinking(text: String) {
@@ -268,6 +364,8 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     override fun onSessionStatus(processing: Boolean) {
         ShibaRepo.setProcessing(processing)
+        if (!processing) writing = false
+        syncBusy()
     }
 
     override fun onSessionReset(sessionId: String?) {
@@ -287,12 +385,14 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     override fun onDigest(digest: Digest) {
         ShibaRepo.setDigest(digest)
-        digest.mood.takeIf { it.isNotBlank() }?.let { onMood(Mood.from(it)) }
         ShibaWidget.refresh(this)
     }
 
     override fun onClosed() {
-        onMood(Mood.SLEEP)
+        factLive = false
+        writing = false
+        showRest()
+        syncBusy()
         ShibaRepo.setConnected(false)
         ShibaRepo.setStatus(getString(R.string.status_offline))
         main.removeCallbacks(digestTick)
@@ -329,13 +429,14 @@ class ShibaService : Service(), ShibaClient.Listener {
 
     private fun ensureChannels() {
         val mgr = getSystemService(NotificationManager::class.java)
-        mgr.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notif_channel),
-                NotificationManager.IMPORTANCE_LOW,
-            ),
+        val quiet = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.notif_channel),
+            NotificationManager.IMPORTANCE_MIN,
         )
+        quiet.setShowBadge(false)
+        quiet.setSound(null, null)
+        mgr.createNotificationChannel(quiet)
         mgr.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_REPLIES,
@@ -357,14 +458,28 @@ class ShibaService : Service(), ShibaClient.Listener {
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setContentIntent(open)
+            .setSilent(true)
             .setOngoing(true)
             .build()
+    }
+
+    private fun dropRunningNotice() {
+        if (!needsNotice) return
+        val notif = buildServiceNotif(getString(R.string.notif_title))
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(NOTIF_ID)
+        needsNotice = false
     }
 
     private data class Outbound(val text: String, val atts: List<AttachmentRef>)
 
     companion object {
-        const val CHANNEL_ID = "shiba"
+        const val CHANNEL_ID = "shiba_quiet"
         const val CHANNEL_REPLIES = "replies"
         const val NOTIF_ID = 7
         const val ACTION_BOOP = "com.shibaclaw.companion.BOOP"
@@ -375,6 +490,12 @@ class ShibaService : Service(), ShibaClient.Listener {
 
         @Volatile
         var instance: ShibaService? = null
+
+        @Volatile
+        var needsNotice = true
+
+        @Volatile
+        var busy = false
 
         fun start(
             ctx: Context,
@@ -397,10 +518,16 @@ class ShibaService : Service(), ShibaClient.Listener {
                 }
                 i.putExtra(EXTRA_ATTACHMENTS, arr.toString())
             }
-            if (Build.VERSION.SDK_INT >= 26) {
+            if (instance == null) {
+                needsNotice = true
                 ctx.startForegroundService(i)
             } else {
-                ctx.startService(i)
+                try {
+                    ctx.startService(i)
+                } catch (_: IllegalStateException) {
+                    needsNotice = true
+                    ctx.startForegroundService(i)
+                }
             }
         }
 

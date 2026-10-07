@@ -95,8 +95,44 @@ enum class Clip(
         true,
     ),
     SLEEP(
-        listOf(com.shibaclaw.companion.R.drawable.clip_sleep_0),
-        1000,
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_sleep_0,
+            com.shibaclaw.companion.R.drawable.clip_sleep_1,
+            com.shibaclaw.companion.R.drawable.clip_sleep_2,
+            com.shibaclaw.companion.R.drawable.clip_sleep_3,
+            com.shibaclaw.companion.R.drawable.clip_sleep_4,
+            com.shibaclaw.companion.R.drawable.clip_sleep_5,
+            com.shibaclaw.companion.R.drawable.clip_sleep_6,
+            com.shibaclaw.companion.R.drawable.clip_sleep_7,
+            com.shibaclaw.companion.R.drawable.clip_sleep_8,
+            com.shibaclaw.companion.R.drawable.clip_sleep_9,
+            com.shibaclaw.companion.R.drawable.clip_sleep_10,
+            com.shibaclaw.companion.R.drawable.clip_sleep_11,
+        ),
+        140,
+        0,
+        true,
+    ),
+    WALK(
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_walk_0,
+            com.shibaclaw.companion.R.drawable.clip_walk_1,
+            com.shibaclaw.companion.R.drawable.clip_walk_2,
+            com.shibaclaw.companion.R.drawable.clip_walk_3,
+            com.shibaclaw.companion.R.drawable.clip_walk_4,
+            com.shibaclaw.companion.R.drawable.clip_walk_5,
+            com.shibaclaw.companion.R.drawable.clip_walk_6,
+            com.shibaclaw.companion.R.drawable.clip_walk_7,
+            com.shibaclaw.companion.R.drawable.clip_walk_8,
+            com.shibaclaw.companion.R.drawable.clip_walk_9,
+            com.shibaclaw.companion.R.drawable.clip_walk_10,
+            com.shibaclaw.companion.R.drawable.clip_walk_11,
+            com.shibaclaw.companion.R.drawable.clip_walk_12,
+            com.shibaclaw.companion.R.drawable.clip_walk_13,
+            com.shibaclaw.companion.R.drawable.clip_walk_14,
+            com.shibaclaw.companion.R.drawable.clip_walk_15,
+        ),
+        90,
         0,
         true,
     ),
@@ -111,7 +147,100 @@ enum class Clip(
         1000,
         0,
         true,
+    ),
+    SWAY(
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_sway_0,
+            com.shibaclaw.companion.R.drawable.clip_sway_1,
+            com.shibaclaw.companion.R.drawable.clip_sway_2,
+            com.shibaclaw.companion.R.drawable.clip_sway_3,
+            com.shibaclaw.companion.R.drawable.clip_sway_4,
+            com.shibaclaw.companion.R.drawable.clip_sway_5,
+            com.shibaclaw.companion.R.drawable.clip_sway_6,
+            com.shibaclaw.companion.R.drawable.clip_sway_7,
+            com.shibaclaw.companion.R.drawable.clip_sway_8,
+            com.shibaclaw.companion.R.drawable.clip_sway_9,
+            com.shibaclaw.companion.R.drawable.clip_sway_10,
+            com.shibaclaw.companion.R.drawable.clip_sway_11,
+            com.shibaclaw.companion.R.drawable.clip_sway_12,
+            com.shibaclaw.companion.R.drawable.clip_sway_13,
+            com.shibaclaw.companion.R.drawable.clip_sway_14,
+            com.shibaclaw.companion.R.drawable.clip_sway_15,
+        ),
+        42,
+        0,
+        false,
+    ),
+    BOW(
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_bow_0,
+            com.shibaclaw.companion.R.drawable.clip_bow_1,
+            com.shibaclaw.companion.R.drawable.clip_bow_2,
+            com.shibaclaw.companion.R.drawable.clip_bow_3,
+            com.shibaclaw.companion.R.drawable.clip_bow_4,
+            com.shibaclaw.companion.R.drawable.clip_bow_5,
+            com.shibaclaw.companion.R.drawable.clip_bow_6,
+            com.shibaclaw.companion.R.drawable.clip_bow_7,
+            com.shibaclaw.companion.R.drawable.clip_bow_8,
+            com.shibaclaw.companion.R.drawable.clip_bow_9,
+            com.shibaclaw.companion.R.drawable.clip_bow_10,
+            com.shibaclaw.companion.R.drawable.clip_bow_11,
+            com.shibaclaw.companion.R.drawable.clip_bow_12,
+            com.shibaclaw.companion.R.drawable.clip_bow_13,
+        ),
+        46,
+        0,
+        false,
+    ),
+    HOP(
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_hop_0,
+            com.shibaclaw.companion.R.drawable.clip_hop_1,
+            com.shibaclaw.companion.R.drawable.clip_hop_2,
+            com.shibaclaw.companion.R.drawable.clip_hop_3,
+            com.shibaclaw.companion.R.drawable.clip_hop_4,
+            com.shibaclaw.companion.R.drawable.clip_hop_5,
+            com.shibaclaw.companion.R.drawable.clip_hop_6,
+            com.shibaclaw.companion.R.drawable.clip_hop_7,
+            com.shibaclaw.companion.R.drawable.clip_hop_8,
+            com.shibaclaw.companion.R.drawable.clip_hop_9,
+            com.shibaclaw.companion.R.drawable.clip_hop_10,
+            com.shibaclaw.companion.R.drawable.clip_hop_11,
+            com.shibaclaw.companion.R.drawable.clip_hop_12,
+            com.shibaclaw.companion.R.drawable.clip_hop_13,
+            com.shibaclaw.companion.R.drawable.clip_hop_14,
+            com.shibaclaw.companion.R.drawable.clip_hop_15,
+        ),
+        40,
+        0,
+        false,
+    ),
+    BREATHE(
+        listOf(
+            com.shibaclaw.companion.R.drawable.clip_breathe_0,
+            com.shibaclaw.companion.R.drawable.clip_breathe_1,
+            com.shibaclaw.companion.R.drawable.clip_breathe_2,
+            com.shibaclaw.companion.R.drawable.clip_breathe_3,
+            com.shibaclaw.companion.R.drawable.clip_breathe_4,
+            com.shibaclaw.companion.R.drawable.clip_breathe_5,
+            com.shibaclaw.companion.R.drawable.clip_breathe_6,
+            com.shibaclaw.companion.R.drawable.clip_breathe_7,
+            com.shibaclaw.companion.R.drawable.clip_breathe_8,
+            com.shibaclaw.companion.R.drawable.clip_breathe_9,
+            com.shibaclaw.companion.R.drawable.clip_breathe_10,
+            com.shibaclaw.companion.R.drawable.clip_breathe_11,
+            com.shibaclaw.companion.R.drawable.clip_breathe_12,
+            com.shibaclaw.companion.R.drawable.clip_breathe_13,
+        ),
+        48,
+        0,
+        false,
     );
+
+    fun playedFrames(home: Int = IDLE.frameDrawables.first()): List<Int> {
+        if (looping) return frameDrawables
+        return listOf(home) + frameDrawables + listOf(home)
+    }
 
     companion object {
         fun forMood(mood: Mood): Clip = when (mood) {
@@ -122,8 +251,36 @@ enum class Clip(
             Mood.ERROR -> ERROR
         }
 
-        fun randomTap(): Clip = listOf(BOOP, WAG, JUMP).random()
+        fun tapPool(last: Clip?): List<Clip> {
+            val all = listOf(BOOP, WAG, JUMP, SWAY, BOW, HOP, BREATHE)
+            return all.filter { it != last }.ifEmpty { all }
+        }
     }
+}
+
+internal enum class Rest { SIT, SLEEP, WALK }
+
+internal fun restAt(hour: Int, minute: Int, awake: Boolean): Rest {
+    if (awake) return Rest.SIT
+    val mins = hour * 60 + minute
+    if (mins >= 22 * 60 || mins < 7 * 60) return Rest.SLEEP
+    if (mins in 8 * 60 until 9 * 60) return Rest.WALK
+    if (mins in 13 * 60 until 14 * 60) return Rest.WALK
+    if (mins in 19 * 60 until 20 * 60) return Rest.WALK
+    return Rest.SIT
+}
+
+internal fun Clip.Companion.homeFor(rest: Rest): Clip = when (rest) {
+    Rest.SIT -> Clip.IDLE
+    Rest.SLEEP -> Clip.SLEEP
+    Rest.WALK -> Clip.WALK
+}
+
+fun frameHoldMs(index: Int, count: Int, baseMs: Int): Long {
+    if (count <= 2) return baseMs.toLong()
+    val fromEdge = minOf(index, count - 1 - index)
+    val extra = (2 - fromEdge).coerceAtLeast(0) * baseMs / 2
+    return (baseMs + extra).toLong()
 }
 
 enum class ThemeMode { SYSTEM, DARK, LIGHT }
