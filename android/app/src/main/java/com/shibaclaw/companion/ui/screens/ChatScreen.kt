@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -272,15 +271,6 @@ fun ChatScreen(
                     val modelLabel = sessionModel.substringAfterLast('/').ifBlank { "model" }
                     AssistChip(onClick = { showPicker = true }, label = { Text(agent, maxLines = 1) })
                     AssistChip(onClick = { showPicker = true }, label = { Text(modelLabel, maxLines = 1) })
-                    if (processing) {
-                        AssistChip(
-                            onClick = { ShibaRepo.client?.stop() },
-                            label = { Text("Stop") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Stop, contentDescription = null, Modifier.size(16.dp))
-                            },
-                        )
-                    }
                     if (queued > 0) {
                         AssistChip(onClick = {}, label = { Text("Queued #$queued") })
                     }
@@ -357,6 +347,11 @@ fun ChatScreen(
                     if (uploading) {
                         CircularProgressIndicator(Modifier.size(28.dp).padding(start = 8.dp))
                     } else {
+                        if (processing) {
+                            IconButton(onClick = { ShibaRepo.client?.stop() }) {
+                                Icon(Icons.Default.Stop, contentDescription = "Stop")
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 val text = input.trim()
@@ -420,7 +415,7 @@ private fun ChatBubble(
                         MaterialTheme.colorScheme.surfaceVariant
                     },
                     modifier = if (item.fromUser) {
-                        Modifier.widthIn(max = 300.dp)
+                        Modifier.fillMaxWidth(0.86f)
                     } else {
                         Modifier.fillMaxWidth()
                     },
@@ -442,7 +437,7 @@ private fun ChatBubble(
                                 Text(att.name, style = MaterialTheme.typography.labelMedium)
                             }
                         }
-                        if (item.fromUser || !item.text.contains("```")) {
+                        if (item.fromUser || item.text.isBlank()) {
                             Text(
                                 item.text.ifBlank { if (item.streaming) "…" else "" },
                                 style = MaterialTheme.typography.bodyMedium,

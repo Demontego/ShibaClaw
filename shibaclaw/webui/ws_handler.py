@@ -472,6 +472,7 @@ async def _handle_user_message(ws_id: str, ws: WebSocket, data: dict[str, Any]) 
                 "metadata": {
                     "session_key": session_key,
                     "message_id": message["id"],
+                    "input_id": message["id"],
                     "attachments": message.get("attachments", []),
                     "mentioned_kbs": message.get("mentioned_kbs", []),
                     "mentioned_mcps": message.get("mentioned_mcps", []),
