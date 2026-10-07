@@ -11,6 +11,7 @@ from shibaclaw.evolve.gate import (
     ALARM_MS,
     CAMPAIGN,
     JOB_NAME,
+    SESSION_KEY,
     begin,
     end,
     gate,
@@ -65,8 +66,21 @@ def is_owner_surface(
     if ch in {"webui", "cli"}:
         return True
     if ch == "telegram":
-        return str(sender_id) in owner_ids
+        return bool(_telegram_identity(sender_id) & owner_ids)
     return False
+
+
+def _telegram_identity(sender_id: str) -> set[str]:
+    """Match allowFrom the way TelegramChannel does: id, username, or id|username."""
+    text = str(sender_id or "").strip()
+    found = {text} if text else set()
+    if text.count("|") == 1:
+        sid, username = text.split("|", 1)
+        if sid:
+            found.add(sid)
+        if username:
+            found.add(username)
+    return found
 
 
 def _payload(owner: str | None) -> dict:
@@ -76,7 +90,7 @@ def _payload(owner: str | None) -> dict:
         "deliver": bool(owner),
         "channel": "telegram" if owner else None,
         "to": owner,
-        "sessionKey": "automation:shiba-evolve",
+        "sessionKey": SESSION_KEY,
         "targets": {"telegram": owner} if owner else {},
     }
 
@@ -104,7 +118,7 @@ def sync_alarm(
                 deliver=bool(owner),
                 channel="telegram" if owner else None,
                 to=owner,
-                session_key="automation:shiba-evolve",
+                session_key=SESSION_KEY,
                 targets={"telegram": owner} if owner else {},
             ),
         )
