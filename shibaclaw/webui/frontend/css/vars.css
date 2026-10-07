@@ -1,44 +1,53 @@
 /* ═══════════════════════════════════════════════════════════════
    ShibaClaw WebUI — Design Tokens
-   Brand accent: Shiba Gold #E8A317
+   Brand accent: Shiba Gold #dbaa79
    ═══════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root {
+    color-scheme: dark;
+
     /* Brand accent — used for primary actions + active state only */
-    --shiba-gold: #E8A317;
-    --shiba-gold-light: #F5C94A;
-    --shiba-gold-dim: rgba(232, 163, 23, 0.12);
+    --shiba-gold: #dbaa79;
+    --shiba-gold-light: #e5bd96;
+    --shiba-gold-dim: #352b22;
 
     /* Surfaces */
-    --bg-primary: #0d0d0d;
-    --bg-secondary: #131313;
-    --bg-surface: #191919;
-    --bg-surface-hover: #1f1f1f;
-    --bg-elevated: #242424;
+    --bg-primary: #191918;
+    --bg-secondary: #131312;
+    --bg-surface: #222221;
+    --bg-surface-hover: #2b2b29;
+    --bg-elevated: #30302d;
 
     /* Text — all pass ≥4.5:1 against --bg-primary */
-    --text-primary: #e8e8e8;
-    --text-secondary: #9a9a9a;
-    --text-muted: #707070;
-    --text-code: #d4d4d4;
+    --text-primary: #eeeee8;
+    --text-secondary: #aaa99e;
+    --text-muted: #97978c;
+    --text-code: #dddcd2;
 
     /* Borders */
-    --border-color: rgba(255, 255, 255, 0.07);
-    --border-highlight: rgba(232, 163, 23, 0.22);
+    --border-color: #343431;
+    --border-highlight: #6c523d;
 
     /* Semantic accents */
     --accent-blue: #4A9EFF;
-    --accent-green: #4ADE80;
+    --accent-green: #9bc3ab;
     --accent-red: #F87171;
     --accent-purple: #A78BFA;
 
+    --primary: var(--shiba-gold);
+    --text-color: var(--text-primary);
+    --text-2: var(--text-secondary);
+    --border-light: var(--border-color);
+    --success: var(--accent-green);
+    --danger: var(--accent-red);
+
     /* Radius scale — 3 stops, nothing else */
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
     --radius-full: 9999px;
 
     /* Shadows — depth cues only, no glow */
@@ -52,8 +61,8 @@
     --transition-slow: 350ms cubic-bezier(0.25, 1, 0.5, 1);
 
     /* Layout */
-    --sidebar-width: 272px;
-    --header-height: 56px;
+    --sidebar-width: 232px;
+    --header-height: 64px;
     --chat-width: 860px;
 
     /* Typography */

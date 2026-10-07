@@ -5,6 +5,7 @@
 - **LLM retry** — equal-jitter backoff, permanent-error classification (no retry on 4xx auth/model/context), optional `fallback_models`, and a small cache used only after every fallback fails. No model is selected unless the caller passes `fallback_models`.
 - **Loop safety** — hard step cap, session cost cap, context-overflow guard with checkpoint resume, stuck-loop prompts, identical tool-call cutoff, safe-tool retry with jitter, semantic tool circuit breaker, and structured tool-error feedback. Incognito sessions are not checkpointed. A resumed turn starts with a fresh step budget and the new user message. Tool-call pruning keeps each call with its result.
 - **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart. The last audit token wins, progress stays out of the project root, and a rolled-back saga step can run again.
+- **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView. The language menu stays anchored to its switcher.
 
 ## [1.0.3] - 2026-09-30
 

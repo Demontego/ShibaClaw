@@ -1,0 +1,19 @@
+{
+  "name": "ShibaClaw",
+  "short_name": "ShibaClaw",
+  "description": "ShibaClaw AI assistant",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#191918",
+  "theme_color": "#191918",
+  "icons": [
+    {
+      "src": "/static/shibaclaw_logo.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}
