@@ -207,6 +207,12 @@ object ShibaRepo {
         apply(ChatTranscript())
     }
 
+    fun openAuthed() {
+        ensureHistory()
+        refreshSessions()
+        refreshModelsAndProfiles()
+    }
+
     fun ensureHistory() = scope.launch(Dispatchers.IO) {
         if (_messages.value.isNotEmpty()) return@launch
         val id = _sessionId.value ?: return@launch

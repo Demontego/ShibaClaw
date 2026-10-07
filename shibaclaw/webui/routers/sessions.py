@@ -20,7 +20,7 @@ async def api_sessions_list(request: Request):
     sessions = [
         s
         for s in pm.list_sessions()
-        if not str(s.get("key") or s.get("session_key") or "").endswith(":digest")
+        if not str(s.get("key") or s.get("session_key") or "").endswith((":digest", ":fact"))
     ]
     return JSONResponse({"sessions": sessions})
 

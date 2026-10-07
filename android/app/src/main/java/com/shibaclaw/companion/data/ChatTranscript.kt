@@ -30,6 +30,7 @@ internal data class ChatTranscript(
     fun done(text: String, id: String): ChatTranscript {
         val next = when {
             streamId == null && text.isBlank() -> items
+            streamId == null && sameAssistant(items, text) -> items
             streamId == null -> items + ChatItem.Message(id, false, text)
             else -> {
                 val idx = items.indexOfLast { it is ChatItem.Message && it.id == streamId }
@@ -82,20 +83,33 @@ internal data class ChatTranscript(
 
 internal fun historyMessages(messages: List<SessionMessage>, id: (Int) -> String): List<ChatItem.Message> {
     var n = 0
-    return messages.mapNotNull { m ->
+    val out = mutableListOf<ChatItem.Message>()
+    for (m in messages) {
         val role = m.role.lowercase()
         val text = messageText(m.content)
-        if (text.isBlank() && m.metadata?.attachments.isNullOrEmpty()) return@mapNotNull null
-        if (role == "system" || role == "tool") return@mapNotNull null
-        ChatItem.Message(
+        if (text.isBlank() && m.metadata?.attachments.isNullOrEmpty()) continue
+        if (role == "system" || role == "tool") continue
+        val fromUser = role == "user" || role == "human"
+        if (fromUser && isFactPrompt(text)) continue
+        if (!fromUser && sameAssistant(out, text)) continue
+        out += ChatItem.Message(
             id = id(n++),
-            fromUser = role == "user" || role == "human",
+            fromUser = fromUser,
             text = text,
             attachments = m.metadata?.attachments?.map { AttachmentRef(it.name, it.url, it.type) } ?: emptyList(),
             time = clockStamp(m.timestamp),
         )
     }
+    return out
 }
+
+private fun sameAssistant(items: List<ChatItem>, text: String): Boolean {
+    val last = items.lastOrNull() as? ChatItem.Message ?: return false
+    return !last.fromUser && last.text == text
+}
+
+internal fun isFactPrompt(text: String): Boolean =
+    text.startsWith("Tell one surprising real-world fact")
 
 internal fun messageText(content: JsonElement?): String {
     if (content == null) return ""

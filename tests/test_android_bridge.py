@@ -1,10 +1,21 @@
 """WebUI Android bridge helpers."""
 
-from shibaclaw.webui.android_bridge import parse_digest_text, session_key_for
+from shibaclaw.webui.android_bridge import (
+    fact_prompt,
+    fact_session_key,
+    parse_digest_text,
+    session_key_for,
+)
 
 
 def test_android_session_key():
     assert session_key_for("pixel.1") == "android:pixel.1"
+
+
+def test_fact_stays_off_the_chat_session():
+    assert fact_session_key("pixel.1") == "android:pixel.1:fact"
+    assert "Russian" in fact_prompt("ru")
+    assert "English" in fact_prompt("en")
 
 
 def test_parse_digest_plain_json():

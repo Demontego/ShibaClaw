@@ -285,7 +285,7 @@ object ShibaApi {
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val key = o.optString("key").ifBlank { o.optString("session_key") }
-                if (key.isBlank() || key.endsWith(":digest")) continue
+                if (key.isBlank() || key.endsWith(":digest") || key.endsWith(":fact")) continue
                 val nick = o.optString("nickname").ifBlank { null }
                 add(
                     SessionSummary(

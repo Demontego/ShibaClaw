@@ -278,6 +278,13 @@ async def ws_endpoint(websocket: WebSocket):
                     continue
                 asyncio.create_task(_push_digest(websocket, device_id))
 
+            elif msg_type == "fact_request":
+                device_id = (sessions.get(ws_id) or {}).get("device_id") or ""
+                if not device_id:
+                    continue
+                lang = str(data.get("lang") or "ru")
+                asyncio.create_task(_push_fact(websocket, device_id, lang))
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -288,6 +295,43 @@ async def ws_endpoint(websocket: WebSocket):
         sessions.pop(ws_id, None)
         _ws_clients.pop(ws_id, None)
         logger.info("🌐 WebUI client disconnected: {}", ws_id)
+
+
+async def _push_fact(ws: WebSocket, device_id: str, lang: str) -> None:
+    """Widget fact on its own session, so it never steers or lands in the chat."""
+    session_key = android_bridge.fact_session_key(device_id)
+    payload = {
+        "content": android_bridge.fact_prompt(lang),
+        "session_key": session_key,
+        "channel": "android",
+        "chat_id": session_key,
+        "metadata": {"session_key": session_key, "android_fact": True},
+    }
+    text = ""
+    try:
+        async for event in gateway_client.chat_stream(payload, request_id=f"fact-{device_id}"):
+            kind = event.get("t")
+            if kind == "rt":
+                piece = event.get("c") or ""
+                if not piece:
+                    continue
+                text += piece
+                await _emit_to_ws(ws, {"type": "fact_chunk", "content": piece})
+            elif kind == "r":
+                final = event.get("content") or text
+                if isinstance(final, str) and final.strip():
+                    text = final
+            elif kind == "e":
+                logger.warning("Android fact error: {}", event.get("error"))
+                await _emit_to_ws(ws, {"type": "fact_error"})
+                return
+        await _emit_to_ws(ws, {"type": "fact", "content": text})
+    except Exception as exc:
+        logger.debug("fact push failed: {}", exc)
+        try:
+            await _emit_to_ws(ws, {"type": "fact_error"})
+        except Exception:
+            pass
 
 
 async def _push_digest(ws: WebSocket, device_id: str) -> None:

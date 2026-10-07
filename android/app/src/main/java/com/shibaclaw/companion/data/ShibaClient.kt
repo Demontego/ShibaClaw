@@ -36,6 +36,9 @@ class ShibaClient(
         fun onSessionReset(sessionId: String?)
         fun onSystemEvent(text: String)
         fun onDigest(digest: Digest)
+        fun onFactDelta(text: String)
+        fun onFactDone(text: String)
+        fun onFactError()
         fun onClosed()
     }
 
@@ -139,6 +142,15 @@ class ShibaClient(
 
     fun requestDigest() {
         socket?.send(JSONObject().put("type", "digest_request").toString())
+    }
+
+    fun sendFact(lang: String) {
+        socket?.send(
+            JSONObject()
+                .put("type", "fact_request")
+                .put("lang", lang)
+                .toString(),
+        )
     }
 
     private fun login(root: String, username: String, password: String, savedToken: String): String {
@@ -320,6 +332,9 @@ class ShibaClient(
             "system_event" -> main.post {
                 listener.onSystemEvent(msg.optString("content").ifBlank { msg.optString("message") })
             }
+            "fact_chunk" -> main.post { listener.onFactDelta(msg.optString("content")) }
+            "fact" -> main.post { listener.onFactDone(msg.optString("content")) }
+            "fact_error" -> main.post { listener.onFactError() }
             "digest" -> main.post {
                 val news = mutableListOf<String>()
                 val arr = msg.optJSONArray("news")

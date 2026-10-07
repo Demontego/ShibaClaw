@@ -94,6 +94,18 @@ def digest_session_key(device_id: str) -> str:
     return f"android:{device_id}:digest"
 
 
+def fact_session_key(device_id: str) -> str:
+    return f"android:{device_id}:fact"
+
+
+def fact_prompt(lang: str) -> str:
+    name = "Russian" if lang == "ru" else "English"
+    return (
+        "Tell one surprising real-world fact in one or two short sentences. "
+        f"Reply in {name}. No tools, no preamble."
+    )
+
+
 def parse_digest_text(raw: str) -> Digest | None:
     """Parse LLM digest output; fences/noise allowed. Invalid → None."""
     text = (raw or "").strip()

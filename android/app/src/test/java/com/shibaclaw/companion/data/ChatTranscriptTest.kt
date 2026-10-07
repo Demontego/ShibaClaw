@@ -47,6 +47,30 @@ class ChatTranscriptTest {
     }
 
     @Test
+    fun secondDoneDoesNotCloneTheReply() {
+        val log = ChatTranscript()
+            .addUser("привет", id = "u")
+            .delta("факт", id = "s")
+            .done("Акулы. Привет!", id = "d1")
+            .done("Акулы. Привет!", id = "d2")
+        val replies = log.items.filterIsInstance<ChatItem.Message>().filter { !it.fromUser }
+        assertEquals(listOf("Акулы. Привет!"), replies.map { it.text })
+    }
+
+    @Test
+    fun historyDropsFactPromptAndClonedReply() {
+        val msgs = historyMessages(
+            listOf(
+                SessionMessage(role = "user", content = JsonPrimitive(factPrompt("ru"))),
+                SessionMessage(role = "user", content = JsonPrimitive("привет")),
+                SessionMessage(role = "assistant", content = JsonPrimitive("Акулы. Привет!")),
+                SessionMessage(role = "assistant", content = JsonPrimitive("Акулы. Привет!")),
+            ),
+        ) { n -> "h$n" }
+        assertEquals(listOf("привет", "Акулы. Привет!"), msgs.map { it.text })
+    }
+
+    @Test
     fun nextDeltaStartsANewReply() {
         val log = ChatTranscript().delta("one", id = "s1").done("one", id = "d").delta("two", id = "s2")
         val replies = log.items.filterIsInstance<ChatItem.Message>()

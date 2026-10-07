@@ -16,7 +16,9 @@ object Prefs {
     private lateinit var p: SharedPreferences
 
     fun init(ctx: Context) {
-        p = ctx.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+        val app = ctx.applicationContext
+        p = app.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+        secrets(app)
         if (deviceId().isEmpty()) {
             p.edit().putString("device_id", "android." + UUID.randomUUID().toString().take(8)).apply()
         }

@@ -127,9 +127,7 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         Prefs.setChatForeground(ctx, true)
         ShibaService.start(ctx)
-        ShibaRepo.refreshSessions()
-        ShibaRepo.ensureHistory()
-        ShibaRepo.refreshModelsAndProfiles()
+        if (ShibaRepo.connected.value) ShibaRepo.openAuthed()
         onDispose { Prefs.setChatForeground(ctx, false) }
     }
 
