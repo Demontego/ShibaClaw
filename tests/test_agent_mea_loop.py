@@ -51,8 +51,10 @@ async def test_execute_mea_loop(tmp_path):
     assert "Execution completed successfully." in result["execution_result"]
     assert "PASSED" in result["audit_result"]
     
-    # Verify progress.md was created and updated
-    progress_file = tmp_path / "progress.md"
+    assert not (tmp_path / "progress.md").exists()
+    progress_files = list((tmp_path / "memory" / "mea").glob("*.md"))
+    assert len(progress_files) == 1
+    progress_file = progress_files[0]
     assert progress_file.is_file()
     progress_content = progress_file.read_text(encoding="utf-8")
     assert "Task Progress" in progress_content

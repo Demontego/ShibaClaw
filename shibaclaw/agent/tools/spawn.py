@@ -136,7 +136,7 @@ class SpawnMeaTool(Tool):
 
     async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:
         """Execute the MEA loop for the given task."""
-        asyncio.create_task(
+        bg_task = asyncio.create_task(
             self._manager.execute_mea_loop(
                 task=task,
                 label=label,
@@ -147,5 +147,6 @@ class SpawnMeaTool(Tool):
                 provider=self._active_provider,
             )
         )
+        self._manager.track(self._session_key, bg_task)
         return f"MEA Loop [{label or task[:30]}] started in the background. I will manage, execute, and audit the task, and notify you when complete."
 

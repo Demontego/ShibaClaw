@@ -50,5 +50,6 @@ class IdempotentSaga:
                     logger.warning("IdempotentSaga: Compensating step %s", step.step_id)
                     step.compensate_fn()
                     step.status = "compensated"
+                    self.completed_steps.pop(step.step_id, None)
                 except Exception as e:
                     logger.critical("IdempotentSaga: Compensation failed for step %s: %s", step.step_id, e)
