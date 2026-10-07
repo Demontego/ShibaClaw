@@ -142,7 +142,7 @@ class StuckDetector:
         )
 
         try:
-            active_model = model or "google/gemini-2.5-flash"
+            active_model = model or ""
             chat_fn = getattr(provider, "chat_with_retry", None)
             if not callable(chat_fn):
                 return {"intent": "unknown", "is_loop": False, "confidence": 0.0}

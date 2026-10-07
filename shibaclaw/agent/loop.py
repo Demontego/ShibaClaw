@@ -172,7 +172,6 @@ class ShibaBrain:
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._provider_cache: dict[str, Thinker] = {}
         self._steering_queues: dict[str, list[dict]] = {}
-        self._idempotency_cache: dict[str, Any] = {}
         self.memory_consolidator = PackMemory(
             workspace=workspace,
             provider=cast(Thinker, provider),
@@ -721,6 +720,20 @@ class ShibaBrain:
         finally:
             reset_permission_mode(perm_tokens)
 
+    def _checkpoint_forbidden(self, session_key: str | None, metadata: dict | None) -> bool:
+        """Incognito and ephemeral sessions must not be written to checkpoint files."""
+        meta = metadata or {}
+        if meta.get("incognito") or meta.get("ephemeral"):
+            return True
+        if not session_key or not getattr(self, "sessions", None):
+            return False
+        try:
+            sess = self.sessions.get_or_create(session_key)
+        except Exception:
+            return False
+        smeta = getattr(sess, "metadata", None) or {}
+        return bool(smeta.get("incognito") or smeta.get("ephemeral"))
+
     async def _run_agent_loop_inner(
         self,
         initial_messages: list[dict],
@@ -737,10 +750,21 @@ class ShibaBrain:
         temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         checkpoint_mgr = CheckpointManager(self.context.workspace)
-        checkpoint = checkpoint_mgr.load_checkpoint(session_key) if session_key else None
+        private = self._checkpoint_forbidden(session_key, metadata)
+        if private and session_key:
+            checkpoint_mgr.delete_checkpoint(session_key)
+        checkpoint = None if private or not session_key else checkpoint_mgr.load_checkpoint(session_key)
         if checkpoint:
-            messages, iteration, checkpoint_metadata = checkpoint
-            logger.info("Resuming session %s from checkpoint at iteration %d", session_key, iteration)
+            messages, _saved_iteration, _checkpoint_meta = checkpoint
+            fresh = next((item for item in reversed(initial_messages) if item.get("role") == "user"), None)
+            if fresh and (
+                not messages
+                or messages[-1].get("role") != "user"
+                or messages[-1].get("content") != fresh.get("content")
+            ):
+                messages.append(fresh)
+            iteration = 0
+            logger.info("Resuming session {} with a fresh iteration budget", session_key)
         else:
             messages = initial_messages
             iteration = 0
@@ -856,6 +880,10 @@ class ShibaBrain:
         while self.max_iterations == 0 or iteration < self.max_iterations:
             # Enforce Hard Step Cap
             if not hard_step_cap.check_step_limit(iteration):
+                final_content = (
+                    f"I reached the hard step cap ({hard_step_cap.hard_limit}) "
+                    "and stopped to avoid a runaway loop."
+                )
                 break
             if session_key and session_key in self._steering_queues:
                 steer_msgs = self._steering_queues[session_key]
@@ -927,11 +955,10 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            # Enforce Harness Context Budgeting
-            messages = context_overflow_guard.budget_context(messages)
+            prompt_messages = context_overflow_guard.budget_context(messages)
 
             response = await active_provider.chat_with_retry_streaming(
-                messages=messages,
+                messages=prompt_messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
@@ -1103,17 +1130,6 @@ class ShibaBrain:
                         )
                         continue
 
-                    # Idempotency Guard: check if this tool call has already been executed successfully in this session
-                    args_json = json.dumps(tool_call.arguments, sort_keys=True, ensure_ascii=False)
-                    idempotency_key = f"{session_key}:{tool_call.name}:{args_json}"
-                    if session_key and idempotency_key in self._idempotency_cache:
-                        logger.info("Idempotency Guard triggered: returning cached result for {}({})", tool_call.name, args_str[:200])
-                        result = self._idempotency_cache[idempotency_key]
-                        messages = self.context.add_tool_result(
-                            messages, tool_call.id, tool_call.name, result
-                        )
-                        continue
-
                     # Tool Execution Supervisor with Exponential Backoff + Jitter
                     max_tool_retries = 3
                     tool_retry_delays = (1.0, 2.0)
@@ -1223,8 +1239,6 @@ class ShibaBrain:
                     if result.startswith("Error:"):
                         if stuck_detector.add_tool_error(tool_call.name, result):
                             messages.append(stuck_detector.get_tool_error_pivot_prompt(tool_call.name, result))
-                    if session_key and not result.startswith("Error:"):
-                        self._idempotency_cache[idempotency_key] = result
 
                 # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
                 tool_names = [tc.name for tc in response.tool_calls]
@@ -1282,14 +1296,17 @@ class ShibaBrain:
                 )
 
                 # Layered Defense: record iteration and save checkpoint
-                should_continue, recovery_prompt = layered_defense.record_iteration(
-                    iteration=iteration,
-                    response_content=response.content if 'response' in locals() else None,
-                    tool_names=tool_names if 'tool_names' in locals() else None,
-                    progress_metric=progress_metric if 'progress_metric' in locals() else None,
-                    messages=messages,
-                    metadata=metadata,
-                )
+                if private:
+                    should_continue, recovery_prompt = True, None
+                else:
+                    should_continue, recovery_prompt = layered_defense.record_iteration(
+                        iteration=iteration,
+                        response_content=response.content if 'response' in locals() else None,
+                        tool_names=tool_names if 'tool_names' in locals() else None,
+                        progress_metric=progress_metric if 'progress_metric' in locals() else None,
+                        messages=messages,
+                        metadata=metadata,
+                    )
                 if recovery_prompt:
                     messages.append({"role": "user", "content": recovery_prompt})
 

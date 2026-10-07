@@ -15,7 +15,9 @@ class CheckpointManager:
         self.checkpoints_dir = workspace / "memory" / "checkpoints"
 
     def _get_checkpoint_path(self, session_key: str) -> Path:
-        return self.checkpoints_dir / f"{session_key}.json"
+        cleaned = session_key.replace("..", "_")
+        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in cleaned)[:180]
+        return self.checkpoints_dir / f"{safe or 'session'}.json"
 
     def save_checkpoint(
         self,
@@ -43,7 +45,7 @@ class CheckpointManager:
             # Write to temp file first, then atomic rename
             temp_path = checkpoint_path.with_suffix(".tmp")
             temp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-            temp_path.rename(checkpoint_path)
+            temp_path.replace(checkpoint_path)
             
             logger.info("CheckpointManager: Saved checkpoint for session %s at iteration %d", session_key, iteration)
             return True
@@ -111,7 +113,7 @@ class TaskCheckpointManager:
             
             temp_path = checkpoint_path.with_suffix(".tmp")
             temp_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-            temp_path.rename(checkpoint_path)
+            temp_path.replace(checkpoint_path)
             
             logger.info("TaskCheckpointManager: Saved checkpoint for task %s at step %s", task_id, current_step)
             return True

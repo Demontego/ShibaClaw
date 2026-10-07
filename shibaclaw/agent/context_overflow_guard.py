@@ -4,6 +4,50 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _tool_groups(messages: list) -> list[list]:
+    """Keep an assistant tool call together with every following tool result."""
+    groups: list[list] = []
+    index = 0
+    while index < len(messages):
+        msg = messages[index]
+        calls = msg.get("tool_calls") if msg.get("role") == "assistant" else None
+        if not calls:
+            groups.append([msg])
+            index += 1
+            continue
+        ids = {
+            tc.get("id")
+            for tc in calls
+            if isinstance(tc, dict) and tc.get("id")
+        }
+        group = [msg]
+        index += 1
+        while index < len(messages) and messages[index].get("role") == "tool":
+            tool_id = messages[index].get("tool_call_id")
+            if ids and tool_id not in ids:
+                break
+            group.append(messages[index])
+            index += 1
+        groups.append(group)
+    return groups
+
+
+def _message_text(msg: dict) -> str:
+    content = msg.get("content") or ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(str(part.get("text") or ""))
+            else:
+                parts.append(str(part))
+        return " ".join(parts)
+    return str(content)
+
+
 class ContextOverflowError(Exception):
     """Raised when the context window usage exceeds the hard limit threshold."""
     pass
@@ -118,7 +162,7 @@ class ContextOverflowGuard:
         target_budget = max_tokens or self.critical_threshold
         
         # Estimate tokens: 1 token ≈ 4 characters
-        estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
+        estimated_tokens = sum(len(_message_text(msg)) for msg in messages) // 4
         if estimated_tokens <= target_budget:
             return messages
 
@@ -128,25 +172,23 @@ class ContextOverflowGuard:
             target_budget
         )
 
-        # Keep system prompt (index 0) and the last 3 messages
-        system_prompt = messages[0]
-        recent_messages = messages[-3:]
-        middle_messages = messages[1:-3]
-
-        # Prune/compress middle messages if needed
-        budgeted_middle = []
-        current_tokens = (len(system_prompt.get("content") or "") + sum(len(msg.get("content") or "") for msg in recent_messages)) // 4
-
-        for msg in reversed(middle_messages):
-            msg_tokens = len(msg.get("content") or "") // 4
-            if current_tokens + msg_tokens <= target_budget:
-                budgeted_middle.insert(0, msg)
-                current_tokens += msg_tokens
-            else:
-                # Compress or skip
-                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", (msg.get("content") or "")[:50])
-
-        return [system_prompt] + budgeted_middle + recent_messages
+        groups = _tool_groups(messages)
+        head = groups[:1] if groups and groups[0] and groups[0][0].get("role") == "system" else []
+        rest = groups[len(head):]
+        kept: list[list] = []
+        used = sum(len(_message_text(msg)) for group in head for msg in group) // 4
+        for group in reversed(rest):
+            cost = sum(len(_message_text(msg)) for msg in group) // 4
+            if kept and used + cost > target_budget:
+                logger.info(
+                    "ContextOverflowGuard: Pruning message group to fit budget: %s...",
+                    _message_text(group[0])[:50],
+                )
+                continue
+            kept.append(group)
+            used += cost
+        kept.reverse()
+        return [msg for group in head + kept for msg in group]
 
 class ContextWindowRecovery:
     """
@@ -165,7 +207,7 @@ class ContextWindowRecovery:
             return messages
 
         # Estimate tokens: 1 token ≈ 4 characters
-        estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
+        estimated_tokens = sum(len(_message_text(msg)) for msg in messages) // 4
         if estimated_tokens <= max_tokens:
             return messages
 
@@ -183,8 +225,7 @@ class ContextWindowRecovery:
         summary_content = "Summary of previous conversation turns:\n"
         for msg in middle_messages:
             role = msg.get("role", "unknown")
-            content = msg.get("content") or ""
-            # Truncate content for summary
+            content = _message_text(msg)
             truncated = content[:100] + "..." if len(content) > 100 else content
             summary_content += f"- {role}: {truncated}\n"
 
