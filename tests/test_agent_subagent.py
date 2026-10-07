@@ -1,6 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
-from shibaclaw.agent.subagent import SubagentManager
+from shibaclaw.agent.subagent import SubagentManager, _audit_verdict
 
 def test_subagent_manager_init(tmp_path: Path):
     bus = MagicMock()
@@ -42,9 +42,12 @@ def test_subagent_structured_synthesis_text(tmp_path: Path):
         "- Finding 15\n"
     )
     synthesized = manager._synthesize_structured_result(text_result)
-    
-    assert "### Structure / Sections:" in synthesized
-    assert "## Summary" in synthesized
-    assert "### Key Highlights:" in synthesized
-    assert "- Finding 1" in synthesized
-    assert "[Full result truncated for context efficiency" in synthesized
+
+    assert "This is a summary of the task." in synthesized
+    assert "- Finding 15" in synthesized
+
+
+def test_audit_verdict_uses_the_last_token():
+    assert _audit_verdict("Some tests PASSED but the build FAILED") == "FAILED"
+    assert _audit_verdict("FAILED early, then PASSED") == "PASSED"
+    assert _audit_verdict("no verdict here") == "FAILED"
