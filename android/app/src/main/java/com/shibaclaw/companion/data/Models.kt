@@ -35,8 +35,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_idle_2,
             com.shibaclaw.companion.R.drawable.clip_idle_3,
         ),
-        60,
-        2400,
+        150,
+        2600,
         true,
     ),
     BOOP(
@@ -50,7 +50,7 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_boop_6,
             com.shibaclaw.companion.R.drawable.clip_boop_7,
         ),
-        70,
+        130,
         0,
         false,
     ),
@@ -67,7 +67,7 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_wag_8,
             com.shibaclaw.companion.R.drawable.clip_wag_9,
         ),
-        72,
+        120,
         0,
         false,
     ),
@@ -84,7 +84,7 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_jump_8,
             com.shibaclaw.companion.R.drawable.clip_jump_9,
         ),
-        64,
+        120,
         0,
         false,
     ),
@@ -104,12 +104,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_sleep_5,
             com.shibaclaw.companion.R.drawable.clip_sleep_6,
             com.shibaclaw.companion.R.drawable.clip_sleep_7,
-            com.shibaclaw.companion.R.drawable.clip_sleep_8,
-            com.shibaclaw.companion.R.drawable.clip_sleep_9,
-            com.shibaclaw.companion.R.drawable.clip_sleep_10,
-            com.shibaclaw.companion.R.drawable.clip_sleep_11,
         ),
-        140,
+        220,
         0,
         true,
     ),
@@ -123,16 +119,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_walk_5,
             com.shibaclaw.companion.R.drawable.clip_walk_6,
             com.shibaclaw.companion.R.drawable.clip_walk_7,
-            com.shibaclaw.companion.R.drawable.clip_walk_8,
-            com.shibaclaw.companion.R.drawable.clip_walk_9,
-            com.shibaclaw.companion.R.drawable.clip_walk_10,
-            com.shibaclaw.companion.R.drawable.clip_walk_11,
-            com.shibaclaw.companion.R.drawable.clip_walk_12,
-            com.shibaclaw.companion.R.drawable.clip_walk_13,
-            com.shibaclaw.companion.R.drawable.clip_walk_14,
-            com.shibaclaw.companion.R.drawable.clip_walk_15,
         ),
-        90,
+        180,
         0,
         true,
     ),
@@ -158,16 +146,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_sway_5,
             com.shibaclaw.companion.R.drawable.clip_sway_6,
             com.shibaclaw.companion.R.drawable.clip_sway_7,
-            com.shibaclaw.companion.R.drawable.clip_sway_8,
-            com.shibaclaw.companion.R.drawable.clip_sway_9,
-            com.shibaclaw.companion.R.drawable.clip_sway_10,
-            com.shibaclaw.companion.R.drawable.clip_sway_11,
-            com.shibaclaw.companion.R.drawable.clip_sway_12,
-            com.shibaclaw.companion.R.drawable.clip_sway_13,
-            com.shibaclaw.companion.R.drawable.clip_sway_14,
-            com.shibaclaw.companion.R.drawable.clip_sway_15,
         ),
-        42,
+        140,
         0,
         false,
     ),
@@ -181,14 +161,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_bow_5,
             com.shibaclaw.companion.R.drawable.clip_bow_6,
             com.shibaclaw.companion.R.drawable.clip_bow_7,
-            com.shibaclaw.companion.R.drawable.clip_bow_8,
-            com.shibaclaw.companion.R.drawable.clip_bow_9,
-            com.shibaclaw.companion.R.drawable.clip_bow_10,
-            com.shibaclaw.companion.R.drawable.clip_bow_11,
-            com.shibaclaw.companion.R.drawable.clip_bow_12,
-            com.shibaclaw.companion.R.drawable.clip_bow_13,
         ),
-        46,
+        150,
         0,
         false,
     ),
@@ -202,16 +176,8 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_hop_5,
             com.shibaclaw.companion.R.drawable.clip_hop_6,
             com.shibaclaw.companion.R.drawable.clip_hop_7,
-            com.shibaclaw.companion.R.drawable.clip_hop_8,
-            com.shibaclaw.companion.R.drawable.clip_hop_9,
-            com.shibaclaw.companion.R.drawable.clip_hop_10,
-            com.shibaclaw.companion.R.drawable.clip_hop_11,
-            com.shibaclaw.companion.R.drawable.clip_hop_12,
-            com.shibaclaw.companion.R.drawable.clip_hop_13,
-            com.shibaclaw.companion.R.drawable.clip_hop_14,
-            com.shibaclaw.companion.R.drawable.clip_hop_15,
         ),
-        40,
+        130,
         0,
         false,
     ),
@@ -225,21 +191,17 @@ enum class Clip(
             com.shibaclaw.companion.R.drawable.clip_breathe_5,
             com.shibaclaw.companion.R.drawable.clip_breathe_6,
             com.shibaclaw.companion.R.drawable.clip_breathe_7,
-            com.shibaclaw.companion.R.drawable.clip_breathe_8,
-            com.shibaclaw.companion.R.drawable.clip_breathe_9,
-            com.shibaclaw.companion.R.drawable.clip_breathe_10,
-            com.shibaclaw.companion.R.drawable.clip_breathe_11,
-            com.shibaclaw.companion.R.drawable.clip_breathe_12,
-            com.shibaclaw.companion.R.drawable.clip_breathe_13,
         ),
-        48,
+        170,
         0,
         false,
     );
 
     fun playedFrames(home: Int = IDLE.frameDrawables.first()): List<Int> {
         if (looping) return frameDrawables
-        return listOf(home) + frameDrawables + listOf(home)
+        val sit = IDLE.frameDrawables.first()
+        if (home == sit) return frameDrawables
+        return listOf(home) + frameDrawables.dropLast(1) + listOf(sit)
     }
 
     companion object {
@@ -278,9 +240,9 @@ internal fun Clip.Companion.homeFor(rest: Rest): Clip = when (rest) {
 
 fun frameHoldMs(index: Int, count: Int, baseMs: Int): Long {
     if (count <= 2) return baseMs.toLong()
-    val fromEdge = minOf(index, count - 1 - index)
-    val extra = (2 - fromEdge).coerceAtLeast(0) * baseMs / 2
-    return (baseMs + extra).toLong()
+    val mid = (count - 1) / 2.0
+    val dist = kotlin.math.abs(index - mid) / mid
+    return (baseMs * (1.45 - 0.45 * dist)).toLong()
 }
 
 enum class ThemeMode { SYSTEM, DARK, LIGHT }

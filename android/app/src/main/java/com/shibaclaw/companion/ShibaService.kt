@@ -236,7 +236,7 @@ class ShibaService : Service(), ShibaClient.Listener {
         val count = played(clip).size
         if (count <= 1) return
         val delay = if (clip.looping) clip.restMs else frameHoldMs(0, count, clip.intervalMs)
-        main.postDelayed(anim, pace(delay))
+        main.postDelayed(anim, delay)
     }
 
     private val anim = Runnable { stepFrame() }
@@ -256,7 +256,7 @@ class ShibaService : Service(), ShibaClient.Listener {
             Prefs.setFrame(this, 0)
             ShibaWidget.refresh(this)
             val pause = if (clip.restMs > 0) clip.restMs else clip.intervalMs.toLong()
-            main.postDelayed(anim, pace(pause))
+            main.postDelayed(anim, pause)
             return
         }
         Prefs.setFrame(this, next)
@@ -266,10 +266,8 @@ class ShibaService : Service(), ShibaClient.Listener {
         } else {
             frameHoldMs(next, count, clip.intervalMs)
         }
-        main.postDelayed(anim, pace(delay))
+        main.postDelayed(anim, delay)
     }
-
-    private fun pace(ms: Long): Long = ms.coerceAtLeast(140L)
 
     private fun vibrate() {
         val vibe = if (Build.VERSION.SDK_INT >= 31) {

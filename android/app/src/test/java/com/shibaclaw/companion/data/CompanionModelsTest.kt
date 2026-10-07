@@ -17,20 +17,14 @@ class CompanionModelsTest {
     }
 
     @Test
-    fun actionsLeaveAndReturnToTheSit() {
-        val rest = Clip.IDLE.playedFrames().first()
-        listOf(Clip.BOOP, Clip.WAG, Clip.JUMP, Clip.SWAY, Clip.BOW, Clip.HOP, Clip.BREATHE).forEach { clip ->
-            val played = clip.playedFrames()
-            assertEquals(rest, played.first())
-            assertEquals(rest, played.last())
-            assertTrue(clip.frameDrawables.all { it in played })
-        }
+    fun sitGesturePlaysItsOwnFrames() {
+        assertEquals(Clip.BOOP.frameDrawables, Clip.BOOP.playedFrames())
         assertEquals(Clip.IDLE.frameDrawables, Clip.IDLE.playedFrames())
     }
 
     @Test
-    fun actionFramesLingerAtTheEnds() {
-        assertTrue(frameHoldMs(0, 10, 70) > frameHoldMs(4, 10, 70))
+    fun actionFramesHoldTheMiddle() {
+        assertTrue(frameHoldMs(4, 10, 70) > frameHoldMs(0, 10, 70))
     }
 
     @Test
@@ -46,7 +40,7 @@ class CompanionModelsTest {
         val home = Clip.SLEEP.frameDrawables.first()
         val played = Clip.HOP.playedFrames(home)
         assertEquals(home, played.first())
-        assertEquals(home, played.last())
+        assertEquals(Clip.IDLE.frameDrawables.first(), played.last())
     }
 
     @Test

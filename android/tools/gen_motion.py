@@ -17,11 +17,6 @@ OUT = ROOT / "app" / "src" / "main" / "res" / "drawable-nodpi"
 BASE = 0.90
 
 
-def smooth(t: float) -> float:
-    t = min(1.0, max(0.0, t))
-    return t * t * (3 - 2 * t)
-
-
 def feet(src: Image.Image) -> tuple[float, float]:
     box = src.getchannel("A").getbbox()
     if not box:
@@ -77,47 +72,31 @@ def sequence(src: Image.Image, anchor: tuple[float, float], prefix: str, poses: 
         save(frame, f"{prefix}_{i}.webp")
 
 
-def sway(n: int = 16) -> list[tuple]:
+def arc(n: int) -> list[float]:
+    return [math.sin((i / (n - 1)) * math.pi) for i in range(n)]
+
+
+def sway(n: int = 8) -> list[tuple]:
+    return [(8 * u, 1, 1, 2 * u, -4 * u) for u in arc(n)]
+
+
+def bow(n: int = 8) -> list[tuple]:
+    return [(13 * u, 1 + 0.03 * u, 1 - 0.07 * u, 0, 8 * u) for u in arc(n)]
+
+
+def hop(n: int = 8) -> list[tuple]:
+    # Squat, leave, hang in the headroom, land. Ends are replaced by the sit.
+    lift = (0, 6, -14, -26, -24, -8, 7, 0)
+    squash = (0, 0.07, -0.02, 0, 0, 0.02, 0.08, 0)
     poses = []
     for i in range(n):
-        t = i / (n - 1)
-        angle = math.sin(t * math.tau) * 7.0
-        poses.append((angle, 1, 1, 0, 0))
+        s = squash[i]
+        poses.append((0, 1 + s, 1 - s, 0, lift[i]))
     return poses
 
 
-def bow(n: int = 14) -> list[tuple]:
-    poses = []
-    for i in range(n):
-        t = i / (n - 1)
-        u = math.sin(t * math.pi)
-        poses.append((u * 11, 1 + u * 0.04, 1 - u * 0.07, 0, u * 3))
-    return poses
-
-
-def hop(n: int = 16) -> list[tuple]:
-    poses = []
-    for i in range(n):
-        t = i / (n - 1)
-        if t < 0.2:
-            u = smooth(t / 0.2)
-            poses.append((0, 1 + 0.05 * u, 1 - 0.07 * u, 0, 0))
-        elif t < 0.78:
-            u = math.sin(((t - 0.2) / 0.58) * math.pi)
-            poses.append((0, 1.05 - 0.06 * u, 0.93 + 0.08 * u, 0, -20 * u))
-        else:
-            u = smooth((t - 0.78) / 0.22)
-            poses.append((0, 1.05 - 0.05 * u, 0.93 + 0.07 * u, 0, 0))
-    return poses
-
-
-def breathe(n: int = 14) -> list[tuple]:
-    poses = []
-    for i in range(n):
-        t = i / (n - 1)
-        u = math.sin(t * math.pi)
-        poses.append((0, 1 - 0.02 * u, 1 + 0.045 * u, 0, -3 * u))
-    return poses
+def breathe(n: int = 8) -> list[tuple]:
+    return [(0, 1 - 0.03 * u, 1 + 0.055 * u, 0, -5 * u) for u in arc(n)]
 
 
 def loop(src: Image.Image, anchor: tuple[float, float], prefix: str, poses: list[tuple]) -> None:
@@ -125,21 +104,30 @@ def loop(src: Image.Image, anchor: tuple[float, float], prefix: str, poses: list
         save(render(src, anchor, angle, sx, sy, ox, oy), f"{prefix}_{i}.webp")
 
 
-def stroll(n: int = 16) -> list[tuple]:
+def stroll(n: int = 8) -> list[tuple]:
     poses = []
     for i in range(n):
         t = i / n
-        step = math.sin(t * math.tau * 2)
-        poses.append((math.sin(t * math.tau) * 4, 1, 1, math.sin(t * math.tau) * 10, -5 * abs(step)))
+        rock = math.sin(t * math.tau)
+        step = abs(math.sin(t * math.tau * 2))
+        poses.append((rock * 7, 1 + 0.02 * abs(rock), 1 - 0.04 * step, rock * 3, -10 * step))
     return poses
 
 
-def sleep_breath(n: int = 12) -> list[tuple]:
+def sleep_breath(n: int = 8) -> list[tuple]:
     poses = []
     for i in range(n):
         u = math.sin((i / n) * math.tau)
-        poses.append((0, 1 - 0.012 * u, 1 + 0.03 * u, 0, 0))
+        inhale = max(u, 0)
+        poses.append((u * 2, 1 - 0.02 * inhale, 1 + 0.05 * inhale, 0, -3 * inhale))
     return poses
+
+
+def wipe(prefix: str, keep: int) -> None:
+    for path in OUT.glob(f"{prefix}_*.webp"):
+        idx = int(path.stem.rsplit("_", 1)[-1])
+        if idx >= keep:
+            path.unlink()
 
 
 def main() -> None:
@@ -155,6 +143,8 @@ def main() -> None:
     loop(idle, anchor, "clip_walk", stroll())
     sleep = Image.open(SRC / "clip_sleep_0.webp").convert("RGBA")
     loop(sleep, feet(sleep), "clip_sleep", sleep_breath())
+    for prefix in ("clip_sway", "clip_bow", "clip_hop", "clip_breathe", "clip_walk", "clip_sleep"):
+        wipe(prefix, 8)
     print("wrote clips")
 
 
