@@ -60,3 +60,23 @@ def test_saga_idempotency():
     # Second execution (should skip due to idempotency)
     assert saga.execute() is True
     assert runs == 1
+
+
+def test_saga_retry_after_rollback():
+    saga = IdempotentSaga()
+    runs = 0
+
+    def action1():
+        nonlocal runs
+        runs += 1
+
+    def fail_once():
+        if runs < 2:
+            raise ValueError("fail")
+
+    saga.add_step("step1", action1, lambda: None)
+    saga.add_step("step2", fail_once, lambda: None)
+    assert saga.execute() is False
+    assert "step1" not in saga.completed_steps
+    assert saga.execute() is True
+    assert runs == 2
