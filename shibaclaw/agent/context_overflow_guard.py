@@ -5,6 +5,34 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _tool_groups(messages: list) -> list[list]:
+    """Keep an assistant tool call together with every following tool result."""
+    groups: list[list] = []
+    index = 0
+    while index < len(messages):
+        msg = messages[index]
+        calls = msg.get("tool_calls") if msg.get("role") == "assistant" else None
+        if not calls:
+            groups.append([msg])
+            index += 1
+            continue
+        ids = {
+            tc.get("id")
+            for tc in calls
+            if isinstance(tc, dict) and tc.get("id")
+        }
+        group = [msg]
+        index += 1
+        while index < len(messages) and messages[index].get("role") == "tool":
+            tool_id = messages[index].get("tool_call_id")
+            if ids and tool_id not in ids:
+                break
+            group.append(messages[index])
+            index += 1
+        groups.append(group)
+    return groups
+
+
 def _message_text(msg: dict) -> str:
     content = msg.get("content") or ""
     if isinstance(content, str):
@@ -144,25 +172,23 @@ class ContextOverflowGuard:
             target_budget
         )
 
-        # Keep system prompt (index 0) and the last 3 messages
-        system_prompt = messages[0]
-        recent_messages = messages[-3:]
-        middle_messages = messages[1:-3]
-
-        # Prune/compress middle messages if needed
-        budgeted_middle = []
-        current_tokens = (len(_message_text(system_prompt)) + sum(len(_message_text(msg)) for msg in recent_messages)) // 4
-
-        for msg in reversed(middle_messages):
-            msg_tokens = len(_message_text(msg)) // 4
-            if current_tokens + msg_tokens <= target_budget:
-                budgeted_middle.insert(0, msg)
-                current_tokens += msg_tokens
-            else:
-                # Compress or skip
-                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", _message_text(msg)[:50])
-
-        return [system_prompt] + budgeted_middle + recent_messages
+        groups = _tool_groups(messages)
+        head = groups[:1] if groups and groups[0] and groups[0][0].get("role") == "system" else []
+        rest = groups[len(head):]
+        kept: list[list] = []
+        used = sum(len(_message_text(msg)) for group in head for msg in group) // 4
+        for group in reversed(rest):
+            cost = sum(len(_message_text(msg)) for msg in group) // 4
+            if kept and used + cost > target_budget:
+                logger.info(
+                    "ContextOverflowGuard: Pruning message group to fit budget: %s...",
+                    _message_text(group[0])[:50],
+                )
+                continue
+            kept.append(group)
+            used += cost
+        kept.reverse()
+        return [msg for group in head + kept for msg in group]
 
 class ContextWindowRecovery:
     """

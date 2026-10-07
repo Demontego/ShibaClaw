@@ -43,6 +43,24 @@ def test_context_overflow_guard_budget_context(tmp_path: Path):
     # At least one middle message should be pruned to fit the budget
     assert len(budgeted) < len(messages)
 
+
+def test_budget_keeps_tool_call_with_result(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=100)
+    messages = [
+        {"role": "system", "content": "sys"},
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "call-1", "type": "function"}],
+            "content": "x" * 500,
+        },
+        {"role": "tool", "tool_call_id": "call-1", "content": "y" * 500},
+        {"role": "user", "content": "latest"},
+    ]
+    budgeted = guard.budget_context(messages, max_tokens=20)
+    roles = [(m.get("role"), m.get("tool_call_id")) for m in budgeted]
+    if any(m.get("tool_calls") for m in budgeted):
+        assert ("tool", "call-1") in roles
+
 def test_context_window_recovery(tmp_path: Path):
     from shibaclaw.agent.context_overflow_guard import ContextWindowRecovery
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)

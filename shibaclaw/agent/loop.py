@@ -167,7 +167,6 @@ class ShibaBrain:
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._provider_cache: dict[str, Thinker] = {}
         self._steering_queues: dict[str, list[dict]] = {}
-        self._idempotency_cache: dict[str, str] = {}
         self.memory_consolidator = PackMemory(
             workspace=workspace,
             provider=cast(Thinker, provider),
@@ -714,6 +713,20 @@ class ShibaBrain:
         finally:
             reset_permission_mode(perm_tokens)
 
+    def _checkpoint_forbidden(self, session_key: str | None, metadata: dict | None) -> bool:
+        """Incognito and ephemeral sessions must not be written to checkpoint files."""
+        meta = metadata or {}
+        if meta.get("incognito") or meta.get("ephemeral"):
+            return True
+        if not session_key or not getattr(self, "sessions", None):
+            return False
+        try:
+            sess = self.sessions.get_or_create(session_key)
+        except Exception:
+            return False
+        smeta = getattr(sess, "metadata", None) or {}
+        return bool(smeta.get("incognito") or smeta.get("ephemeral"))
+
     async def _run_agent_loop_inner(
         self,
         initial_messages: list[dict],
@@ -730,10 +743,21 @@ class ShibaBrain:
         temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
         checkpoint_mgr = CheckpointManager(self.context.workspace)
-        checkpoint = checkpoint_mgr.load_checkpoint(session_key) if session_key else None
+        private = self._checkpoint_forbidden(session_key, metadata)
+        if private and session_key:
+            checkpoint_mgr.delete_checkpoint(session_key)
+        checkpoint = None if private or not session_key else checkpoint_mgr.load_checkpoint(session_key)
         if checkpoint:
-            messages, iteration, _checkpoint_meta = checkpoint
-            logger.info("Resuming session {} from checkpoint at iteration {}", session_key, iteration)
+            messages, _saved_iteration, _checkpoint_meta = checkpoint
+            fresh = next((item for item in reversed(initial_messages) if item.get("role") == "user"), None)
+            if fresh and (
+                not messages
+                or messages[-1].get("role") != "user"
+                or messages[-1].get("content") != fresh.get("content")
+            ):
+                messages.append(fresh)
+            iteration = 0
+            logger.info("Resuming session {} with a fresh iteration budget", session_key)
         else:
             messages = initial_messages
             iteration = 0
@@ -891,7 +915,7 @@ class ShibaBrain:
                 )
                 break
             iteration += 1
-            if session_key:
+            if session_key and not private:
                 checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
 
             live_block = self.context.build_runtime_block(
@@ -922,10 +946,10 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            messages = context_overflow_guard.budget_context(messages)
+            prompt_messages = context_overflow_guard.budget_context(messages)
 
             response = await active_provider.chat_with_retry_streaming(
-                messages=messages,
+                messages=prompt_messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
@@ -943,11 +967,11 @@ class ShibaBrain:
                 try:
                     overflow_action = context_overflow_guard.check_usage(
                         current_tokens=prompt_tokens + completion_tokens,
-                        checkpoint_mgr=checkpoint_mgr,
+                        checkpoint_mgr=None if private else checkpoint_mgr,
                         session_key=session_key or "",
                     )
                     if overflow_action == "compress":
-                        messages = context_overflow_guard.budget_context(messages)
+                        prompt_messages = context_overflow_guard.budget_context(messages)
                 except ContextOverflowError as exc:
                     logger.error("ContextOverflowGuard hard limit: {}", exc)
                     keep_checkpoint = True
@@ -1034,16 +1058,6 @@ class ShibaBrain:
                                 f"Error: Tool '{tool_call.name}' is allowlist-only. "
                                 "Non-allowlisted senders may only use web_search/web_fetch."
                             ),
-                        )
-                        continue
-                    args_json = json.dumps(tool_call.arguments, sort_keys=True, ensure_ascii=False)
-                    idempotency_key = f"{session_key}:{tool_call.name}:{args_json}"
-                    if session_key and idempotency_key in self._idempotency_cache:
-                        messages = self.context.add_tool_result(
-                            messages,
-                            tool_call.id,
-                            tool_call.name,
-                            self._idempotency_cache[idempotency_key],
                         )
                         continue
                     result = ""
@@ -1145,8 +1159,6 @@ class ShibaBrain:
                             messages.append(
                                 stuck_detector.get_tool_error_pivot_prompt(tool_call.name, result)
                             )
-                    elif session_key:
-                        self._idempotency_cache[idempotency_key] = result
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
@@ -1207,7 +1219,7 @@ class ShibaBrain:
                 "without completing the task. You can try breaking the task into smaller steps."
             )
 
-        if session_key:
+        if session_key and not private:
             if keep_checkpoint:
                 checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
             else:
