@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 
 JOB_NAME = "Shiba evolve"
+SESSION_KEY = "automation:shiba-evolve"
 STALE_HOURS = 6
 ALARM_MS = 10 * 60 * 1000
 MAX_APPLIES = 3

@@ -45,6 +45,7 @@ from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
+from shibaclaw.evolve.gate import SESSION_KEY as EVOLVE_SESSION_KEY
 from shibaclaw.evolve.switch import handle as evolve_handle
 from shibaclaw.evolve.switch import is_owner_surface, owner_chat
 from shibaclaw.integrations.telegram_labels import telegram_owner_ids
@@ -1389,19 +1390,36 @@ class ShibaBrain:
             content = "Evolution commands are owner-only."
         else:
             if head == "/panic":
-                tasks = self._active_tasks.pop(msg.session_key, [])
-                for task in tasks:
-                    if not task.done():
+                current = asyncio.current_task()
+                keys = [msg.session_key]
+                if EVOLVE_SESSION_KEY not in keys:
+                    keys.append(EVOLVE_SESSION_KEY)
+                for key in keys:
+                    pending = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is not current and not task.done()
+                    ]
+                    kept = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is current
+                    ]
+                    if kept:
+                        self._active_tasks[key] = kept
+                    else:
+                        self._active_tasks.pop(key, None)
+                    for task in pending:
                         task.cancel()
-                for task in tasks:
+                    for task in pending:
+                        try:
+                            await task
+                        except (asyncio.CancelledError, Exception):
+                            pass
                     try:
-                        await task
-                    except (asyncio.CancelledError, Exception):
+                        await self.subagents.cancel_by_session(key)
+                    except Exception:
                         pass
-                try:
-                    await self.subagents.cancel_by_session(msg.session_key)
-                except Exception:
-                    pass
                 action = "panic"
             else:
                 action = parts[1].lower() if len(parts) > 1 else "status"
@@ -1720,6 +1738,8 @@ class ShibaBrain:
             lines = [
                 "🐕 shibaclaw commands:",
                 "/new — Start a new conversation",
+                "/evolve — Evolution on/off/status (owner)",
+                "/panic — Stop evolution, no restart",
                 "/stop — Stop the current task",
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
@@ -2068,11 +2088,19 @@ class ShibaBrain:
             content=content,
             media=media or [],
             metadata=metadata or {},
+            session_key_override=session_key,
         )
-        return await self._process_message(
-            msg,
-            session_key=session_key,
-            on_progress=on_progress,
-            on_response_token=on_response_token,
-            profile_id_override=profile_id,
-        )
+        task = asyncio.current_task()
+        if task is not None:
+            self._active_tasks.setdefault(session_key, []).append(task)
+        try:
+            return await self._process_message(
+                msg,
+                session_key=session_key,
+                on_progress=on_progress,
+                on_response_token=on_response_token,
+                profile_id_override=profile_id,
+            )
+        finally:
+            if task is not None:
+                self._remove_active_task(session_key, task)

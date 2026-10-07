@@ -67,10 +67,24 @@ def test_alarm_job_is_every_thirty_minutes(tmp_path, monkeypatch):
     assert "EVOLVE_SKIP" in job.payload.message
 
 
+def test_running_service_keeps_cli_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
+    store = tmp_path / "automation.json"
+    live = AutomationService(store_path=store, workspace=tmp_path)
+    cli = AutomationService(store_path=store, workspace=tmp_path)
+    handle("on", workspace=tmp_path, automation=cli, owner="1", tz=UTC)
+    assert live.sync_from_disk()
+    live._save_unlocked()
+    again = AutomationService(store_path=store, workspace=tmp_path)
+    assert any(job.name == "Shiba evolve" and job.enabled for job in again.list_jobs())
+
+
 def test_owner_surface_and_chat():
     owners = {"42"}
     assert is_owner_surface("webui", "x", {}, owners)
     assert is_owner_surface("telegram", "42", {}, owners)
+    assert is_owner_surface("telegram", "42|alice", {}, owners)
+    assert not is_owner_surface("telegram", "7|alice", {}, owners)
     assert not is_owner_surface("telegram", "7", {}, owners)
     assert not is_owner_surface("telegram", "42", {"is_group": True}, owners)
     assert not is_owner_surface("telegram", "42", {"business_connection_id": "b"}, owners)
