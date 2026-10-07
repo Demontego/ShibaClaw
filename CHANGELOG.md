@@ -6,6 +6,7 @@
 - **Loop safety** — hard step cap, session cost cap, context-overflow guard with checkpoint resume, stuck-loop prompts, identical tool-call cutoff, safe-tool retry with jitter, semantic tool circuit breaker, and structured tool-error feedback. Incognito sessions are not checkpointed. A resumed turn starts with a fresh step budget and the new user message. Tool-call pruning keeps each call with its result.
 - **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart. The last audit token wins, progress stays out of the project root, and a rolled-back saga step can run again.
 - **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView. The language menu stays anchored to its switcher.
+- **Durable turn journal** — Tool calls are recorded before they run, so a crash or a redelivered input does not execute the same call twice. `/stop` still cancels the turn; `/stop idle` lets the current tool finish. Incognito sessions keep this journal in memory.
 
 ## [1.0.3] - 2026-09-30
 

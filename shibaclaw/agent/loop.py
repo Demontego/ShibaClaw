@@ -26,6 +26,7 @@ from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
+from shibaclaw.agent.turn_journal import REFUSAL, JournalError, TurnJournal
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
 from shibaclaw.agent.tools.interactive import (
@@ -172,6 +173,8 @@ class ShibaBrain:
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._provider_cache: dict[str, Thinker] = {}
         self._steering_queues: dict[str, list[dict]] = {}
+        self.turn_journal = TurnJournal(workspace / "runtime" / "turns")
+        self._ephemeral_journal = TurnJournal(None)
         self.memory_consolidator = PackMemory(
             workspace=workspace,
             provider=cast(Thinker, provider),
@@ -719,6 +722,13 @@ class ShibaBrain:
             )
         finally:
             reset_permission_mode(perm_tokens)
+            if session_key:
+                journal = self._journal_for(session_key)
+                if journal is not None:
+                    try:
+                        journal.clear_stop(session_key)
+                    except JournalError as exc:
+                        logger.error("turn journal: {}", exc)
 
     def _checkpoint_forbidden(self, session_key: str | None, metadata: dict | None) -> bool:
         """Incognito and ephemeral sessions must not be written to checkpoint files."""
@@ -1082,6 +1092,7 @@ class ShibaBrain:
                     thinking_blocks=response.thinking_blocks,
                 )
 
+                stop_turn = False
                 for tool_call in response.tool_calls:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
@@ -1130,91 +1141,129 @@ class ShibaBrain:
                         )
                         continue
 
-                    # Tool Execution Supervisor with Exponential Backoff + Jitter
-                    max_tool_retries = 3
-                    tool_retry_delays = (1.0, 2.0)
-                    
-                    for tool_attempt in range(1, max_tool_retries + 1):
-                        resource = layered_defense.race_guard.extract_resource(tool_call.name, tool_call.arguments)
-                        acquired = True
-                        if resource:
-                            acquired = await layered_defense.race_guard.acquire(resource, tool_call.name, timeout=2.0)
-
-                        if not acquired:
-                            result = f"Error: Tool '{tool_call.name}' failed to acquire lock for resource '{resource}' (race condition detected)"
-                            break
-
-                        try:
-                            tool_start_time = time.monotonic()
-                            tool_future = asyncio.ensure_future(
-                                self.tools.execute(tool_call.name, tool_call.arguments)
+                    async def _run_tool(call: Any = tool_call) -> str:
+                        outcome = ""
+                        max_tool_retries = 3
+                        tool_retry_delays = (1.0, 2.0)
+                        for tool_attempt in range(1, max_tool_retries + 1):
+                            resource = layered_defense.race_guard.extract_resource(
+                                call.name, call.arguments
                             )
-                            # Emit periodic "still working" progress while the
-                            # tool runs, so the UI doesn't look stuck.
-                            _heartbeat = 15  # seconds
-                            _waited = 0
-                            while not tool_future.done():
-                                remaining = self.tool_timeout - _waited
-                                if remaining <= 0 and self.tool_timeout > 0:
-                                    break
-                                step_timeout = (
-                                    max(0.1, min(float(_heartbeat), float(remaining)))
-                                    if self.tool_timeout > 0
-                                    else _heartbeat
+                            acquired = True
+                            if resource:
+                                acquired = await layered_defense.race_guard.acquire(
+                                    resource, call.name, timeout=2.0
                                 )
-                                try:
-                                    await asyncio.wait_for(
-                                        asyncio.shield(tool_future),
-                                        timeout=step_timeout,
-                                    )
-                                except asyncio.TimeoutError:
-                                    _waited += _heartbeat
-                                    if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                            if not acquired:
+                                return (
+                                    f"Error: Tool '{call.name}' failed to acquire lock "
+                                    f"for resource '{resource}' (race condition detected)"
+                                )
+                            try:
+                                tool_start_time = time.monotonic()
+                                tool_future = asyncio.ensure_future(
+                                    self.tools.execute(call.name, call.arguments)
+                                )
+                                _heartbeat = 15
+                                _waited = 0
+                                while not tool_future.done():
+                                    remaining = self.tool_timeout - _waited
+                                    if remaining <= 0 and self.tool_timeout > 0:
                                         break
-                                    if on_progress:
-                                        await on_progress(
-                                            f"⏳ {tool_call.name} still running ({_waited}s)…",
-                                            tool_hint=True,
+                                    step_timeout = (
+                                        max(0.1, min(float(_heartbeat), float(remaining)))
+                                        if self.tool_timeout > 0
+                                        else _heartbeat
+                                    )
+                                    try:
+                                        await asyncio.wait_for(
+                                            asyncio.shield(tool_future),
+                                            timeout=step_timeout,
                                         )
-                                    continue
-
-                            if not tool_future.done():
-                                tool_future.cancel()
-                                result = (
-                                    f"Error: Tool '{tool_call.name}' timed out after "
-                                    f"{_waited}s (cap: {self.tool_timeout}s)"
+                                    except asyncio.TimeoutError:
+                                        _waited += _heartbeat
+                                        if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                                            break
+                                        if on_progress:
+                                            await on_progress(
+                                                f"⏳ {call.name} still running ({_waited}s)…",
+                                                tool_hint=True,
+                                            )
+                                        continue
+                                if not tool_future.done():
+                                    tool_future.cancel()
+                                    outcome = (
+                                        f"Error: Tool '{call.name}' timed out after "
+                                        f"{_waited}s (cap: {self.tool_timeout}s)"
+                                    )
+                                else:
+                                    outcome = tool_future.result()
+                            except asyncio.CancelledError:
+                                raise
+                            except Exception as exc:
+                                outcome = f"Error: Tool '{call.name}' failed: {exc}"
+                            finally:
+                                if resource and acquired:
+                                    layered_defense.race_guard.release(resource, call.name)
+                            tool_duration = time.monotonic() - tool_start_time
+                            layered_defense.tool_profiler.record_execution(call.name, tool_duration)
+                            is_error = outcome.startswith("Error:")
+                            is_transient = any(
+                                m in outcome.lower()
+                                for m in (
+                                    "timeout",
+                                    "connection",
+                                    "500",
+                                    "502",
+                                    "503",
+                                    "504",
+                                    "temporarily unavailable",
                                 )
-                            else:
-                                result = tool_future.result()
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception as exc:
-                            result = f"Error: Tool '{tool_call.name}' failed: {exc}"
-                        finally:
-                            if resource and acquired:
-                                layered_defense.race_guard.release(resource, tool_call.name)
-
-                        # Record execution duration
-                        tool_duration = time.monotonic() - tool_start_time
-                        layered_defense.tool_profiler.record_execution(tool_call.name, tool_duration)
-
-                        # Check if we should retry (only for safe, idempotent tools on transient errors)
-                        is_error = result.startswith("Error:")
-                        is_transient = any(m in result.lower() for m in ["timeout", "connection", "500", "502", "503", "504", "temporarily unavailable"])
-                        is_safe = tool_call.name in {"web_search", "web_fetch", "read_file", "list_dir", "session_search"}
-
-                        if is_error and is_transient and is_safe and tool_attempt < max_tool_retries:
-                            import random
-                            base_delay = tool_retry_delays[tool_attempt - 1]
-                            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
-                            logger.warning(
-                                "Tool '{}' failed with transient error (attempt {}/{}), retrying in {:.2f}s: {}",
-                                tool_call.name, tool_attempt, max_tool_retries, delay, result[:120]
                             )
-                            await asyncio.sleep(delay)
-                            continue
+                            is_safe = call.name in {
+                                "web_search",
+                                "web_fetch",
+                                "read_file",
+                                "list_dir",
+                                "session_search",
+                            }
+                            if is_error and is_transient and is_safe and tool_attempt < max_tool_retries:
+                                base_delay = tool_retry_delays[tool_attempt - 1]
+                                delay = base_delay / 2 + random.uniform(0, base_delay / 2)
+                                logger.warning(
+                                    "Tool '{}' failed with transient error (attempt {}/{}), retrying in {:.2f}s: {}",
+                                    call.name,
+                                    tool_attempt,
+                                    max_tool_retries,
+                                    delay,
+                                    outcome[:120],
+                                )
+                                await asyncio.sleep(delay)
+                                continue
+                            return outcome
+                        return outcome
+
+                    journal = self._journal_for(session_key)
+                    halt = False
+                    try:
+                        if journal is not None and session_key:
+                            result, halt = await journal.execute_claimed(
+                                session_key,
+                                str(tool_call.id or tool_call.name),
+                                tool_call.name,
+                                _run_tool,
+                            )
                         else:
-                            break
+                            result = await _run_tool()
+                    except JournalError as exc:
+                        logger.error("turn journal: {}", exc)
+                        final_content = REFUSAL
+                        stop_turn = True
+                        break
+                    if halt:
+                        final_content = result
+                        stop_turn = True
+                        break
                     # Semantic Tool Circuit Breaker
                     if layered_defense.semantic_tool_breaker.record_call(tool_call.name, tool_call.arguments, result):
                         result = layered_defense.semantic_tool_breaker.get_tripped_message(tool_call.name)
@@ -1227,12 +1276,17 @@ class ShibaBrain:
                             result = format_structured_error_feedback(tool_call.name, raw_err, tool.parameters)
 
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
+                        original = len(result)
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
                             result[:half]
-                            + f"\n...[TRUNCATED — {len(result)} chars total]...\n"
+                            + f"\n...[TRUNCATED — {original} chars total]...\n"
                             + result[-half:]
                         )
+                        if journal is not None and session_key:
+                            journal.note_truncation(
+                                session_key, tool_call.name, f"{original} chars"
+                            )
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
@@ -1255,6 +1309,8 @@ class ShibaBrain:
                 sre_monitor.add_progress_metric(progress_metric)
                 if stuck_detector.add_progress_metric(progress_metric):
                     messages.append(stuck_detector.get_goal_reassessment_prompt("lack of progress / flat progress metric"))
+                if stop_turn:
+                    break
             else:
                 # Strip think from logs/debug output, but keep full content for memory (so UI can reload it)
                 clean = self._strip_think(response.content)
@@ -1367,11 +1423,20 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
+            folded = " ".join(cmd.split())
             head = cmd.split()[0].split("@", 1)[0] if cmd else ""
             if head in {"/evolve", "/panic"}:
                 await self.bus.publish_outbound(await self._handle_evolve_cmd(msg))
-            elif cmd == "/stop":
-                await self._handle_stop(msg)
+            elif folded == "/stop":
+                content = await self._handle_stop(msg, msg.session_key, "hard")
+                await self.bus.publish_outbound(
+                    OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+                )
+            elif folded in {"/stop idle", "/stop when_idle"}:
+                content = await self._handle_stop(msg, msg.session_key, "when_idle")
+                await self.bus.publish_outbound(
+                    OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
+                )
             elif cmd == "/restart":
                 await self._handle_restart(msg)
             else:
@@ -1453,25 +1518,85 @@ class ShibaBrain:
     def _evolve_owner_chat(self) -> str | None:
         return owner_chat(self.channels_config)
 
-    async def _handle_stop(self, msg: InboundMessage) -> None:
-        """Cancel all active tasks and subagents for the session."""
-        tasks = self._active_tasks.pop(msg.session_key, [])
-        cancelled = sum(1 for t in tasks if not t.done() and t.cancel())
-        for t in tasks:
+    def _journal_for(self, session_key: str | None) -> TurnJournal | None:
+        if not session_key:
+            return None
+        try:
+            session = self.sessions.get_or_create(session_key)
+            meta = getattr(session, "metadata", None) or {}
+        except Exception:
+            logger.warning("turn journal lookup failed for {}", session_key)
+            return self._ephemeral_journal
+        if meta.get("incognito") or meta.get("ephemeral"):
+            return self._ephemeral_journal
+        return self.turn_journal
+
+    def _screen_turn_input(
+        self,
+        msg: InboundMessage,
+        session_key: str,
+        *,
+        channel: str | None = None,
+        chat_id: str | None = None,
+    ) -> bool | OutboundMessage | None:
+        journal = self._journal_for(session_key)
+        if journal is None:
+            return True
+        input_id = (msg.metadata or {}).get("input_id")
+        try:
+            fresh = journal.accept_input(session_key, None if input_id is None else str(input_id))
+        except JournalError as exc:
+            logger.error("turn journal: {}", exc)
+            return OutboundMessage(
+                channel=channel or msg.channel,
+                chat_id=chat_id or msg.chat_id,
+                content=REFUSAL,
+            )
+        if fresh:
+            return True
+        logger.info("Dropped duplicate input {} for {}", input_id, session_key)
+        return None
+
+    def _with_interrupt_note(self, session_key: str, messages: list[dict]) -> list[dict]:
+        journal = self._journal_for(session_key)
+        if journal is None:
+            return messages
+        note = journal.consume_interruptions(session_key)
+        if not note:
+            return messages
+        messages.insert(max(len(messages) - 1, 0), {"role": "user", "content": note})
+        return messages
+
+    async def _handle_stop(self, msg: InboundMessage, session_key: str, mode: str) -> str:
+        """Hard stop cancels the turn. Idle stop lets the current tool finish."""
+        journal = self._journal_for(session_key)
+        tasks = [task for task in self._active_tasks.get(session_key, []) if not task.done()]
+        if mode == "when_idle":
+            if not tasks:
+                return "No active scent to stop."
+            if journal is not None:
+                journal.request_stop(session_key, "when_idle")
+            return "Stopping when the current tool finishes."
+        if journal is not None:
             try:
-                await t
+                journal.request_stop(session_key, "hard")
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
+        tasks = self._active_tasks.pop(session_key, [])
+        cancelled = sum(1 for task in tasks if not task.done() and task.cancel())
+        for task in tasks:
+            try:
+                await task
             except (asyncio.CancelledError, Exception):
                 pass
-        sub_cancelled = await self.subagents.cancel_by_session(msg.session_key)
+        sub_cancelled = await self.subagents.cancel_by_session(session_key)
+        if journal is not None:
+            try:
+                journal.clear_stop(session_key)
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
         total = cancelled + sub_cancelled
-        content = f"🐕 Halted {total} hunt(s)." if total else "No active scent to stop."
-        await self.bus.publish_outbound(
-            OutboundMessage(
-                channel=msg.channel,
-                chat_id=msg.chat_id,
-                content=content,
-            )
-        )
+        return f"🐕 Halted {total} hunt(s)." if total else "No active scent to stop."
 
     _ALLOWED_SUBCOMMANDS = frozenset({"web", "gateway", "cli"})
 
@@ -1629,6 +1754,16 @@ class ShibaBrain:
                 profile_id=profile_id,
                 defer_system=True,
             )
+            screened = self._screen_turn_input(msg, key, channel=channel, chat_id=chat_id)
+            if screened is None:
+                return None
+            if isinstance(screened, OutboundMessage):
+                return screened
+            try:
+                messages = self._with_interrupt_note(key, messages)
+            except JournalError as exc:
+                logger.error("turn journal: {}", exc)
+                return OutboundMessage(channel=channel, chat_id=chat_id, content=REFUSAL)
             _temp = self._resolve_temperature(
                 profile_id, session.metadata, self.workspace
             )
@@ -1924,6 +2059,16 @@ class ShibaBrain:
 
         if msg.metadata and msg.metadata.get("no_reply"):
             return None
+        screened = self._screen_turn_input(msg, key)
+        if screened is None:
+            return None
+        if isinstance(screened, OutboundMessage):
+            return screened
+        try:
+            initial_messages = self._with_interrupt_note(key, initial_messages)
+        except JournalError as exc:
+            logger.error("turn journal: {}", exc)
+            return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=REFUSAL)
         _pre_saved_count = 1
 
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
