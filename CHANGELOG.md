@@ -5,6 +5,7 @@
 - **Opt-in self-evolution** — `/evolve on|off|status` and `/panic` (owner DM, CLI, or WebUI). An alarm takes one backlog class on an `evolve/*` branch. A separate `shibaclaw agent --model` process reviews. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself. `GET /api/evolve` shows the gate, chronicle, and recent commits.
 - **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView.
 - **Durable turn journal** — Tool calls are recorded before they run, so a crash or a redelivered input does not execute the same call twice. `/stop` still cancels the turn; `/stop idle` lets the current tool finish. Incognito sessions keep this journal in memory.
+- **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart.
 
 ## [1.0.3] - 2026-09-30
 
