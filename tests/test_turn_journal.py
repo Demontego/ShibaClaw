@@ -56,9 +56,41 @@ def test_completed_call_is_replayed(tmp_path: Path):
 def test_duplicate_input_is_dropped(tmp_path: Path):
     journal = TurnJournal(tmp_path)
     assert journal.accept_input("s", "telegram:9")
+    journal.commit_turn("s")
     assert not journal.accept_input("s", "telegram:9")
     assert journal.accept_input("s", None)
     assert journal.accept_input("s", "telegram:10")
+
+
+def test_uncommitted_input_is_accepted_after_restart(tmp_path: Path):
+    first = TurnJournal(tmp_path)
+    assert first.accept_input("s", "telegram:9")
+    restarted = TurnJournal(tmp_path)
+    assert restarted.accept_input("s", "telegram:9")
+    restarted.commit_turn("s")
+    assert not TurnJournal(tmp_path).accept_input("s", "telegram:9")
+
+
+def test_reused_tool_id_runs_on_the_next_turn(tmp_path: Path):
+    journal = TurnJournal(tmp_path)
+    assert journal.accept_input("s", "telegram:1")
+    assert journal.claim("s", "call_1", "web_search").run
+    journal.mark("s", "call_1", "completed", "one")
+    journal.commit_turn("s")
+    assert journal.accept_input("s", "telegram:2")
+    assert journal.claim("s", "call_1", "web_search").run
+
+
+def test_resumed_turn_replays_the_finished_tool(tmp_path: Path):
+    first = TurnJournal(tmp_path)
+    assert first.accept_input("s", "telegram:9")
+    assert first.claim("s", "call_1", "web_search").run
+    first.mark("s", "call_1", "completed", "sunny")
+    restarted = TurnJournal(tmp_path)
+    assert restarted.accept_input("s", "telegram:9")
+    replay = restarted.claim("s", "call_1", "web_search")
+    assert not replay.run
+    assert replay.result == "sunny"
 
 
 def test_unknown_version_is_refused(tmp_path: Path):
@@ -248,3 +280,50 @@ async def test_duplicate_telegram_input_skips_the_model(tmp_path: Path):
     assert first is not None
     assert second is None
     assert provider.chat_with_retry_streaming.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_uncommitted_input_still_runs_after_restart(tmp_path: Path):
+    crashed = _brain(tmp_path, MagicMock())
+    assert crashed.turn_journal.accept_input("cli:direct", "telegram:4")
+    provider = MagicMock()
+    provider.get_default_model = MagicMock(return_value="test-model")
+    provider.chat_with_retry_streaming = AsyncMock(
+        return_value=LLMResponse(content="hello", finish_reason="stop")
+    )
+    brain = _brain(tmp_path, provider)
+    brain._resolve_provider_for_model = MagicMock(return_value=provider)
+    brain.context.build_static_prompt = MagicMock(return_value="STATIC")
+    brain.context.build_runtime_block = MagicMock(return_value="LIVE")
+    msg = InboundMessage(
+        channel="cli",
+        sender_id="1",
+        chat_id="direct",
+        content="hi",
+        metadata={"input_id": "telegram:4"},
+    )
+    result = await brain._process_message(msg, session_key="cli:direct")
+    assert result is not None
+    assert provider.chat_with_retry_streaming.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_next_turn_runs_a_reused_tool_id(tmp_path: Path):
+    provider = _tool_then_stop()
+    brain = _brain(tmp_path, provider)
+    brain.tools.execute = AsyncMock(return_value="sunny")
+    brain.tools.get_definitions = MagicMock(return_value=[])
+    brain.context.build_static_prompt = MagicMock(return_value="STATIC")
+    brain.context.build_runtime_block = MagicMock(return_value="LIVE")
+    brain._resolve_provider_for_model = MagicMock(return_value=provider)
+    brain.bus.publish_outbound = AsyncMock()
+    for index in (1, 2):
+        msg = InboundMessage(
+            channel="cli",
+            sender_id="1",
+            chat_id="direct",
+            content=f"q{index}",
+            metadata={"input_id": f"telegram:{index}"},
+        )
+        await brain._process_message(msg, session_key="cli:direct")
+    assert brain.tools.execute.await_count == 2

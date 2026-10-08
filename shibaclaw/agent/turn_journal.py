@@ -53,14 +53,26 @@ class TurnJournal:
             root.mkdir(parents=True, exist_ok=True)
 
     def accept_input(self, session_key: str, input_id: str | None) -> bool:
-        """False when this input id was already accepted."""
+        """False only after this input's turn was saved.
+
+        A crash before ``commit_turn`` leaves the input open, so a redelivery
+        resumes that same turn instead of dropping the request.
+        """
         text = str(input_id or "").strip()
         if not text:
+            self._open_turn_record(session_key, "")
             return True
-        if text in self._input_ids(session_key):
+        status = self._input_status(session_key, text)
+        if status == "done":
             return False
-        self._append(session_key, {"kind": "input", "id": text})
+        if status == "open":
+            return True
+        self._open_turn_record(session_key, text)
         return True
+
+    def commit_turn(self, session_key: str) -> None:
+        """The session turn is saved. A redelivery of its input is a duplicate."""
+        self._close_open_turn(session_key)
 
     def claim(self, session_key: str, op_id: str, tool: str) -> Claim:
         """Record ``ready`` before the caller performs I/O."""
@@ -70,6 +82,7 @@ class TurnJournal:
         if mode == "when_idle":
             return Claim(False, True, _STOP_IDLE)
         op_id = str(op_id or tool)
+        turn = self._scope(session_key)
         current = self._operations(session_key).get(op_id)
         if current is None:
             self._append(
@@ -77,6 +90,7 @@ class TurnJournal:
                 {
                     "kind": "operation",
                     "id": op_id,
+                    "turn": turn,
                     "tool": tool,
                     "idempotency": op_id,
                     "status": "ready",
@@ -125,7 +139,13 @@ class TurnJournal:
             stored = result[:RESULT_CAP] + "\n...[journal truncated]"
         self._append(
             session_key,
-            {"kind": "operation", "id": str(op_id), "status": status, "result": stored},
+            {
+                "kind": "operation",
+                "id": str(op_id),
+                "turn": self._scope(session_key),
+                "status": status,
+                "result": stored,
+            },
         )
 
     def note_truncation(self, session_key: str, source: str, reason: str) -> None:
@@ -166,13 +186,72 @@ class TurnJournal:
         if self.stop_mode(session_key):
             self._append(session_key, {"kind": "stop", "mode": ""})
 
+    def _scope(self, session_key: str) -> int:
+        """Open turn, or 0 when the caller has not started one."""
+        return self._open_turn(session_key) or 0
+
+    def _open_turn(self, session_key: str) -> int | None:
+        open_id: int | None = None
+        for row in self._load(session_key):
+            if row.get("kind") != "turn":
+                continue
+            turn_id = int(row["id"])
+            if row.get("status") == "open":
+                open_id = turn_id
+            elif row.get("status") == "done" and open_id == turn_id:
+                open_id = None
+        return open_id
+
+    def _open_turn_record(self, session_key: str, input_id: str) -> int:
+        self._close_open_turn(session_key)
+        turn_id = 1
+        for row in self._load(session_key):
+            if row.get("kind") == "turn":
+                turn_id = max(turn_id, int(row["id"]) + 1)
+        self._append(
+            session_key,
+            {"kind": "turn", "id": turn_id, "status": "open", "input": input_id},
+        )
+        if input_id:
+            self._append(
+                session_key,
+                {"kind": "input", "id": input_id, "status": "open", "turn": turn_id},
+            )
+        return turn_id
+
+    def _close_open_turn(self, session_key: str) -> None:
+        turn_id = self._open_turn(session_key)
+        if turn_id is None:
+            return
+        input_id = ""
+        for row in self._load(session_key):
+            if row.get("kind") == "turn" and int(row.get("id") or 0) == turn_id:
+                input_id = str(row.get("input") or "")
+        self._append(session_key, {"kind": "turn", "id": turn_id, "status": "done"})
+        if input_id:
+            self._append(
+                session_key,
+                {"kind": "input", "id": input_id, "status": "done", "turn": turn_id},
+            )
+
+    def _input_status(self, session_key: str, input_id: str) -> str | None:
+        status: str | None = None
+        for row in self._load(session_key):
+            if row.get("kind") == "input" and str(row.get("id") or "") == input_id:
+                status = str(row.get("status") or "open")
+        return status
+
     def _operations(self, session_key: str) -> dict[str, dict[str, str]]:
+        scope = self._scope(session_key)
         found: dict[str, dict[str, str]] = {}
         for row in self._load(session_key):
             if row.get("kind") != "operation":
                 continue
             op_id = str(row.get("id") or "")
             if not op_id:
+                continue
+            row_turn = int(row["turn"]) if "turn" in row else 0
+            if row_turn != scope:
                 continue
             current = found.setdefault(op_id, {"id": op_id, "tool": "", "status": "", "result": ""})
             if row.get("tool"):
@@ -182,13 +261,6 @@ class TurnJournal:
             if row.get("result") is not None and "result" in row:
                 current["result"] = str(row.get("result") or "")
         return found
-
-    def _input_ids(self, session_key: str) -> set[str]:
-        return {
-            str(row["id"])
-            for row in self._load(session_key)
-            if row.get("kind") == "input" and row.get("id")
-        }
 
     def _append(self, session_key: str, row: dict[str, Any]) -> None:
         record = {"v": FORMAT_VERSION, "session": session_key, **row}

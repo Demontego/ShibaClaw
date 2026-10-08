@@ -1418,6 +1418,15 @@ class ShibaBrain:
         logger.info("Dropped duplicate input {} for {}", input_id, session_key)
         return None
 
+    def _commit_journal_turn(self, session_key: str) -> None:
+        journal = self._journal_for(session_key)
+        if journal is None:
+            return
+        try:
+            journal.commit_turn(session_key)
+        except JournalError as exc:
+            logger.error("turn journal: {}", exc)
+
     def _with_interrupt_note(self, session_key: str, messages: list[dict]) -> list[dict]:
         journal = self._journal_for(session_key)
         if journal is None:
@@ -1636,6 +1645,7 @@ class ShibaBrain:
             )
             self._save_turn(session, all_msgs, 1 + len(history))
             await self.sessions.asave(session)
+            self._commit_journal_turn(key)
             self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
             return OutboundMessage(
                 channel=channel,
@@ -1925,6 +1935,7 @@ class ShibaBrain:
         await self.sessions.asave(session)
 
         if msg.metadata and msg.metadata.get("no_reply"):
+            self._commit_journal_turn(key)
             return None
         try:
             initial_messages = self._with_interrupt_note(key, initial_messages)
@@ -1967,6 +1978,7 @@ class ShibaBrain:
 
         self._save_turn(session, all_msgs, 1 + len(history) + _pre_saved_count)
         await self.sessions.asave(session)
+        self._commit_journal_turn(key)
         self._schedule_background(self.memory_consolidator.maybe_consolidate_by_tokens(session))
         self._schedule_background(self.memory_consolidator.maybe_proactive_learn(session))
 
