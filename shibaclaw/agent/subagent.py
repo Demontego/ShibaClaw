@@ -53,6 +53,13 @@ class SubagentManager:
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
         self._session_tasks: dict[str, set[str]] = {}  # session_key -> {task_id, ...}
 
+    def _journal(self, session_key: str | None):
+        runner = self._agent_runner
+        pick = getattr(runner, "_journal_for", None)
+        if callable(pick):
+            return pick(session_key)
+        return None
+
     def reconfigure(self, new_cfg: "Any", new_provider: "Any") -> None:
         """Update provider and tool configuration in-place."""
         from shibaclaw.config.schema import ExecToolConfig, WebSearchConfig
@@ -276,6 +283,7 @@ class SubagentManager:
                     )
 
                     # Execute tools
+                    halt = False
                     for tool_call in response.tool_calls:
                         args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                         logger.debug(
@@ -284,7 +292,24 @@ class SubagentManager:
                             tool_call.name,
                             args_str,
                         )
-                        result = await tools.execute(tool_call.name, tool_call.arguments)
+                        session_key = origin.get("session_key") or task_id
+                        journal = self._journal(session_key)
+                        if journal is None:
+                            result = await tools.execute(tool_call.name, tool_call.arguments)
+                        else:
+                            op_id = f"{task_id}:{tool_call.id or tool_call.name}"
+
+                            async def _run(
+                                name: str = tool_call.name,
+                                args: Any = tool_call.arguments,
+                            ) -> str:
+                                return await tools.execute(name, args)
+
+                            result, halt = await journal.execute_claimed(
+                                session_key, op_id, tool_call.name, _run
+                            )
+                        if halt:
+                            final_result = result
                         if len(result) > self._TOOL_RESULT_MAX_CHARS:
                             half = self._TOOL_RESULT_MAX_CHARS // 2
                             result = (
@@ -300,6 +325,10 @@ class SubagentManager:
                                 "content": result,
                             }
                         )
+                        if halt:
+                            break
+                    if final_result is not None and halt:
+                        break
                 else:
                     if response.finish_reason == "error":
                         error_msg = response.content or "Unknown LLM error"
