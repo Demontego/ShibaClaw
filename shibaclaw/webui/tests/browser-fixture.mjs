@@ -114,10 +114,11 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
     document.getElementById = id => document.querySelector(`#${id}`);
     const html = readFrontend('index.html');
     const ids = ['chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-app-actions',
+        'workspace-evolve-actions',
         'workspace-view-title', 'workspace-page-heading', 'workspace-page-description', 'workspace-stage',
         'workspace-context-toggle', 'workspace-theme', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',
         'profile-selector', 'context-content', 'token-badge', 'token-badge-text', 'token-badge-fill',
-        'fs-modal', 'knowledge-modal', 'memory-modal', 'automation-modal', 'connected-apps-modal', 'context-modal'];
+        'fs-modal', 'knowledge-modal', 'memory-modal', 'automation-modal', 'connected-apps-modal', 'evolve-modal', 'context-modal'];
     const nodes = Object.fromEntries(ids.map(id => {
         if (!html.includes(`id="${id}"`)) throw new Error(`Fixture id is absent from real HTML: ${id}`);
         return [id, document.body.appendChild(new Element('div', { id }))];
@@ -140,7 +141,18 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
         document,
         localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)) },
         navigator: { language: 'en', languages: ['en'] },
-        matchMedia: () => systemTheme,
+        matchMedia: (query = "") => {
+            if (String(query).includes("prefers-color-scheme")) return systemTheme;
+            return {
+                matches: false,
+                media: query,
+                addEventListener() {},
+                removeEventListener() {},
+                addListener() {},
+                removeListener() {},
+                dispatchEvent() { return true; },
+            };
+        },
         CustomEvent: class { constructor(type, options = {}) { this.type = type; Object.assign(this, options); } },
         state: { contextModalOpen: false, profileId: 'default', sessionId: null },
         _profilesCache: [],

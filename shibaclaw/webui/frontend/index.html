@@ -3,9 +3,16 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <title>ShibaClaw — AI Assistant</title>
     <meta name="description" content="ShibaClaw WebUI — Premium AI Agent Interface">
+    <meta name="theme-color" content="#191918" id="theme-color">
+    <meta name="color-scheme" content="dark light">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ShibaClaw">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/webp" href="/shibaclaw_logo.webp">
     <link rel="apple-touch-icon" href="/shibaclaw_logo.webp">
 
@@ -69,24 +76,13 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo">
+                <div class="logo" role="button" tabindex="0" onclick="showWorkspaceChat()"
+                    data-i18n-title="workspace.conversations" title="Conversations">
                     <img src="/shibaclaw_logo.webp" alt="ShibaClaw Logo" class="logo-icon">
                     <div class="logo-text">
                         <h1>ShibaClaw</h1>
-                        <div class="header-sub-row">
-                            <span class="version" id="sidebar-version" onclick="openChangelog()"
-                                data-i18n-title="version.whats_new" title="View what's new">loading...</span>
-                            <div class="status-micro" id="status-card">
-                                <div class="status-dot disconnected" id="status-dot"></div>
-                                <span class="status-text" id="status-text"
-                                    data-i18n="status.connecting">Connecting...</span>
-                                <button class="btn-restart" id="btn-restart" onclick="restartGateway()"
-                                    data-i18n-title="restart.gateway" data-i18n-aria="restart.gateway"
-                                    title="Restart Gateway" tabindex="-1" aria-label="Restart Gateway">
-                                    <span class="material-icons-round">refresh</span>
-                                </button>
-                            </div>
-                        </div>
+                        <span class="version" id="sidebar-version" onclick="openChangelog()"
+                            data-i18n-title="version.whats_new" title="View what's new">loading...</span>
                     </div>
                 </div>
                 <button class="sidebar-toggle" id="sidebar-toggle" data-i18n-aria="chrome.toggle_sidebar"
@@ -103,38 +99,42 @@
             </div>
 
             <nav class="workspace-nav" data-i18n-aria="workspace.title" aria-label="Your workspace">
-                <button type="button" class="workspace-nav-item" data-workspace-page="chat"
-                    onclick="showWorkspaceChat()" aria-current="page">
-                    <span class="material-icons-round" aria-hidden="true">chat_bubble_outline</span><span
-                        class="workspace-nav-label" data-i18n="workspace.conversations">Conversations</span>
-                </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="agents"
-                    onclick="openWorkspaceAgents()">
+                    onclick="openWorkspaceAgents()" data-i18n-title="workspace.agents"
+                    data-i18n-aria="workspace.agents" title="Agents" aria-label="Agents">
                     <span class="material-icons-round" aria-hidden="true">smart_toy</span><span
                         class="workspace-nav-label" data-i18n="workspace.agents">Agents</span>
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="automations"
-                    onclick="openModal('automation-modal')">
+                    onclick="openModal('automation-modal')" data-i18n-title="workspace.automations"
+                    data-i18n-aria="workspace.automations" title="Automations" aria-label="Automations">
                     <span class="material-icons-round" aria-hidden="true">schedule</span><span
                         class="workspace-nav-label" data-i18n="workspace.automations">Automations</span><span
                         class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="library"
-                    onclick="openModal('fs-modal')">
+                    onclick="openModal('fs-modal')" data-i18n-title="workspace.library"
+                    data-i18n-aria="workspace.library" title="Library" aria-label="Library">
                     <span class="material-icons-round" aria-hidden="true">folder_open</span><span
                         class="workspace-nav-label" data-i18n="workspace.library">Library</span>
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="apps"
-                    onclick="openModal('connected-apps-modal')">
+                    onclick="openModal('connected-apps-modal')" data-i18n-title="workspace.apps"
+                    data-i18n-aria="workspace.apps" title="Apps &amp; tools" aria-label="Apps &amp; tools">
                     <span class="material-icons-round" aria-hidden="true">grid_view</span><span
                         class="workspace-nav-label" data-i18n="workspace.apps">Apps &amp; tools</span>
+                </button>
+                <button type="button" class="workspace-nav-item" id="btn-evolve" data-workspace-page="evolution"
+                    onclick="openModal('evolve-modal')" data-i18n-title="workspace.evolution"
+                    data-i18n-aria="workspace.evolution" title="Evolution" aria-label="Evolution">
+                    <span class="material-icons-round" aria-hidden="true">auto_awesome</span><span
+                        class="workspace-nav-label" data-i18n="workspace.evolution">Evolution</span>
                 </button>
             </nav>
 
             <!-- History Section -->
             <div class="sidebar-section history-section">
                 <div class="history-section-head">
-                    <div class="section-title" data-i18n="workspace.recent">Recent conversations</div>
                     <div class="session-search-wrap">
                         <span class="material-icons-round session-search-icon">search</span>
                         <input id="session-search" class="session-search" type="search" aria-label="Search"
@@ -170,9 +170,22 @@
 
             <div class="sidebar-footer">
                 <button type="button" class="workspace-nav-item workspace-settings" data-workspace-page="settings"
-                    onclick="openModal('settings-modal')"><span class="material-icons-round"
-                        aria-hidden="true">tune</span><span class="workspace-nav-label"
-                        data-i18n="workspace.settings">Settings</span></button>
+                    onclick="openModal('settings-modal')" data-i18n-title="workspace.settings"
+                    data-i18n-aria="workspace.settings" title="Settings" aria-label="Settings"><span
+                        class="material-icons-round" aria-hidden="true">settings</span><span
+                        class="workspace-nav-label" data-i18n="workspace.settings">Settings</span></button>
+                <div class="footer-status">
+                    <div class="status-micro" id="status-card">
+                        <div class="status-dot disconnected" id="status-dot"></div>
+                        <span class="status-text" id="status-text"
+                            data-i18n="status.connecting">Connecting...</span>
+                        <button class="btn-restart" id="btn-restart" onclick="restartGateway()"
+                            data-i18n-title="restart.gateway" data-i18n-aria="restart.gateway"
+                            title="Restart Gateway" tabindex="-1" aria-label="Restart Gateway">
+                            <span class="material-icons-round">refresh</span>
+                        </button>
+                    </div>
+                </div>
                 <div class="footer-actions">
                     <div class="lang-switcher" id="lang-switcher">
                         <button class="btn-command btn-lang btn-icon-only" id="btn-lang" type="button"
@@ -185,7 +198,7 @@
                     <a href="https://github.com/RikyZ90/ShibaClaw" target="_blank" rel="noopener noreferrer"
                         class="btn-command btn-github" data-i18n-title="footer.github" data-i18n-aria="footer.github"
                         title="GitHub" aria-label="GitHub">
-                        <svg height="16" viewBox="0 0 16 16" width="16" fill="currentColor">
+                        <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor" aria-hidden="true">
                             <path
                                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
                             </path>
@@ -365,8 +378,7 @@
                         <div class="input-footer">
                             <div class="input-actions">
                                 <!-- Model Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="model-selector-wrapper"
-                                    style="position: relative;">
+                                <div class="model-selector-wrapper" id="model-selector-wrapper">
                                     <button class="btn-input-action" id="btn-model-select"
                                         data-i18n-title="chat.model_title" title="Change active model for session">
                                         <span class="material-icons-round">auto_awesome</span>
@@ -376,8 +388,7 @@
                                     </button>
                                 </div>
                                 <!-- Reasoning Effort Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="reasoning-selector-wrapper"
-                                    style="position: relative;">
+                                <div class="model-selector-wrapper" id="reasoning-selector-wrapper">
                                     <button class="btn-input-action" id="btn-reasoning-select"
                                         data-i18n-title="chat.reasoning_title"
                                         title="Change reasoning effort for active session">
@@ -387,22 +398,18 @@
                                             style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
                                     </button>
                                     <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
-                                        style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 150px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary); backdrop-filter: blur(12px);">
-                                        <div
-                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                            <span
-                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
+                                        style="display: none;">
+                                        <div class="dropdown-head">
+                                            <span class="dropdown-head-label"
                                                 data-i18n="chat.reasoning_effort">Reasoning Effort</span>
                                         </div>
-                                        <div class="model-dropdown-list" id="reasoning-dropdown-list"
-                                            style="max-height: 200px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
+                                        <div class="model-dropdown-list dropdown-list" id="reasoning-dropdown-list">
                                             <!-- populated dynamically -->
                                         </div>
                                     </div>
                                 </div>
                                 <!-- Knowledge Base Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="kb-selector-wrapper"
-                                    style="position: relative;">
+                                <div class="model-selector-wrapper" id="kb-selector-wrapper">
                                     <button class="btn-input-action" id="btn-kb-select" data-i18n-title="chat.kb_title"
                                         title="Select active Knowledge Bases">
                                         <span class="material-icons-round">library_books</span>
@@ -410,23 +417,17 @@
                                         <span class="material-icons-round"
                                             style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
                                     </button>
-                                    <div class="model-dropdown-menu premium-dropdown" id="kb-dropdown-menu"
-                                        style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 170px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary);">
-                                        <div
-                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                            <span
-                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
+                                    <div class="model-dropdown-menu premium-dropdown dropdown-wide" id="kb-dropdown-menu"
+                                        style="display: none;">
+                                        <div class="dropdown-head">
+                                            <span class="dropdown-head-label"
                                                 data-i18n="chat.collections">Collections</span>
-                                            <span class="material-icons-round"
+                                            <button type="button" class="dropdown-head-action material-icons-round"
                                                 onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';"
-                                                style="font-size: 15px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;"
-                                                onmouseover="this.style.color='var(--text-color)'"
-                                                onmouseout="this.style.color='var(--text-muted)'"
                                                 data-i18n-title="chat.manage_collections"
-                                                title="Manage Collections">settings</span>
+                                                title="Manage Collections">settings</button>
                                         </div>
-                                        <div class="model-dropdown-list" id="kb-dropdown-list"
-                                            style="max-height: 220px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
+                                        <div class="model-dropdown-list dropdown-list" id="kb-dropdown-list">
                                             <!-- populated dynamically -->
                                         </div>
                                     </div>
@@ -443,11 +444,6 @@
                                             Loading models...</div>
                                     </div>
                                 </div>
-                                <button class="btn-input-action" id="btn-context" onclick="openModal('context-modal')"
-                                    data-i18n-title="chat.context_title" title="View context">
-                                    <span class="material-icons-round">psychology</span>
-                                    <span data-i18n="chat.context">Context</span>
-                                </button>
                                 <button class="btn-input-action btn-stop" id="btn-stop" disabled
                                     data-i18n-title="chat.stop_title" title="Stop agent">
                                     <span class="material-icons-round">stop_circle</span>
@@ -1190,6 +1186,11 @@
                 <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span
                         class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
             </div>
+            <div id="workspace-evolve-actions" class="workspace-page-actions workspace-app-actions" hidden>
+                <button type="button" class="btn-secondary" onclick="loadEvolve()" data-i18n-aria="common.refresh"
+                    aria-label="Refresh"><span class="material-icons-round"
+                        aria-hidden="true">refresh</span></button>
+            </div>
             <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library"
                 data-i18n-aria="workspace.library" hidden>
                 <button type="button" data-workspace-modal="fs-modal" onclick="openModal('fs-modal')"
@@ -1436,6 +1437,39 @@
             </div>
         </div>
     </div>
+
+    <!-- ══ Evolution ══════════════════════════════════════════════════════ -->
+    <div id="evolve-modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <span class="material-icons-round" aria-hidden="true">auto_awesome</span>
+                    <h2 id="evolve-title" data-i18n="workspace.evolution">Evolution</h2>
+                </div>
+                <div class="modal-header-actions">
+                    <button class="btn-icon" aria-label="Refresh" title="Refresh" onclick="loadEvolve()">
+                        <span class="material-icons-round">refresh</span>
+                    </button>
+                    <button class="btn-icon" aria-label="Close" title="Close" onclick="closeModal('evolve-modal')">
+                        <span class="material-icons-round">close</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body" id="evolve-content"></div>
+        </div>
+    </div>
+    <style>
+        .evolve-status { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; margin-bottom: 8px; }
+        .evolve-chip { padding: 2px 8px; border-radius: 12px; background: rgba(212, 175, 55, 0.15); color: var(--shiba-gold, #d4af37); }
+        .evolve-repo { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+        .evolve-block { margin: 0 0 14px; }
+        .evolve-block h3 { margin: 0 0 6px; font-size: 13px; }
+        .evolve-block pre { white-space: pre-wrap; margin: 0; font-size: 12px; line-height: 1.45; max-height: 220px; overflow: auto; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
+        .evolve-commits { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+        .evolve-commits li { padding: 4px 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
+        .evolve-commits span { color: var(--text-muted); margin-left: 6px; }
+        .evolve-loading, .evolve-error { padding: 2rem; text-align: center; }
+    </style>
 
     <!-- ══ Memory Manager Modal ══════════════════════════════════════════ -->
     <div id="memory-modal" class="modal-backdrop">

@@ -1,6 +1,6 @@
 // ── Event Listeners ───────────────────────────────────────────
 function isMobileSidebar() {
-    return window.matchMedia("(max-width: 768px)").matches;
+    return window.matchMedia("(max-width: 900px)").matches;
 }
 
 function setSidebarOpen(open) {
