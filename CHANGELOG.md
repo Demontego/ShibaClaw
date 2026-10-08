@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Added
+- **Loop safety** — hard step cap, session cost cap, context-overflow guard with checkpoint resume, stuck-loop prompts, identical tool-call cutoff, safe-tool retry with jitter, semantic tool circuit breaker, and structured tool-error feedback.
+
 ## [1.0.3] - 2026-09-30
 
 ### Added
