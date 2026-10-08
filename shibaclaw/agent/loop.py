@@ -47,6 +47,10 @@ from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.evolve.gate import SESSION_KEY as EVOLVE_SESSION_KEY
+from shibaclaw.evolve.switch import handle as evolve_handle
+from shibaclaw.evolve.switch import is_owner_surface, owner_chat
+from shibaclaw.integrations.telegram_labels import telegram_owner_ids
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
@@ -1249,7 +1253,10 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
-            if cmd == "/stop":
+            head = cmd.split()[0].split("@", 1)[0] if cmd else ""
+            if head in {"/evolve", "/panic"}:
+                await self.bus.publish_outbound(await self._handle_evolve_cmd(msg))
+            elif cmd == "/stop":
                 await self._handle_stop(msg)
             elif cmd == "/restart":
                 await self._handle_restart(msg)
@@ -1269,6 +1276,58 @@ class ShibaBrain:
                 lock = self._session_locks.get(session_key)
                 if lock and not lock.locked():
                     self._session_locks.pop(session_key, None)
+
+    async def _handle_evolve_cmd(self, msg: InboundMessage) -> OutboundMessage:
+        """Owner /evolve and /panic. Does not restart the process."""
+        parts = msg.content.strip().split()
+        head = parts[0].lower().split("@", 1)[0] if parts else ""
+        owners = telegram_owner_ids(self.channels_config)
+        if not is_owner_surface(msg.channel, str(msg.sender_id), msg.metadata, owners):
+            content = "Evolution commands are owner-only."
+        else:
+            if head == "/panic":
+                current = asyncio.current_task()
+                keys = [msg.session_key]
+                if EVOLVE_SESSION_KEY not in keys:
+                    keys.append(EVOLVE_SESSION_KEY)
+                for key in keys:
+                    pending = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is not current and not task.done()
+                    ]
+                    kept = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is current
+                    ]
+                    if kept:
+                        self._active_tasks[key] = kept
+                    else:
+                        self._active_tasks.pop(key, None)
+                    for task in pending:
+                        task.cancel()
+                    for task in pending:
+                        try:
+                            await task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    try:
+                        await self.subagents.cancel_by_session(key)
+                    except Exception:
+                        pass
+                action = "panic"
+            else:
+                action = parts[1].lower() if len(parts) > 1 else "status"
+                if action not in {"on", "off", "status"}:
+                    action = "status"
+            content, _code = evolve_handle(
+                action,
+                workspace=self.workspace,
+                automation=self.automation_service,
+                owner=owner_chat(self.channels_config),
+            )
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""
@@ -1406,6 +1465,10 @@ class ShibaBrain:
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
     ) -> OutboundMessage | None:
+        cmd_head = msg.content.strip().lower().split()
+        head = cmd_head[0].split("@", 1)[0] if cmd_head else ""
+        if head in {"/evolve", "/panic"}:
+            return await self._handle_evolve_cmd(msg)
         if self.provider is None:
             return OutboundMessage(
                 channel=msg.channel,
@@ -1567,6 +1630,8 @@ class ShibaBrain:
             lines = [
                 "🐕 shibaclaw commands:",
                 "/new — Start a new conversation",
+                "/evolve — Evolution on/off/status (owner)",
+                "/panic — Stop evolution, no restart",
                 "/stop — Stop the current task",
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
@@ -1913,11 +1978,19 @@ class ShibaBrain:
             content=content,
             media=media or [],
             metadata=metadata or {},
+            session_key_override=session_key,
         )
-        return await self._process_message(
-            msg,
-            session_key=session_key,
-            on_progress=on_progress,
-            on_response_token=on_response_token,
-            profile_id_override=profile_id,
-        )
+        task = asyncio.current_task()
+        if task is not None:
+            self._active_tasks.setdefault(session_key, []).append(task)
+        try:
+            return await self._process_message(
+                msg,
+                session_key=session_key,
+                on_progress=on_progress,
+                on_response_token=on_response_token,
+                profile_id_override=profile_id,
+            )
+        finally:
+            if task is not None:
+                self._remove_active_task(session_key, task)
