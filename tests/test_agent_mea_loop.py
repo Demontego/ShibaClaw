@@ -193,7 +193,9 @@ async def test_stop_cancels_mea_and_clears_session_tracking(tmp_path):
     assert brain.subagents.get_running_count() == 1
 
     await brain._handle_stop(
-        InboundMessage(channel="telegram", sender_id="1", chat_id="99", content="/stop")
+        InboundMessage(channel="telegram", sender_id="1", chat_id="99", content="/stop"),
+        "telegram:99",
+        "hard",
     )
     assert "telegram:99" not in brain.subagents._session_tasks
     assert brain.subagents.get_running_count() == 0
