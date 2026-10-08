@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import os
+import random
 import re
 import time
 from datetime import datetime
@@ -15,6 +16,13 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 from loguru import logger
 
 from shibaclaw.agent.mcp_manager import MCPManager
+from shibaclaw.agent.checkpoint_manager import CheckpointManager
+from shibaclaw.agent.context_overflow_guard import ContextOverflowError, ContextOverflowGuard
+from shibaclaw.agent.cost_circuit_breaker import CostCircuitBreaker
+from shibaclaw.agent.hard_step_cap import HardStepCap
+from shibaclaw.agent.semantic_tool_circuit_breaker import SemanticToolCircuitBreaker
+from shibaclaw.agent.sre_monitor import SREMonitor
+from shibaclaw.agent.stuck_detector import StuckDetector
 from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
@@ -39,6 +47,10 @@ from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.evolve.gate import SESSION_KEY as EVOLVE_SESSION_KEY
+from shibaclaw.evolve.switch import handle as evolve_handle
+from shibaclaw.evolve.switch import is_owner_surface, owner_chat
+from shibaclaw.integrations.telegram_labels import telegram_owner_ids
 from shibaclaw.config.paths import get_media_dir
 from shibaclaw.helpers.system import get_os_type
 from shibaclaw.thinkers.base import Thinker
@@ -705,6 +717,20 @@ class ShibaBrain:
         finally:
             reset_permission_mode(perm_tokens)
 
+    def _checkpoint_forbidden(self, session_key: str | None, metadata: dict | None) -> bool:
+        """Incognito and ephemeral sessions must not be written to checkpoint files."""
+        meta = metadata or {}
+        if meta.get("incognito") or meta.get("ephemeral"):
+            return True
+        if not session_key or not getattr(self, "sessions", None):
+            return False
+        try:
+            sess = self.sessions.get_or_create(session_key)
+        except Exception:
+            return False
+        smeta = getattr(sess, "metadata", None) or {}
+        return bool(smeta.get("incognito") or smeta.get("ephemeral"))
+
     async def _run_agent_loop_inner(
         self,
         initial_messages: list[dict],
@@ -720,11 +746,39 @@ class ShibaBrain:
         metadata: dict | None = None,
         temperature: float | None = None,
     ) -> tuple[str | None, list[str], list[dict]]:
-        messages = initial_messages
-        iteration = 0
+        checkpoint_mgr = CheckpointManager(self.context.workspace)
+        private = self._checkpoint_forbidden(session_key, metadata)
+        if private and session_key:
+            checkpoint_mgr.delete_checkpoint(session_key)
+        checkpoint = None if private or not session_key else checkpoint_mgr.load_checkpoint(session_key)
+        if checkpoint:
+            messages, _saved_iteration, _checkpoint_meta = checkpoint
+            fresh = next((item for item in reversed(initial_messages) if item.get("role") == "user"), None)
+            if fresh and (
+                not messages
+                or messages[-1].get("role") != "user"
+                or messages[-1].get("content") != fresh.get("content")
+            ):
+                messages.append(fresh)
+            iteration = 0
+            logger.info("Resuming session {} with a fresh iteration budget", session_key)
+        else:
+            messages = initial_messages
+            iteration = 0
         final_content = None
         tools_used: list[str] = []
         loop_start = time.monotonic()
+        hard_step_cap = HardStepCap(self.context.workspace)
+        cost_circuit_breaker = CostCircuitBreaker(self.context.workspace)
+        context_overflow_guard = ContextOverflowGuard(
+            self.context.workspace, self.context_window_tokens
+        )
+        stuck_detector = StuckDetector()
+        sre_monitor = SREMonitor()
+        semantic_breaker = SemanticToolCircuitBreaker(self.context.workspace)
+        tool_call_history: list[tuple[str, str]] = []
+        executed_tool_calls: set[tuple[str, str]] = set()
+        keep_checkpoint = False
 
         self.context.regenerate_nonce()
         static_prompt = self.context.build_static_prompt(
@@ -816,6 +870,13 @@ class ShibaBrain:
             pass
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
+            if not hard_step_cap.check_step_limit(iteration):
+                keep_checkpoint = True
+                final_content = (
+                    f"I reached the hard step cap ({hard_step_cap.hard_limit}) "
+                    "and stopped to avoid a runaway loop."
+                )
+                break
             if session_key and session_key in self._steering_queues:
                 steer_msgs = self._steering_queues[session_key]
                 if steer_msgs:
@@ -850,6 +911,7 @@ class ShibaBrain:
                 logger.warning(
                     f"Session wall timeout ({self.loop_wall_timeout}s) reached after {elapsed:.1f}s."
                 )
+                keep_checkpoint = True
                 final_content = (
                     f"I reached the maximum time limit for processing "
                     f"(elapsed: {elapsed:.0f}s, cap: {self.loop_wall_timeout}s). "
@@ -857,6 +919,8 @@ class ShibaBrain:
                 )
                 break
             iteration += 1
+            if session_key and not private:
+                checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
 
             live_block = self.context.build_runtime_block(
                 channel=channel,
@@ -886,14 +950,56 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
+            prompt_messages = context_overflow_guard.budget_context(messages)
+
             response = await active_provider.chat_with_retry_streaming(
-                messages=messages,
+                messages=prompt_messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
                 **call_kwargs,
             )
 
+            if response.usage:
+                prompt_tokens = response.usage.get("prompt_tokens", 0)
+                completion_tokens = response.usage.get("completion_tokens", 0)
+                cost_circuit_breaker.record_usage(
+                    model_name=active_model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                try:
+                    overflow_action = context_overflow_guard.check_usage(
+                        current_tokens=prompt_tokens + completion_tokens,
+                        checkpoint_mgr=None if private else checkpoint_mgr,
+                        session_key=session_key or "",
+                    )
+                    if overflow_action == "compress":
+                        prompt_messages = context_overflow_guard.budget_context(messages)
+                except ContextOverflowError as exc:
+                    logger.error("ContextOverflowGuard hard limit: {}", exc)
+                    keep_checkpoint = True
+                    final_content = (
+                        "I reached the context window hard limit and stopped. "
+                        "An emergency checkpoint was saved."
+                    )
+                    break
+
+            if cost_circuit_breaker.is_tripped():
+                keep_checkpoint = True
+                final_content = (
+                    "I reached the session cost cap "
+                    f"(${cost_circuit_breaker.cumulative_cost_usd:.4f} / "
+                    f"${cost_circuit_breaker.max_cost_usd:.2f}) and stopped."
+                )
+                break
+
+            if response.content and stuck_detector.add_response(response.content):
+                messages.append(
+                    stuck_detector.get_goal_reassessment_prompt("repeating response content")
+                )
+            if response.content:
+                sre_monitor.add_response(response.content)
 
             if response.has_tool_calls:
                 if on_progress:
@@ -918,6 +1024,22 @@ class ShibaBrain:
                     tools_used.append(tool_call.name)
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
+                    call_key = (tool_call.name, args_str)
+                    tool_call_history.append(call_key)
+                    executed_tool_calls.add(call_key)
+                    occurrences = tool_call_history.count(call_key)
+                    if occurrences >= 3:
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            (
+                                f"Error: Infinite loop detected. You have called '{tool_call.name}' "
+                                f"with the exact same arguments {occurrences} times. "
+                                "Please reassess your goal and try a different approach."
+                            ),
+                        )
+                        continue
                     if self._tool_disabled_for_profile(tool_call.name, profile_id):
                         messages = self.context.add_tool_result(
                             messages,
@@ -942,51 +1064,105 @@ class ShibaBrain:
                             ),
                         )
                         continue
-                    try:
-                        tool_future = asyncio.ensure_future(
-                            self.tools.execute(tool_call.name, tool_call.arguments)
-                        )
-                        # Emit periodic "still working" progress while the
-                        # tool runs, so the UI doesn't look stuck.
-                        _heartbeat = 15  # seconds
-                        _waited = 0
-                        while not tool_future.done():
-                            remaining = self.tool_timeout - _waited
-                            if remaining <= 0 and self.tool_timeout > 0:
-                                break
-                            step_timeout = (
-                                max(0.1, min(float(_heartbeat), float(remaining)))
-                                if self.tool_timeout > 0
-                                else _heartbeat
+                    result = ""
+                    for tool_attempt in range(1, 4):
+                        try:
+                            tool_future = asyncio.ensure_future(
+                                self.tools.execute(tool_call.name, tool_call.arguments)
                             )
-                            try:
-                                await asyncio.wait_for(
-                                    asyncio.shield(tool_future),
-                                    timeout=step_timeout,
-                                )
-                            except asyncio.TimeoutError:
-                                _waited += _heartbeat
-                                if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                            # Emit periodic "still working" progress while the
+                            # tool runs, so the UI doesn't look stuck.
+                            _heartbeat = 15  # seconds
+                            _waited = 0
+                            while not tool_future.done():
+                                remaining = self.tool_timeout - _waited
+                                if remaining <= 0 and self.tool_timeout > 0:
                                     break
-                                if on_progress:
-                                    await on_progress(
-                                        f"⏳ {tool_call.name} still running ({_waited}s)…",
-                                        tool_hint=True,
+                                step_timeout = (
+                                    max(0.1, min(float(_heartbeat), float(remaining)))
+                                    if self.tool_timeout > 0
+                                    else _heartbeat
+                                )
+                                try:
+                                    await asyncio.wait_for(
+                                        asyncio.shield(tool_future),
+                                        timeout=step_timeout,
                                     )
-                                continue
+                                except asyncio.TimeoutError:
+                                    _waited += _heartbeat
+                                    if self.tool_timeout > 0 and _waited >= self.tool_timeout:
+                                        break
+                                    if on_progress:
+                                        await on_progress(
+                                            f"⏳ {tool_call.name} still running ({_waited}s)…",
+                                            tool_hint=True,
+                                        )
+                                    continue
 
-                        if not tool_future.done():
-                            tool_future.cancel()
-                            result = (
-                                f"Error: Tool '{tool_call.name}' timed out after "
-                                f"{_waited}s (cap: {self.tool_timeout}s)"
+                            if not tool_future.done():
+                                tool_future.cancel()
+                                result = (
+                                    f"Error: Tool '{tool_call.name}' timed out after "
+                                    f"{_waited}s (cap: {self.tool_timeout}s)"
+                                )
+                            else:
+                                result = tool_future.result()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as exc:
+                            result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+
+                        is_error = result.startswith("Error:")
+                        is_transient = any(
+                            marker in result.lower()
+                            for marker in (
+                                "timeout",
+                                "connection",
+                                "500",
+                                "502",
+                                "503",
+                                "504",
+                                "temporarily unavailable",
                             )
-                        else:
-                            result = tool_future.result()
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:
-                        result = f"Error: Tool '{tool_call.name}' failed: {exc}"
+                        )
+                        is_safe = tool_call.name in {
+                            "web_search",
+                            "web_fetch",
+                            "read_file",
+                            "list_dir",
+                            "session_search",
+                        }
+                        if is_error and is_transient and is_safe and tool_attempt < 3:
+                            base_delay = float(tool_attempt)
+                            delay = base_delay / 2 + random.uniform(0, base_delay / 2)
+                            logger.warning(
+                                "Tool '{}' transient error (attempt {}/3), retrying in {:.2f}s",
+                                tool_call.name,
+                                tool_attempt,
+                                delay,
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        break
+
+                    if semantic_breaker.record_call(
+                        tool_call.name, tool_call.arguments, result
+                    ):
+                        result = semantic_breaker.get_tripped_message(tool_call.name)
+                    if result.startswith("Error:"):
+                        if tool := self.tools.get(tool_call.name):
+                            from shibaclaw.agent.tools.error_feedback import (
+                                format_structured_error_feedback,
+                            )
+
+                            raw_err = result[len("Error:") :].strip()
+                            result = format_structured_error_feedback(
+                                tool_call.name, raw_err, tool.parameters
+                            )
+                        if stuck_detector.add_tool_error(tool_call.name, result):
+                            messages.append(
+                                stuck_detector.get_tool_error_pivot_prompt(tool_call.name, result)
+                            )
                     if len(result) > self._TOOL_RESULT_LOOP_MAX_CHARS:
                         half = self._TOOL_RESULT_LOOP_MAX_CHARS // 2
                         result = (
@@ -997,6 +1173,21 @@ class ShibaBrain:
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
+                tool_names = [tc.name for tc in response.tool_calls]
+                sre_monitor.add_tool_sequence(tool_names)
+                sre_monitor.add_progress_metric(float(len(executed_tool_calls)))
+                if stuck_detector.add_tool_sequence(tool_names):
+                    messages.append(
+                        stuck_detector.get_goal_reassessment_prompt("repeating tool sequence")
+                    )
+                if stuck_detector.add_progress_metric(len(executed_tool_calls)):
+                    messages.append(
+                        stuck_detector.get_goal_reassessment_prompt(
+                            "lack of progress / flat progress metric"
+                        )
+                    )
+                status = sre_monitor.get_status()
+                logger.debug("SRE monitor iteration {}: {}", iteration, status)
             else:
                 # Strip think from logs/debug output, but keep full content for memory (so UI can reload it)
                 clean = self._strip_think(response.content)
@@ -1026,12 +1217,17 @@ class ShibaBrain:
 
         if final_content is None and self.max_iterations > 0 and iteration >= self.max_iterations:
             logger.warning("Max iterations ({}) reached", self.max_iterations)
+            keep_checkpoint = True
             final_content = (
                 f"I reached the maximum number of tool call iterations ({self.max_iterations}) "
                 "without completing the task. You can try breaking the task into smaller steps."
             )
 
-        if session_key:
+        if session_key and not private:
+            if keep_checkpoint:
+                checkpoint_mgr.save_checkpoint(session_key, messages, iteration, metadata)
+            else:
+                checkpoint_mgr.delete_checkpoint(session_key)
             self._steering_queues.pop(session_key, None)
 
         return final_content, tools_used, messages
@@ -1057,7 +1253,10 @@ class ShibaBrain:
                 continue
 
             cmd = msg.content.strip().lower()
-            if cmd == "/stop":
+            head = cmd.split()[0].split("@", 1)[0] if cmd else ""
+            if head in {"/evolve", "/panic"}:
+                await self.bus.publish_outbound(await self._handle_evolve_cmd(msg))
+            elif cmd == "/stop":
                 await self._handle_stop(msg)
             elif cmd == "/restart":
                 await self._handle_restart(msg)
@@ -1077,6 +1276,58 @@ class ShibaBrain:
                 lock = self._session_locks.get(session_key)
                 if lock and not lock.locked():
                     self._session_locks.pop(session_key, None)
+
+    async def _handle_evolve_cmd(self, msg: InboundMessage) -> OutboundMessage:
+        """Owner /evolve and /panic. Does not restart the process."""
+        parts = msg.content.strip().split()
+        head = parts[0].lower().split("@", 1)[0] if parts else ""
+        owners = telegram_owner_ids(self.channels_config)
+        if not is_owner_surface(msg.channel, str(msg.sender_id), msg.metadata, owners):
+            content = "Evolution commands are owner-only."
+        else:
+            if head == "/panic":
+                current = asyncio.current_task()
+                keys = [msg.session_key]
+                if EVOLVE_SESSION_KEY not in keys:
+                    keys.append(EVOLVE_SESSION_KEY)
+                for key in keys:
+                    pending = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is not current and not task.done()
+                    ]
+                    kept = [
+                        task
+                        for task in self._active_tasks.get(key, [])
+                        if task is current
+                    ]
+                    if kept:
+                        self._active_tasks[key] = kept
+                    else:
+                        self._active_tasks.pop(key, None)
+                    for task in pending:
+                        task.cancel()
+                    for task in pending:
+                        try:
+                            await task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    try:
+                        await self.subagents.cancel_by_session(key)
+                    except Exception:
+                        pass
+                action = "panic"
+            else:
+                action = parts[1].lower() if len(parts) > 1 else "status"
+                if action not in {"on", "off", "status"}:
+                    action = "status"
+            content, _code = evolve_handle(
+                action,
+                workspace=self.workspace,
+                automation=self.automation_service,
+                owner=owner_chat(self.channels_config),
+            )
+        return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=content)
 
     async def _handle_stop(self, msg: InboundMessage) -> None:
         """Cancel all active tasks and subagents for the session."""
@@ -1214,6 +1465,10 @@ class ShibaBrain:
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
     ) -> OutboundMessage | None:
+        cmd_head = msg.content.strip().lower().split()
+        head = cmd_head[0].split("@", 1)[0] if cmd_head else ""
+        if head in {"/evolve", "/panic"}:
+            return await self._handle_evolve_cmd(msg)
         if self.provider is None:
             return OutboundMessage(
                 channel=msg.channel,
@@ -1375,6 +1630,8 @@ class ShibaBrain:
             lines = [
                 "🐕 shibaclaw commands:",
                 "/new — Start a new conversation",
+                "/evolve — Evolution on/off/status (owner)",
+                "/panic — Stop evolution, no restart",
                 "/stop — Stop the current task",
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
@@ -1721,11 +1978,19 @@ class ShibaBrain:
             content=content,
             media=media or [],
             metadata=metadata or {},
+            session_key_override=session_key,
         )
-        return await self._process_message(
-            msg,
-            session_key=session_key,
-            on_progress=on_progress,
-            on_response_token=on_response_token,
-            profile_id_override=profile_id,
-        )
+        task = asyncio.current_task()
+        if task is not None:
+            self._active_tasks.setdefault(session_key, []).append(task)
+        try:
+            return await self._process_message(
+                msg,
+                session_key=session_key,
+                on_progress=on_progress,
+                on_response_token=on_response_token,
+                profile_id_override=profile_id,
+            )
+        finally:
+            if task is not None:
+                self._remove_active_task(session_key, task)

@@ -258,6 +258,7 @@ class AutomationService:
         self._save_lock = asyncio.Lock()
         self._io_lock = threading.Lock()
         self._timer_task: asyncio.Task | None = None
+        self._sync_task: asyncio.Task | None = None
         self._wake = asyncio.Event()
         self._running = False
         self._save_task: asyncio.Task | None = None
@@ -338,7 +339,30 @@ class AutomationService:
         except Exception as exc:
             logger.warning("AutomationService: legacy migration failed: {}", exc)
 
+    def sync_from_disk(self) -> bool:
+        """Replace in-memory jobs when another process wrote the store."""
+        path = self._store_path
+        try:
+            mtime = path.stat().st_mtime if path.exists() else 0.0
+        except OSError:
+            return False
+        if mtime <= self._last_mtime:
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"jobs": []}
+            jobs: dict[str, AutomationJob] = {}
+            for item in data.get("jobs", []):
+                job = self._job_from_dict(item)
+                jobs[job.id] = job
+        except Exception as exc:
+            logger.warning("AutomationService: skip external reload: {}", exc)
+            return False
+        self._jobs = jobs
+        self._last_mtime = mtime
+        return True
+
     def _save_unlocked(self) -> None:
+        self.sync_from_disk()
         try:
             self._store_path.parent.mkdir(parents=True, exist_ok=True)
             data = {"jobs": [self._job_to_dict(j) for j in self._jobs.values()]}
@@ -684,6 +708,7 @@ class AutomationService:
                 if j.state.next_run_at_ms and j.state.next_run_at_ms < now:
                     j.state.next_run_at_ms = _compute_next_run(j.schedule, now) or 0
         await self._fire_overdue_at_jobs()
+        self._sync_task = asyncio.create_task(self._watch_store(), name="automation-sync")
         self._rearm()
         logger.info(
             "AutomationService: started ({} jobs)",
@@ -695,6 +720,9 @@ class AutomationService:
         if self._timer_task:
             self._timer_task.cancel()
             self._timer_task = None
+        if self._sync_task:
+            self._sync_task.cancel()
+            self._sync_task = None
         if self._save_task and not self._save_task.done():
             self._save_task.cancel()
             self._save_task = None
@@ -730,6 +758,17 @@ class AutomationService:
 
         self._timer_task = asyncio.create_task(_tick(), name="automation-timer")
 
+    async def _watch_store(self) -> None:
+        """Pick up jobs written by the CLI while this gateway is already running."""
+        while self._running:
+            try:
+                await asyncio.sleep(2)
+            except asyncio.CancelledError:
+                return
+            if self.sync_from_disk():
+                logger.info("AutomationService: reloaded jobs from disk")
+                self._rearm()
+
     async def _fire_overdue_at_jobs(self) -> None:
         """On startup, immediately fire one-shot 'at' jobs that are already due."""
         now = _now_ms()
@@ -754,6 +793,7 @@ class AutomationService:
             await asyncio.gather(*tasks)
 
     async def _on_timer(self) -> None:
+        self.sync_from_disk()
         now = _now_ms()
         due = [
             j

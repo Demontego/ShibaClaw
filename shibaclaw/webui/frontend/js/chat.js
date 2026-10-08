@@ -680,7 +680,10 @@ window.updateSendButton = updateSendButton;
 
 function autoResizeInput() {
     chatInput.style.height = "auto";
-    chatInput.style.height = Math.min(chatInput.scrollHeight, 200) + "px";
+    const maxHeight = parseFloat(window.getComputedStyle(chatInput).maxHeight) || 200;
+    chatInput.style.height = Math.min(chatInput.scrollHeight, maxHeight) + "px";
+    const area = chatInput.closest(".input-area");
+    if (area) document.documentElement.style.setProperty("--mobile-composer-height", `${Math.ceil(area.getBoundingClientRect().height)}px`);
 }
 
 
