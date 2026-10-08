@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
@@ -188,8 +189,16 @@ class ShibaBrain:
         )
         self.memory = ScentKeeper(workspace)
         self._available_channels = self._extract_enabled_channels()
+        self._tool_call_history: list[tuple[str, str, float]] = []  # (tool_name, args_hash, timestamp)
+        self._loop_detection_threshold = 3  # Number of repeated calls to trigger loop detection
         self._register_default_tools()
         logger.debug("Agent initialized for workspace: {}", workspace)
+
+    def _hash_tool_arguments(self, args: dict[str, Any]) -> str:
+        """Generates a consistent hash for tool arguments."""
+        # Convert dict to a sorted JSON string to ensure consistent hashing
+        return hashlib.md5(json.dumps(args, sort_keys=True).encode('utf-8')).hexdigest()
+
 
     def _extract_enabled_channels(self) -> list[str]:
         """Return names of enabled channels from channels_config."""
