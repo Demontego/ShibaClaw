@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,9 +38,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.shibaclaw.companion.data.ShibaRepo
+import kotlin.math.min
 
 @Composable
 fun SessionsDrawer(onClose: () -> Unit) {
@@ -52,8 +58,9 @@ fun SessionsDrawer(onClose: () -> Unit) {
 
     LaunchedEffect(Unit) { ShibaRepo.refreshSessions() }
 
+    val drawerWidth = min(LocalConfiguration.current.screenWidthDp * 0.88f, 320f).dp
     ModalDrawerSheet(
-        modifier = Modifier.width(264.dp).fillMaxHeight(),
+        modifier = Modifier.width(drawerWidth).fillMaxHeight(),
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
@@ -72,6 +79,7 @@ fun SessionsDrawer(onClose: () -> Unit) {
                         ShibaRepo.newSession(currentProfile)
                         onClose()
                     },
+                    modifier = Modifier.size(44.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "New")
                 }
@@ -82,8 +90,9 @@ fun SessionsDrawer(onClose: () -> Unit) {
                     query = it
                     ShibaRepo.searchSessions(it)
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
                 placeholder = { Text("Search") },
+                textStyle = TextStyle(fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface),
                 singleLine = true,
             )
             Spacer(Modifier.height(8.dp))

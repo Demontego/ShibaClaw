@@ -6,9 +6,13 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,10 +33,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
@@ -43,6 +48,8 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +57,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -72,10 +80,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.mikepenz.markdown.compose.components.markdownComponents
@@ -89,6 +100,7 @@ import com.shibaclaw.companion.data.ChatItem
 import com.shibaclaw.companion.data.ShibaApi
 import com.shibaclaw.companion.data.ShibaRepo
 import com.shibaclaw.companion.ui.theme.shibaBarColors
+import com.shibaclaw.companion.ui.theme.shibaFocusBorder
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -121,6 +133,7 @@ fun ChatScreen(
     val pending = remember { mutableStateListOf<AttachmentRef>() }
     var uploading by remember { mutableStateOf(false) }
     var showPicker by remember { mutableStateOf(false) }
+    var attachMenu by remember { mutableStateOf(false) }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val listState = rememberLazyListState()
 
@@ -233,18 +246,21 @@ fun ChatScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        IconButton(
+                            onClick = { scope.launch { drawerState.open() } },
+                            modifier = Modifier.size(44.dp),
+                        ) {
                             Icon(Icons.Default.Menu, contentDescription = "Sessions")
                         }
                     },
                     actions = {
-                        IconButton(onClick = onOpenAutomation) {
+                        IconButton(onClick = onOpenAutomation, modifier = Modifier.size(44.dp)) {
                             Icon(Icons.Default.Schedule, contentDescription = "Automation")
                         }
-                        IconButton(onClick = onOpenNotifications) {
+                        IconButton(onClick = onOpenNotifications, modifier = Modifier.size(44.dp)) {
                             Icon(Icons.Default.Notifications, contentDescription = "Notifications")
                         }
-                        IconButton(onClick = onOpenSettings) {
+                        IconButton(onClick = onOpenSettings, modifier = Modifier.size(44.dp)) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
@@ -257,34 +273,21 @@ fun ChatScreen(
                     .padding(padding)
                     .imePadding(),
             ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val agent = profiles.firstOrNull { it.id == sessionProfile }?.title()
-                        ?: sessionProfile.ifBlank { "agent" }
-                    val modelLabel = sessionModel.substringAfterLast('/').ifBlank { "model" }
-                    AssistChip(onClick = { showPicker = true }, label = { Text(agent, maxLines = 1) })
-                    AssistChip(onClick = { showPicker = true }, label = { Text(modelLabel, maxLines = 1) })
-                    if (queued > 0) {
-                        AssistChip(onClick = {}, label = { Text("Queued #$queued") })
-                    }
-                }
                 LazyColumn(
                     state = listState,
                     reverseLayout = true,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(messages.asReversed(), key = { it.id }) { item ->
+                        val agentLabel = profiles.firstOrNull { it.id == sessionProfile }?.title()
+                            ?.ifBlank { null } ?: "Shiba"
                         ChatBubble(
                             item = item,
+                            agentLabel = agentLabel,
                             onToggle = { ShibaRepo.toggleCollapse(item.id) },
                             onReply = { requestId, body ->
                                 ShibaRepo.client?.interactiveReply(requestId, body)
@@ -311,66 +314,148 @@ fun ChatScreen(
                         }
                     }
                 }
-                Row(
-                    Modifier
+                val fieldFocus = remember { MutableInteractionSource() }
+                val fieldFocused by fieldFocus.collectIsFocusedAsState()
+                val canSend = input.isNotBlank() || pending.isNotEmpty()
+                fun send() {
+                    val text = input.trim()
+                    if (text.isEmpty() && pending.isEmpty()) return
+                    val atts = pending.toList()
+                    pending.clear()
+                    input = ""
+                    ShibaRepo.appendUser(text.ifBlank { "(attachment)" }, atts)
+                    ShibaService.start(ctx, ShibaService.ACTION_CHAT, text.ifBlank { " " }, atts)
+                }
+                Surface(
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (fieldFocused) shibaFocusBorder() else MaterialTheme.colorScheme.outline,
+                    ),
                 ) {
-                    IconButton(onClick = {
-                        photoPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                        )
-                    }) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Photo")
-                    }
-                    IconButton(onClick = {
-                        val granted = ctx.checkSelfPermission(Manifest.permission.CAMERA) ==
-                            PackageManager.PERMISSION_GRANTED
-                        if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
-                    }) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = "Camera")
-                    }
-                    IconButton(onClick = { filePicker.launch("*/*") }) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "File")
-                    }
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        modifier = Modifier.weight(1f),
-                        shape = MaterialTheme.shapes.medium,
-                        placeholder = { Text("Tell Shiba…") },
-                        maxLines = 5,
-                    )
-                    if (uploading) {
-                        CircularProgressIndicator(Modifier.size(28.dp).padding(start = 8.dp))
-                    } else {
-                        if (processing) {
-                            IconButton(onClick = { ShibaRepo.client?.stop() }) {
-                                Icon(Icons.Default.Stop, contentDescription = "Stop")
+                    Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    val granted = ctx.checkSelfPermission(Manifest.permission.CAMERA) ==
+                                        PackageManager.PERMISSION_GRANTED
+                                    if (granted) launchCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
+                                },
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = "Camera")
+                            }
+                            Box {
+                                IconButton(
+                                    onClick = { attachMenu = true },
+                                    modifier = Modifier.size(44.dp),
+                                ) {
+                                    Icon(Icons.Default.AttachFile, contentDescription = "Attach")
+                                }
+                                DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Photo") },
+                                        onClick = {
+                                            attachMenu = false
+                                            photoPicker.launch(
+                                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                            )
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("File") },
+                                        onClick = {
+                                            attachMenu = false
+                                            filePicker.launch("*/*")
+                                        },
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = input,
+                                onValueChange = { input = it },
+                                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                                interactionSource = fieldFocus,
+                                textStyle = TextStyle(
+                                    fontSize = 16.sp,
+                                    lineHeight = 22.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                ),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                ),
+                                placeholder = { Text("Send a message to ShibaClaw...") },
+                                maxLines = 5,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = if (canSend && !uploading) 1f else 0.3f,
+                                        ),
+                                    )
+                                    .clickable(enabled = canSend && !uploading, onClick = ::send),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (uploading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Default.ArrowUpward,
+                                        contentDescription = "Send",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                }
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                val text = input.trim()
-                                if (text.isEmpty() && pending.isEmpty()) return@IconButton
-                                val atts = pending.toList()
-                                pending.clear()
-                                input = ""
-                                ShibaRepo.appendUser(text.ifBlank { "(attachment)" }, atts)
-                                ShibaService.start(
-                                    ctx,
-                                    ShibaService.ACTION_CHAT,
-                                    text.ifBlank { " " },
-                                    atts,
-                                )
-                            },
+                        val agent = profiles.firstOrNull { it.id == sessionProfile }?.title()
+                            ?: sessionProfile.ifBlank { "agent" }
+                        val modelLabel = sessionModel.substringAfterLast('/').ifBlank { "model" }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Send",
-                                tint = MaterialTheme.colorScheme.primary,
+                            AssistChip(
+                                onClick = { showPicker = true },
+                                label = { Text(agent, maxLines = 1) },
+                                modifier = Modifier.heightIn(min = 44.dp),
                             )
+                            AssistChip(
+                                onClick = { showPicker = true },
+                                label = { Text(modelLabel, maxLines = 1) },
+                                modifier = Modifier.heightIn(min = 44.dp),
+                            )
+                            if (queued > 0) {
+                                AssistChip(onClick = {}, label = { Text("Queued #$queued") })
+                            }
+                            if (processing) {
+                                AssistChip(
+                                    onClick = { ShibaRepo.client?.stop() },
+                                    label = { Text("Stop") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -398,25 +483,44 @@ fun ChatScreen(
 @Composable
 private fun ChatBubble(
     item: ChatItem,
+    agentLabel: String,
     onToggle: () -> Unit,
     onReply: (String, JSONObject) -> Unit,
 ) {
     when (item) {
         is ChatItem.Message -> {
             val align = if (item.fromUser) Alignment.CenterEnd else Alignment.CenterStart
+            val bubbleShape = if (item.fromUser) {
+                RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomEnd = 6.dp, bottomStart = 10.dp)
+            } else {
+                RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp, bottomEnd = 10.dp, bottomStart = 6.dp)
+            }
             Box(Modifier.fillMaxWidth(), contentAlignment = align) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(if (item.fromUser) 0.82f else 0.92f),
+                    horizontalAlignment = if (item.fromUser) Alignment.End else Alignment.Start,
+                ) {
+                    Text(
+                        if (item.fromUser) "You" else agentLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (item.fromUser) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = bubbleShape,
                     color = if (item.fromUser) {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    } else {
                         MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
                     },
-                    modifier = if (item.fromUser) {
-                        Modifier.fillMaxWidth(0.86f)
-                    } else {
-                        Modifier.fillMaxWidth()
-                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (item.fromUser) MaterialTheme.colorScheme.outline else shibaFocusBorder(),
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         item.attachments.forEach { att ->
@@ -458,6 +562,7 @@ private fun ChatBubble(
                             )
                         }
                     }
+                }
                 }
             }
         }

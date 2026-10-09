@@ -84,6 +84,12 @@ fun ShibaTheme(mode: ThemeMode, content: @Composable () -> Unit) {
     )
 }
 
+@Composable
+fun shibaFocusBorder(): Color {
+    val bg = MaterialTheme.colorScheme.background
+    return if (bg.red + bg.green + bg.blue < 1.5f) Color(0xFF6C523D) else Color(0xFFCCB096)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun shibaBarColors() = TopAppBarDefaults.topAppBarColors(
