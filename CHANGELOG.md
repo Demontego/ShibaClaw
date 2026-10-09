@@ -1,12 +1,11 @@
 ## [Unreleased]
 
 ### Added
-- **Opt-in self-evolution** — `/evolve on|off` and `/panic` (owner DM or WebUI). A 10-minute alarm takes one backlog class on an `evolve/*` branch, or one world topic from `USER.md` and `memory/people/` into `memory/evolution/WORLD.md`. A separate `shibaclaw agent --model` session reviews code. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself and does not change the saved provider. Code budget: 3 applies per day, 45 minutes between them. World notes: 16 a day, 30 minutes apart. WebUI tool **Evolution** (`GET /api/evolve`) shows the gate, chronicle, backlog, patterns, world notes, and recent commits. `/panic` cancels the evolution session, and a running gateway reloads jobs the CLI writes.
 - **LLM retry** — equal-jitter backoff, permanent-error classification (no retry on 4xx auth/model/context), optional `fallback_models`, and a small cache used only after every fallback fails. No model is selected unless the caller passes `fallback_models`.
-- **Loop safety** — hard step cap, session cost cap, context-overflow guard with checkpoint resume, stuck-loop prompts, identical tool-call cutoff, safe-tool retry with jitter, semantic tool circuit breaker, and structured tool-error feedback. Incognito sessions are not checkpointed. A resumed turn starts with a fresh step budget and the new user message. Tool-call pruning keeps each call with its result.
-- **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart. The last audit token wins, progress stays out of the project root, and a rolled-back saga step can run again.
-- **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView. The language menu stays anchored to its switcher.
+- **Opt-in self-evolution** — `/evolve on|off|status` and `/panic` (owner DM, CLI, or WebUI). An alarm takes one backlog class on an `evolve/*` branch. A separate `shibaclaw agent --model` process reviews. `EVOLVE_QUIET` and `EVOLVE_SKIP` are not delivered. The package does not restart itself. `GET /api/evolve` shows the gate, chronicle, and recent commits.
+- **Chat-first workspace shell** — conversation list is the sidebar, workspace tools collapse to icons, and the layout fits phone, tablet, and desktop including Android WebView.
 - **Durable turn journal** — Tool calls are recorded before they run, so a crash or a redelivered input does not execute the same call twice. `/stop` still cancels the turn; `/stop idle` lets the current tool finish. Incognito sessions keep this journal in memory.
+- **Subagent MEA** — `spawn_mea` runs a manage-execute-audit pass and returns a structured synthesis. `IdempotentSaga` and `SupervisorTree` are available for multi-step work with rollback and child restart.
 
 ## [1.0.3] - 2026-09-30
 

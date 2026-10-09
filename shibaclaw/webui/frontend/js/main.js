@@ -14,6 +14,12 @@ function setSidebarOpen(open) {
     }
 
     sidebar.classList.toggle("open", open);
+    sidebar.inert = isMobileSidebar() && !open;
+    sidebar.setAttribute("aria-hidden", String(sidebar.inert));
+    document.querySelectorAll(".mobile-menu-btn, .workspace-mobile-menu, .sidebar-toggle").forEach(button => {
+        button.setAttribute("aria-controls", "sidebar");
+        button.setAttribute("aria-expanded", String(open && isMobileSidebar()));
+    });
     if (backdrop) {
         backdrop.classList.toggle("active", open && isMobileSidebar());
     }
@@ -27,9 +33,31 @@ function closeSidebarOnMobile() {
 
 window.closeSidebarOnMobile = closeSidebarOnMobile;
 
+// Mobile browser toolbars and keyboards can shrink the visual viewport without
+// changing 100dvh. Keep the composer inside the space the user can actually see.
+function syncMobileViewport() {
+    const viewport = window.visualViewport;
+    const style = document.documentElement.style;
+    if (isMobileSidebar() && viewport && viewport.scale === 1) {
+        style.setProperty("--mobile-viewport-height", `${Math.round(viewport.height)}px`);
+        style.setProperty("--mobile-viewport-top", `${Math.round(viewport.offsetTop)}px`);
+    } else {
+        style.removeProperty("--mobile-viewport-height");
+        style.removeProperty("--mobile-viewport-top");
+    }
+    autoResizeInput();
+}
+
 function initListeners() {
     if (state.listenersInitialized) return;
     state.listenersInitialized = true;
+
+    setSidebarOpen(false);
+    syncMobileViewport();
+    window.visualViewport?.addEventListener("resize", syncMobileViewport);
+    window.visualViewport?.addEventListener("scroll", syncMobileViewport);
+    window.addEventListener("resize", syncMobileViewport);
+    window.matchMedia("(max-width: 768px)").addEventListener("change", () => setSidebarOpen(false));
 
     btnSend.addEventListener("click", sendMessage);
 
