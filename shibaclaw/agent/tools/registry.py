@@ -3,6 +3,7 @@
 from typing import Any
 
 from shibaclaw.agent.tools.base import Tool
+from shibaclaw.agent.tools.preflight_guard import ToolCallPreFlightGuard
 
 
 class SkillVault:
@@ -14,6 +15,7 @@ class SkillVault:
 
     def __init__(self):
         self._tools: dict[str, Tool] = {}
+        self.preflight_guard = ToolCallPreFlightGuard()
 
     def register(self, tool: Tool) -> None:
         """Register a tool."""
@@ -44,14 +46,11 @@ class SkillVault:
             return f"Error: Tool '{name}' not found. Available: {', '.join(self.tool_names)}"
 
         try:
-            # Attempt to cast parameters to match schema types
-            params = tool.cast_params(params)
+            is_valid, norm_params, error_feedback = self.preflight_guard.validate_and_normalize(tool, params)
+            if not is_valid and error_feedback:
+                return error_feedback
 
-            # Validate parameters
-            errors = tool.validate_params(params)
-            if errors:
-                return f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors) + hint
-            result = await tool.execute(**params)
+            result = await tool.execute(**norm_params)
             if isinstance(result, str) and result.startswith("Error"):
                 return result + hint
             return result

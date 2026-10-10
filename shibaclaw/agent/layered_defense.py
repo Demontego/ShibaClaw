@@ -16,6 +16,7 @@ from shibaclaw.agent.supervisor_tree import SupervisorTree
 from shibaclaw.agent.idempotent_saga import IdempotentSaga
 from shibaclaw.agent.graceful_degradation import GracefulDegradation
 from shibaclaw.agent.exponential_backoff import ExponentialBackoff
+from shibaclaw.agent.tools.preflight_guard import ToolCallPreFlightGuard
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class LayeredDefense:
         self.idempotent_saga = IdempotentSaga()
         self.graceful_degradation = GracefulDegradation()
         self.exponential_backoff = ExponentialBackoff()
+        self.preflight_guard = ToolCallPreFlightGuard()
 
     def record_iteration(
         self,
