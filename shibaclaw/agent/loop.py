@@ -598,16 +598,22 @@ class ShibaBrain:
         model: str | None = None,
         provider: Any | None = None,
         metadata: dict | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
-        for name in ("message", "spawn", "automation", "think"):
+        for name in ("message", "spawn", "spawn_mea", "automation", "think"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
-                    elif name == "spawn":
+                    elif name in ("spawn", "spawn_mea"):
                         tool.set_context(
-                            channel, chat_id, session_key, model=model, provider=provider
+                            channel,
+                            chat_id,
+                            session_key,
+                            model=model,
+                            provider=provider,
+                            parent_messages=parent_messages,
                         )
                     else:
                         tool.set_context(channel, chat_id, session_key)
@@ -775,6 +781,7 @@ class ShibaBrain:
             model=active_model,
             provider=active_provider,
             metadata=metadata,
+            parent_messages=messages,
         )
 
         if not active_provider:

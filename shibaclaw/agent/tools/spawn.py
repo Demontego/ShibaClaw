@@ -19,6 +19,7 @@ class SpawnTool(Tool):
         self._session_key = "cli:direct"
         self._active_model: str | None = None
         self._active_provider: Any | None = None
+        self._parent_messages: list[dict[str, Any]] | None = None
 
     def set_context(
         self,
@@ -27,6 +28,7 @@ class SpawnTool(Tool):
         session_key: str | None = None,
         model: str | None = None,
         provider: Any | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
         self._origin_channel = channel
@@ -34,6 +36,7 @@ class SpawnTool(Tool):
         self._session_key = session_key or f"{channel}:{chat_id}"
         self._active_model = model
         self._active_provider = provider
+        self._parent_messages = parent_messages
 
     @property
     def name(self) -> str:
@@ -62,20 +65,37 @@ class SpawnTool(Tool):
                     "type": "string",
                     "description": "Optional short label for the task (for display)",
                 },
+                "mode": {
+                    "type": "string",
+                    "enum": ["isolated", "fork"],
+                    "description": (
+                        "Context mode: 'isolated' (default, fresh clean context window for independent research/review) "
+                        "or 'fork' (copies supervisor conversation history for worker continuation tasks)."
+                    ),
+                    "default": "isolated",
+                },
             },
             "required": ["task"],
         }
 
-    async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:
+    async def execute(
+        self,
+        task: str,
+        label: str | None = None,
+        mode: str = "isolated",
+        **kwargs: Any,
+    ) -> str:
         """Spawn a subagent to execute the given task."""
         return await self._manager.spawn(
             task=task,
             label=label,
+            mode=mode,
             origin_channel=self._origin_channel,
             origin_chat_id=self._origin_chat_id,
             session_key=self._session_key,
             model=self._active_model,
             provider=self._active_provider,
+            parent_messages=self._parent_messages,
         )
 
 
@@ -89,6 +109,7 @@ class SpawnMeaTool(Tool):
         self._session_key = "cli:direct"
         self._active_model: str | None = None
         self._active_provider: Any | None = None
+        self._parent_messages: list[dict[str, Any]] | None = None
 
     def set_context(
         self,
@@ -97,6 +118,7 @@ class SpawnMeaTool(Tool):
         session_key: str | None = None,
         model: str | None = None,
         provider: Any | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
         self._origin_channel = channel
@@ -104,6 +126,7 @@ class SpawnMeaTool(Tool):
         self._session_key = session_key or f"{channel}:{chat_id}"
         self._active_model = model
         self._active_provider = provider
+        self._parent_messages = parent_messages
 
     @property
     def name(self) -> str:
@@ -130,22 +153,35 @@ class SpawnMeaTool(Tool):
                     "type": "string",
                     "description": "Optional short label for the task (for display)",
                 },
+                "mode": {
+                    "type": "string",
+                    "enum": ["isolated", "fork"],
+                    "description": "Context mode for MEA subagents: 'isolated' (default) or 'fork'.",
+                    "default": "isolated",
+                },
             },
             "required": ["task"],
         }
 
-    async def execute(self, task: str, label: str | None = None, **kwargs: Any) -> str:
+    async def execute(
+        self,
+        task: str,
+        label: str | None = None,
+        mode: str = "isolated",
+        **kwargs: Any,
+    ) -> str:
         """Execute the MEA loop for the given task."""
         asyncio.create_task(
             self._manager.execute_mea_loop(
                 task=task,
                 label=label,
+                mode=mode,
                 origin_channel=self._origin_channel,
                 origin_chat_id=self._origin_chat_id,
                 session_key=self._session_key,
                 model=self._active_model,
                 provider=self._active_provider,
+                parent_messages=self._parent_messages,
             )
         )
         return f"MEA Loop [{label or task[:30]}] started in the background. I will manage, execute, and audit the task, and notify you when complete."
-
