@@ -2,10 +2,11 @@
 
 import asyncio
 import difflib
+import hashlib
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from shibaclaw.agent.tools.base import Tool
 
@@ -36,6 +37,32 @@ def _is_under(path: Path, directory: Path) -> bool:
         return False
 
 
+class FileReadCache:
+    """Cache for tracking read file content hashes to avoid redundant re-reads."""
+
+    def __init__(self) -> None:
+        self._cache: dict[str, dict[str, Any]] = {}
+
+    def get(self, path: str, content_hash: str) -> dict[str, Any] | None:
+        entry = self._cache.get(path)
+        if entry and entry.get("hash") == content_hash:
+            return entry
+        return None
+
+    def set(self, path: str, content_hash: str, total_lines: int, size_bytes: int) -> None:
+        self._cache[path] = {
+            "hash": content_hash,
+            "lines": total_lines,
+            "size": size_bytes,
+        }
+
+    def invalidate(self, path: str) -> None:
+        self._cache.pop(path, None)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
 class _FsTool(Tool):
     """Shared base for filesystem tools — common init and path resolution."""
 
@@ -44,11 +71,15 @@ class _FsTool(Tool):
         workspace: Path | None = None,
         allowed_dir: Path | None = None,
         extra_allowed_dirs: list[Path] | None = None,
+        read_cache: FileReadCache | None = None,
+        artifact_register: Any | None = None,
     ):
         self._workspace = workspace
         self._allowed_dir = allowed_dir
         self._extra_allowed_dirs = extra_allowed_dirs
         self._readonly = False
+        self.read_cache = read_cache or FileReadCache()
+        self.artifact_register = artifact_register
 
     def configure_sandbox(
         self,
@@ -122,12 +153,21 @@ class ReadFileTool(_FsTool):
                     "description": "Maximum number of lines to read (default 2000)",
                     "minimum": 1,
                 },
+                "force_reload": {
+                    "type": "boolean",
+                    "description": "Bypass deduplication cache and re-read file content (default false)",
+                },
             },
             "required": ["path"],
         }
 
     async def execute(
-        self, path: str, offset: int = 1, limit: int | None = None, **kwargs: Any
+        self,
+        path: str,
+        offset: int = 1,
+        limit: int | None = None,
+        force_reload: bool = False,
+        **kwargs: Any,
     ) -> str:
         try:
             fp = self._resolve(path)
@@ -136,10 +176,13 @@ class ReadFileTool(_FsTool):
             if not fp.is_file():
                 return f"Error: Not a file: {path}"
 
+            raw_bytes = await asyncio.to_thread(fp.read_bytes)
+            content_hash = hashlib.sha256(raw_bytes).hexdigest()
+            size = len(raw_bytes)
+
             try:
-                all_lines = (await asyncio.to_thread(fp.read_text, encoding="utf-8")).splitlines()
+                all_lines = raw_bytes.decode("utf-8").splitlines()
             except UnicodeDecodeError:
-                size = fp.stat().st_size
                 if fp.suffix.lower() != ".pdf":
                     return f"Binary file ({size:,} bytes) at {fp}. Cannot read as UTF-8 text."
                 if not shutil.which("pdftotext"):
@@ -163,7 +206,23 @@ class ReadFileTool(_FsTool):
                 if result.returncode != 0 or not (result.stdout or "").strip():
                     return f"Binary PDF ({size:,} bytes) at {fp}. pdftotext produced no text."
                 all_lines = result.stdout.splitlines()
+
             total = len(all_lines)
+
+            # Deduplication check
+            if not force_reload:
+                cached = self.read_cache.get(str(fp), content_hash)
+                if cached:
+                    if self.artifact_register and hasattr(self.artifact_register, "record_read_file"):
+                        self.artifact_register.record_read_file(str(fp))
+                    return (
+                        f"[File Read Deduplicated: {path} (hash={content_hash[:8]}, {total} lines, {size} bytes). "
+                        f"Content is unchanged from prior read in context. Use force_reload=true to re-read full content.]"
+                    )
+
+            self.read_cache.set(str(fp), content_hash, total, size)
+            if self.artifact_register and hasattr(self.artifact_register, "record_read_file"):
+                self.artifact_register.record_read_file(str(fp))
 
             if offset < 1:
                 offset = 1
@@ -233,6 +292,10 @@ class WriteFileTool(_FsTool):
             fp = self._resolve(path)
             fp.parent.mkdir(parents=True, exist_ok=True)
             fp.write_text(content, encoding="utf-8")
+            if self.read_cache:
+                self.read_cache.invalidate(str(fp))
+            if self.artifact_register and hasattr(self.artifact_register, "record_modified_file"):
+                self.artifact_register.record_modified_file(str(fp))
             return f"Successfully wrote {len(content)} bytes to {fp}"
         except PermissionError as e:
             return f"Error: {e}"
@@ -246,11 +309,7 @@ class WriteFileTool(_FsTool):
 
 
 def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
-    """Locate old_text in content: exact first, then line-trimmed sliding window.
-
-    Both inputs should use LF line endings (caller normalises CRLF).
-    Returns (matched_fragment, count) or (None, 0).
-    """
+    """Locate old_text in content: exact first, then line-trimmed sliding window."""
     if old_text in content:
         return old_text, content.count(old_text)
 
@@ -341,6 +400,10 @@ class EditFileTool(_FsTool):
                 new_content = new_content.replace("\n", "\r\n")
 
             fp.write_bytes(new_content.encode("utf-8"))
+            if self.read_cache:
+                self.read_cache.invalidate(str(fp))
+            if self.artifact_register and hasattr(self.artifact_register, "record_modified_file"):
+                self.artifact_register.record_modified_file(str(fp))
             return f"Successfully edited {fp}"
         except PermissionError as e:
             return f"Error: {e}"

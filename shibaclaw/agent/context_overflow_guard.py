@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 from typing import Any, Optional
@@ -8,9 +9,99 @@ class ContextOverflowError(Exception):
     """Raised when the context window usage exceeds the hard limit threshold."""
     pass
 
+PROMPT_CACHE_PREFIX_MARKER = "<!-- PROMPT_CACHE_PREFIX_MARKER -->"
+
+@dataclass
+class ArtifactRegister:
+    """
+    Tracks artifacts produced or accessed during an execution session.
+    Preserved during context compaction to ensure critical state is not lost.
+    """
+    modified_files: set = field(default_factory=set)
+    git_commits: list = field(default_factory=list)
+    subagent_results: list = field(default_factory=list)
+    read_files: set = field(default_factory=set)
+
+    def record_modified_file(self, path: str) -> None:
+        self.modified_files.add(path)
+
+    def record_git_commit(self, commit: str) -> None:
+        if commit not in self.git_commits:
+            self.git_commits.append(commit)
+
+    def record_subagent_result(self, label: str, status: str, summary: str) -> None:
+        self.subagent_results.append({
+            "label": label,
+            "status": status,
+            "summary": summary,
+        })
+
+    def record_read_file(self, path: str) -> None:
+        self.read_files.add(path)
+
+    def is_empty(self) -> bool:
+        return not (self.modified_files or self.git_commits or self.subagent_results or self.read_files)
+
+    def render_markdown(self) -> str:
+        """Render artifact register as a structured markdown block with prompt cache markers."""
+        lines = [PROMPT_CACHE_PREFIX_MARKER, "<artifact_register>", "### Artifact Register"]
+        
+        if self.modified_files:
+            lines.append("- **Modified Files**:")
+            for f in sorted(self.modified_files):
+                lines.append(f"  - `{f}`")
+        else:
+            lines.append("- **Modified Files**: (none)")
+
+        if self.git_commits:
+            lines.append("- **Git Commits**:")
+            for c in self.git_commits:
+                lines.append(f"  - `{c}`")
+        else:
+            lines.append("- **Git Commits**: (none)")
+
+        if self.subagent_results:
+            lines.append("- **Subagent Results**:")
+            for sub in self.subagent_results:
+                lines.append(f"  - [{sub.get('status', 'done')}] {sub.get('label', 'subagent')}: {sub.get('summary', '')}")
+        else:
+            lines.append("- **Subagent Results**: (none)")
+
+        if self.read_files:
+            lines.append("- **Read Files**:")
+            for rf in sorted(self.read_files):
+                lines.append(f"  - `{rf}`")
+
+        lines.append("</artifact_register>")
+        return "\n".join(lines)
+
+    def clear(self) -> None:
+        self.modified_files.clear()
+        self.git_commits.clear()
+        self.subagent_results.clear()
+        self.read_files.clear()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "modified_files": sorted(list(self.modified_files)),
+            "git_commits": list(self.git_commits),
+            "subagent_results": list(self.subagent_results),
+            "read_files": sorted(list(self.read_files)),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ArtifactRegister":
+        reg = cls()
+        reg.modified_files = set(data.get("modified_files", []))
+        reg.git_commits = list(data.get("git_commits", []))
+        reg.subagent_results = list(data.get("subagent_results", []))
+        reg.read_files = set(data.get("read_files", []))
+        return reg
+
+
 class ContextOverflowGuard:
     """
-    Context Overflow Guard system.
+    Context Overflow Guard system with Artifact Preservation & Prompt Cache discipline.
     Monitors the current token usage of the context window and enforces three thresholds:
     1. Warning Threshold (70%): Logs a warning.
     2. Critical Threshold (85%): Triggers automatic compression.
@@ -22,7 +113,8 @@ class ContextOverflowGuard:
         context_window_tokens: int = 4000,
         warning_ratio: float = 0.70,
         critical_ratio: float = 0.85,
-        hard_limit_ratio: float = 0.95
+        hard_limit_ratio: float = 0.95,
+        artifact_register: Optional[ArtifactRegister] = None,
     ):
         self.workspace = workspace
         self.context_window_tokens = context_window_tokens
@@ -30,6 +122,7 @@ class ContextOverflowGuard:
         self.critical_threshold = int(context_window_tokens * critical_ratio)
         self.hard_limit_threshold = int(context_window_tokens * hard_limit_ratio)
         self.learnings_file = workspace / "memory" / "learnings.md"
+        self.artifact_register = artifact_register or ArtifactRegister()
 
     def check_usage(self, current_tokens: int, checkpoint_mgr: Any = None, session_key: str = "default") -> Optional[str]:
         """
@@ -106,18 +199,22 @@ class ContextOverflowGuard:
         except Exception as e:
             logger.error("ContextOverflowGuard: Failed to log incident: %s", e)
 
+    def format_compacted_summary(self, summary_text: str) -> str:
+        """Appends the rendered artifact register to summary text to preserve task state."""
+        register_md = self.artifact_register.render_markdown()
+        return f"{summary_text}\n\n{register_md}"
+
     def budget_context(self, messages: list, max_tokens: Optional[int] = None) -> list:
         """
         Dynamically budgets the context by pruning or compressing older messages
         if the estimated token count exceeds the max_tokens budget.
-        Keeps the system prompt (messages[0]) and the most recent messages intact.
+        Preserves the artifact register state and prompt cache prefix markers.
         """
         if not messages:
             return messages
             
         target_budget = max_tokens or self.critical_threshold
         
-        # Estimate tokens: 1 token ≈ 4 characters
         estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
         if estimated_tokens <= target_budget:
             return messages
@@ -128,14 +225,20 @@ class ContextOverflowGuard:
             target_budget
         )
 
-        # Keep system prompt (index 0) and the last 3 messages
-        system_prompt = messages[0]
+        system_prompt = dict(messages[0])
+        sys_content = system_prompt.get("content") or ""
+
+        # Inject artifact register if non-empty and not present
+        if not self.artifact_register.is_empty() and "<artifact_register>" not in sys_content:
+            artifact_block = self.artifact_register.render_markdown()
+            sys_content = f"{PROMPT_CACHE_PREFIX_MARKER}\n{artifact_block}\n\n{sys_content}"
+            system_prompt["content"] = sys_content
+
         recent_messages = messages[-3:]
         middle_messages = messages[1:-3]
 
-        # Prune/compress middle messages if needed
         budgeted_middle = []
-        current_tokens = (len(system_prompt.get("content") or "") + sum(len(msg.get("content") or "") for msg in recent_messages)) // 4
+        current_tokens = (len(sys_content) + sum(len(msg.get("content") or "") for msg in recent_messages)) // 4
 
         for msg in reversed(middle_messages):
             msg_tokens = len(msg.get("content") or "") // 4
@@ -143,7 +246,6 @@ class ContextOverflowGuard:
                 budgeted_middle.insert(0, msg)
                 current_tokens += msg_tokens
             else:
-                # Compress or skip
                 logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", (msg.get("content") or "")[:50])
 
         return [system_prompt] + budgeted_middle + recent_messages
