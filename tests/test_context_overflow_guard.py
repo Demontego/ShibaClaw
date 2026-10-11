@@ -81,3 +81,23 @@ def test_observation_masking_prunes_old_tool_results(tmp_path: Path):
     # Assistant thoughts/messages are preserved
     assert masked[2]["content"] == "Executing tool 1"
     assert masked[4]["content"] == "Finished turn 1"
+
+
+def test_observation_masking_handles_complex_content(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "name": "custom_tool", "tool_call_id": "call_1", "content": [{"type": "text", "text": "Structured output"}]},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "tool", "name": "exec", "tool_call_id": "call_2", "content": "Recent output"},
+        {"role": "assistant", "content": "Finished turn 2"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=1)
+    assert "[Tool result masked: output from 'custom_tool' pruned" in masked[3]["content"]
+    assert masked[7]["content"] == "Recent output"
