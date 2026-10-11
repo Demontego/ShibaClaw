@@ -121,3 +121,24 @@ def test_observation_masking_user_role_case_insensitive(tmp_path: Path):
     masked = guard.mask_observations(messages, keep_recent_turns=1)
     assert "[Tool result masked: output from 'exec' pruned" in masked[3]["content"]
     assert "[Tool Result] stdout output from recent tool run" in masked[7]["content"]
+
+
+def test_observation_masking_structured_user_content_and_fallback(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "user", "tool_name": "fetch_data", "content": [{"type": "text", "text": "[tool result] stdout from old tool"}]},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "tool", "name": "exec", "tool_call_id": "call_2", "content": "Recent output"},
+        {"role": "assistant", "content": "Finished turn 2"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=1)
+    assert "[Tool result masked: output from 'fetch_data' pruned" in masked[3]["content"]
+    assert masked[7]["content"] == "Recent output"
+

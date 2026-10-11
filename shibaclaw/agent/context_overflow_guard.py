@@ -248,14 +248,15 @@ class ContextOverflowGuard:
 
             # Check if this message is a tool output
             is_tool_msg = False
-            tool_name = msg.get("name") or "tool"
+            tool_name = msg.get("name") or msg.get("tool_name") or msg.get("function_name") or "tool"
 
             if role == "tool":
                 is_tool_msg = True
-            elif role == "user" and isinstance(content, str) and (
-                content.lower().startswith("[tool result")
-            ):
-                is_tool_msg = True
+            elif role == "user":
+                if isinstance(content, str) and content.lower().startswith("[tool result"):
+                    is_tool_msg = True
+                elif isinstance(content, list) and content and isinstance(content[0], dict) and str(content[0].get("text", "")).lower().startswith("[tool result"):
+                    is_tool_msg = True
 
             if is_tool_msg and content:
                 content_str = content if isinstance(content, str) else str(content)
