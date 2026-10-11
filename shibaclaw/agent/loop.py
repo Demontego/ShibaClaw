@@ -942,7 +942,8 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            # Enforce Harness Context Budgeting
+            # Enforce Harness Context Budgeting & Observation Masking
+            messages = context_overflow_guard.mask_observations(messages, keep_recent_turns=3)
             messages = context_overflow_guard.budget_context(messages)
 
             response = await active_provider.chat_with_retry_streaming(

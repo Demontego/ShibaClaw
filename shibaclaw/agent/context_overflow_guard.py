@@ -204,6 +204,74 @@ class ContextOverflowGuard:
         register_md = self.artifact_register.render_markdown()
         return f"{summary_text}\n\n{register_md}"
 
+    def mask_observations(
+        self,
+        messages: list[dict[str, Any]],
+        keep_recent_turns: int = 3,
+        preserve_system: bool = True,
+    ) -> list[dict[str, Any]]:
+        """
+        Observation Masking & Selective Tool Result Pruning.
+        Replaces raw tool outputs older than `keep_recent_turns` assistant turns with concise stubs.
+        Preserves assistant thoughts/reasoning, tool call IDs, and system messages while
+        protecting context window from context rot and preserving KV cache ratios.
+        """
+        if not messages:
+            return messages
+
+        # Find indices of assistant messages that made tool calls
+        tool_calling_assistant_indices = [
+            i for i, msg in enumerate(messages)
+            if msg.get("role") == "assistant" and msg.get("tool_calls")
+        ]
+
+        if len(tool_calling_assistant_indices) >= keep_recent_turns:
+            cutoff_index = tool_calling_assistant_indices[-keep_recent_turns]
+        else:
+            assistant_indices = [
+                i for i, msg in enumerate(messages)
+                if msg.get("role") == "assistant"
+            ]
+            if len(assistant_indices) <= keep_recent_turns:
+                return messages
+            cutoff_index = assistant_indices[-keep_recent_turns]
+
+        new_messages = []
+        for i, msg in enumerate(messages):
+            if i >= cutoff_index:
+                # Recent turn — preserve as-is
+                new_messages.append(msg)
+                continue
+
+            role = msg.get("role")
+            content = msg.get("content")
+
+            # Check if this message is a tool output
+            is_tool_msg = False
+            tool_name = msg.get("name") or "tool"
+
+            if role == "tool":
+                is_tool_msg = True
+            elif role == "user" and isinstance(content, str) and (
+                content.startswith("[Tool Result") or content.startswith("[Tool result")
+            ):
+                is_tool_msg = True
+
+            if is_tool_msg and content:
+                content_str = content if isinstance(content, str) else str(content)
+                if not content_str.startswith("[Tool result masked"):
+                    # Create stub
+                    stub = f"[Tool result masked: output from '{tool_name}' pruned to prevent context rot. See ArtifactRegister for state changes.]"
+                    masked_msg = dict(msg)
+                    masked_msg["content"] = stub
+                    new_messages.append(masked_msg)
+                    logger.info("ContextOverflowGuard: Masked observation for tool '%s' at msg index %d", tool_name, i)
+                    continue
+
+            new_messages.append(msg)
+
+        return new_messages
+
     def budget_context(self, messages: list, max_tokens: Optional[int] = None) -> list:
         """
         Dynamically budgets the context by pruning or compressing older messages
@@ -212,10 +280,15 @@ class ContextOverflowGuard:
         """
         if not messages:
             return messages
-            
+
+        # Apply observation masking to prune older raw tool outputs first
+        messages = self.mask_observations(messages, keep_recent_turns=3)
+
         target_budget = max_tokens or self.critical_threshold
-        
-        estimated_tokens = sum(len(msg.get("content") or "") for msg in messages) // 4
+
+        estimated_tokens = sum(
+            len(msg.get("content") or "") for msg in messages if isinstance(msg.get("content"), str)
+        ) // 4
         if estimated_tokens <= target_budget:
             return messages
 
@@ -238,14 +311,15 @@ class ContextOverflowGuard:
         middle_messages = messages[1:-3]
 
         budgeted_middle = []
-        current_tokens = (len(sys_content) + sum(len(msg.get("content") or "") for msg in recent_messages)) // 4
+        current_tokens = (len(sys_content) + sum(len(msg.get("content") or "") for msg in recent_messages if isinstance(msg.get("content"), str))) // 4
 
         for msg in reversed(middle_messages):
-            msg_tokens = len(msg.get("content") or "") // 4
+            msg_content = msg.get("content") or ""
+            msg_tokens = len(msg_content) // 4 if isinstance(msg_content, str) else 0
             if current_tokens + msg_tokens <= target_budget:
                 budgeted_middle.insert(0, msg)
                 current_tokens += msg_tokens
             else:
-                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", (msg.get("content") or "")[:50])
+                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", str(msg_content)[:50])
 
         return [system_prompt] + budgeted_middle + recent_messages
