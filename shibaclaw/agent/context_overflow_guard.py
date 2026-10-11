@@ -253,7 +253,7 @@ class ContextOverflowGuard:
             if role == "tool":
                 is_tool_msg = True
             elif role == "user" and isinstance(content, str) and (
-                content.startswith("[Tool Result") or content.startswith("[Tool result")
+                content.lower().startswith("[tool result")
             ):
                 is_tool_msg = True
 
