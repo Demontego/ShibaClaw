@@ -12,26 +12,26 @@ from shibaclaw.agent.context_overflow_guard import (
 
 def test_context_overflow_guard_healthy(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
-    action = guard.check_usage(500)
-    assert action is None
+    action = guard.evaluate(500)
+    assert action == "ok"
 
 
 def test_context_overflow_guard_warning(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
-    action = guard.check_usage(750)
+    action = guard.evaluate(750)
     assert action == "warning"
 
 
 def test_context_overflow_guard_critical(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
-    action = guard.check_usage(860)
-    assert action == "compress"
+    action = guard.evaluate(860)
+    assert action == "critical"
 
 
 def test_context_overflow_guard_hard_limit(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     with pytest.raises(ContextOverflowError):
-        guard.check_usage(960)
+        guard.evaluate(960)
 
 
 def test_context_overflow_guard_budget_context(tmp_path: Path):
@@ -95,23 +95,18 @@ def test_enforce_schema_invariants():
 
 
 def test_compaction_effectiveness_circuit_breaker(tmp_path: Path):
-    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000, min_reduction_ratio=0.15)
 
-    # Reduction 1000 -> 900 is 10% reduction (< 15%) -> Trips circuit breaker
-    res = guard.evaluate_compaction_effectiveness(1000, 900)
+    # Reduction 1000 -> 900 is 10% reduction (< 15%) when tokens >= critical_threshold -> Trips circuit breaker
+    with pytest.raises(CompactionCircuitBreakerError):
+        guard.evaluate_compaction_effectiveness(1000, 900)
 
-    assert res["tripped"] is True
-    assert res["reduction_ratio"] == pytest.approx(0.10)
     assert guard.is_circuit_breaker_tripped() is True
 
-    # Check reset
-    guard.reset_circuit_breaker()
-    assert guard.is_circuit_breaker_tripped() is False
-
     # Reduction 1000 -> 800 is 20% reduction (>= 15%) -> Does not trip
-    res2 = guard.evaluate_compaction_effectiveness(1000, 800)
-    assert res2["tripped"] is False
-    assert res2["reduction_ratio"] == pytest.approx(0.20)
+    guard._circuit_breaker_tripped = False
+    red = guard.evaluate_compaction_effectiveness(1000, 800)
+    assert red == pytest.approx(0.20)
     assert guard.is_circuit_breaker_tripped() is False
 
 
