@@ -1,44 +1,137 @@
+import hashlib
 from pathlib import Path
 import pytest
-from shibaclaw.agent.context_overflow_guard import ContextOverflowGuard, ContextOverflowError
+from shibaclaw.agent.context_overflow_guard import (
+    ContextOverflowGuard,
+    ContextOverflowError,
+    CompactionCircuitBreakerError,
+    tombstone_tool_result,
+    enforce_schema_invariants,
+)
+
 
 def test_context_overflow_guard_healthy(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.check_usage(500)
     assert action is None
 
+
 def test_context_overflow_guard_warning(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.check_usage(750)
     assert action == "warning"
+
 
 def test_context_overflow_guard_critical(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.check_usage(860)
     assert action == "compress"
 
+
 def test_context_overflow_guard_hard_limit(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     with pytest.raises(ContextOverflowError):
         guard.check_usage(960)
 
+
 def test_context_overflow_guard_budget_context(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
-    
-    # Create messages that exceed the budget (critical threshold is 850 tokens, which is 3400 characters)
+
+    # Create messages that exceed the budget
     messages = [
-        {"role": "system", "content": "System prompt " * 100}, # 1400 chars
-        {"role": "user", "content": "Middle message 1 " * 100}, # 1700 chars
-        {"role": "assistant", "content": "Middle message 2 " * 100}, # 1700 chars
-        {"role": "user", "content": "Recent message 1 " * 10}, # 170 chars
-        {"role": "assistant", "content": "Recent message 2 " * 10}, # 170 chars
-        {"role": "user", "content": "Recent message 3 " * 10}, # 170 chars
+        {"role": "system", "content": "System prompt " * 100},
+        {"role": "user", "content": "Middle message 1 " * 100},
+        {"role": "assistant", "content": "Middle message 2 " * 100},
+        {"role": "user", "content": "Recent message 1 " * 10},
+        {"role": "assistant", "content": "Recent message 2 " * 10},
+        {"role": "user", "content": "Recent message 3 " * 10},
     ]
-    
+
     budgeted = guard.budget_context(messages)
-    
-    # System prompt and recent messages must be kept
+
     assert budgeted[0] == messages[0]
     assert budgeted[-3:] == messages[-3:]
-    # At least one middle message should be pruned to fit the budget
     assert len(budgeted) < len(messages)
+
+
+def test_tombstone_tool_result():
+    raw_content = "Detailed tool output data with 12345 tokens..."
+    msg = {"role": "tool", "tool_call_id": "call_abc123", "name": "exec", "content": raw_content}
+
+    tombstoned = tombstone_tool_result(msg)
+
+    assert tombstoned["role"] == "tool"
+    assert tombstoned["tool_call_id"] == "call_abc123"
+    assert tombstoned["name"] == "exec"
+
+    content = tombstoned["content"]
+    assert "[Tombstone: tool_result pruned (" in content
+    assert f"{len(raw_content)} chars -> hash=" in content
+    assert "Schema invariant preserved.]" in content
+
+    expected_hash = hashlib.sha256(raw_content.encode("utf-8")).hexdigest()[:8]
+    assert f"hash={expected_hash}" in content
+
+
+def test_enforce_schema_invariants():
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {
+            "role": "assistant",
+            "content": "Running tool",
+            "tool_calls": [{"id": "call_1", "function": {"name": "read_file"}}],
+        },
+        {"role": "user", "content": "Follow up"},
+    ]
+
+    enforced = enforce_schema_invariants(messages)
+
+    assert len(enforced) == 4
+    tool_resp = enforced[2]
+    assert tool_resp["role"] == "tool"
+    assert tool_resp["tool_call_id"] == "call_1"
+    assert "[Tombstone: tool_result pruned" in tool_resp["content"]
+    assert "Schema invariant preserved.]" in tool_resp["content"]
+
+
+def test_compaction_effectiveness_circuit_breaker(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
+
+    # Reduction 1000 -> 900 is 10% reduction (< 15%) -> Trips circuit breaker
+    res = guard.evaluate_compaction_effectiveness(1000, 900)
+
+    assert res["tripped"] is True
+    assert res["reduction_ratio"] == pytest.approx(0.10)
+    assert guard.is_circuit_breaker_tripped() is True
+
+    # Check reset
+    guard.reset_circuit_breaker()
+    assert guard.is_circuit_breaker_tripped() is False
+
+    # Reduction 1000 -> 800 is 20% reduction (>= 15%) -> Does not trip
+    res2 = guard.evaluate_compaction_effectiveness(1000, 800)
+    assert res2["tripped"] is False
+    assert res2["reduction_ratio"] == pytest.approx(0.20)
+    assert guard.is_circuit_breaker_tripped() is False
+
+
+def test_budget_context_tombstones_tool_result(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
+
+    messages = [
+        {"role": "system", "content": "System prompt " * 50},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Tool call", "tool_calls": [{"id": "call_789", "function": {"name": "exec"}}]},
+        {"role": "tool", "tool_call_id": "call_789", "name": "exec", "content": "Large tool output " * 200},
+        {"role": "user", "content": "Recent message 1 " * 10},
+        {"role": "assistant", "content": "Recent message 2 " * 10},
+        {"role": "user", "content": "Recent message 3 " * 10},
+    ]
+
+    budgeted = guard.budget_context(messages)
+
+    assert len(budgeted) > 0
+    # Search for tool message in budgeted messages
+    tool_msgs = [m for m in budgeted if m.get("role") == "tool"]
+    assert len(tool_msgs) >= 1
+    assert "call_789" in tool_msgs[0].get("tool_call_id")
