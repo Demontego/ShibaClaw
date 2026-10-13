@@ -2046,6 +2046,8 @@ class ShibaBrain:
             nonlocal _stream_buf, _last_stream_pub
             if not token or msg.channel != "telegram":
                 return
+            if _is_secretary:
+                return
             if on_response_token is not None:
                 await on_response_token(token)
                 return

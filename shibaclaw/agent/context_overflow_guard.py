@@ -39,6 +39,10 @@ def tombstone_tool_result(msg: dict) -> dict:
         return msg
 
     content = msg.get("content")
+    if isinstance(content, str) and (content.startswith("[Tombstone:") or content.startswith("[Tool result masked")):
+        return msg
+
+    content = msg.get("content")
 
     # Calculate original length and hash
     if isinstance(content, str):

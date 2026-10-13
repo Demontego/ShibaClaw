@@ -11,6 +11,7 @@ from shibaclaw.agent.context_overflow_guard import (
 
 
 def test_context_overflow_guard_healthy(tmp_path: Path):
+    assert issubclass(CompactionCircuitBreakerError, ContextOverflowError)
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.evaluate(500)
     assert action is None
@@ -131,3 +132,34 @@ def test_budget_context_tombstones_tool_result(tmp_path: Path):
     tool_msgs = [m for m in budgeted if m.get("role") == "tool"]
     assert len(tool_msgs) >= 1
     assert "call_789" in tool_msgs[0].get("tool_call_id")
+
+
+def test_enforce_schema_invariants_multiple_calls():
+    messages = [
+        {"role": "user", "content": "Run tools"},
+        {
+            "role": "assistant",
+            "content": "Calling A and B",
+            "tool_calls": [
+                {"id": "call_a", "function": {"name": "tool_a"}},
+                {"id": "call_b", "function": {"name": "tool_b"}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_a", "name": "tool_a", "content": "Result A"},
+    ]
+
+    reconciled = enforce_schema_invariants(messages)
+    tool_ids = [m.get("tool_call_id") for m in reconciled if m.get("role") == "tool"]
+    assert "call_a" in tool_ids
+    assert "call_b" in tool_ids
+
+
+def test_reset_circuit_breaker(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
+    with pytest.raises(CompactionCircuitBreakerError):
+        guard.evaluate_compaction_effectiveness(1000, 900)
+
+    assert guard.is_circuit_breaker_tripped() is True
+    guard.reset_circuit_breaker()
+    assert guard.is_circuit_breaker_tripped() is False
+
