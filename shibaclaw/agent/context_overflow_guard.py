@@ -12,8 +12,8 @@ class ContextOverflowError(Exception):
     pass
 
 
-class CompactionCircuitBreakerError(Exception):
-    """Raised when compaction effectiveness is below threshold (circuit breaker tripped)."""
+class CompactionCircuitBreakerError(ContextOverflowError):
+    """Raised when context compaction reduction falls below 15% (circuit breaker tripped)."""
     pass
 
 
@@ -31,53 +31,73 @@ def _pin_message(msg: dict) -> bool:
 
 def tombstone_tool_result(msg: dict) -> dict:
     """
-    Replaces tool result content with an auditable tombstone stub while preserving tool_call_id and name.
-    Format: [Tombstone: tool_result pruned (N chars -> hash=...). Schema invariant preserved.]
+    Replaces older or pruned tool result content with an auditable tombstone stub:
+    `[Tombstone: tool_result pruned ({orig_len} chars -> hash={hash_val}). Schema invariant preserved.]`
+    Preserves tool_call_id, role, name, and message metadata to uphold LLM API schema invariants.
     """
-    tombstoned = dict(msg)
-    raw_content = msg.get("content") or ""
-    content_str = raw_content if isinstance(raw_content, str) else str(raw_content)
-    char_len = len(content_str)
-    content_hash = hashlib.sha256(content_str.encode("utf-8")).hexdigest()[:8]
+    if not isinstance(msg, dict):
+        return msg
 
-    tombstoned["content"] = (
-        f"[Tombstone: tool_result pruned ({char_len} chars -> hash={content_hash}). "
-        f"Schema invariant preserved.]"
-    )
-    return tombstoned
+    content = msg.get("content")
+
+    # Calculate original length and hash
+    if isinstance(content, str):
+        raw_str = content
+    elif isinstance(content, list):
+        raw_str = str(content)
+    elif content is None:
+        raw_str = ""
+    else:
+        raw_str = str(content)
+
+    orig_len = len(raw_str)
+    content_hash = hashlib.sha256(raw_str.encode("utf-8")).hexdigest()[:8]
+
+    stub = f"[Tombstone: tool_result pruned ({orig_len} chars -> hash={content_hash}). Schema invariant preserved.]"
+
+    tombstoned_msg = dict(msg)
+    tombstoned_msg["content"] = stub
+    return tombstoned_msg
 
 
-def enforce_schema_invariants(messages: list) -> list:
+def enforce_schema_invariants(messages: list[dict]) -> list[dict]:
     """
-    Ensures that for every assistant tool_call, a corresponding tool message exists with matching tool_call_id.
-    If missing, inserts a tombstoned tool message to prevent 400 Bad Request errors from LLM APIs.
+    Ensures that for every assistant message containing tool_calls, all corresponding
+    tool response messages (matching tool_call_id) are present in the message history.
+    If a tool response message is missing due to pruning, inserts a tombstoned tool message stub
+    to preserve tool_call_id pairs and prevent 400 Bad Request errors from LLM APIs.
     """
-    new_messages = []
-    seen_tool_ids = set()
+    if not messages:
+        return messages
 
+    # Map existing tool_call_ids present in tool response messages
+    existing_tool_response_ids = set()
     for msg in messages:
         if isinstance(msg, dict) and msg.get("role") == "tool" and msg.get("tool_call_id"):
-            seen_tool_ids.add(msg.get("tool_call_id"))
+            existing_tool_response_ids.add(msg.get("tool_call_id"))
 
+    new_messages = []
     for msg in messages:
         new_messages.append(msg)
         if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("tool_calls"):
-            for tc in msg.get("tool_calls", []):
-                tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
-                if tc_id and tc_id not in seen_tool_ids:
-                    fn = tc.get("function", {}) if isinstance(tc, dict) else getattr(tc, "function", {})
-                    fn_name = fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", "tool")
-                    tombstone_msg = {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "name": fn_name,
-                        "content": (
-                            "[Tombstone: tool_result pruned (0 chars -> hash=00000000). "
-                            "Schema invariant preserved.]"
-                        ),
-                    }
-                    new_messages.append(tombstone_msg)
-                    seen_tool_ids.add(tc_id)
+            tool_calls = msg.get("tool_calls")
+            if isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    if isinstance(tc, dict):
+                        tc_id = tc.get("id")
+                        func = tc.get("function") or {}
+                        tool_name = func.get("name") if isinstance(func, dict) else tc.get("name", "tool")
+                        if tc_id and tc_id not in existing_tool_response_ids:
+                            # Insert tombstone for missing tool response to satisfy schema invariant
+                            stub_msg = {
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "name": tool_name or "tool",
+                                "content": "[Tombstone: tool_result pruned (0 chars -> hash=e3b0c442). Schema invariant preserved.]",
+                            }
+                            new_messages.append(stub_msg)
+                            existing_tool_response_ids.add(tc_id)
+                            logger.info("ContextOverflowGuard: Enforced schema invariant by adding tombstone tool response for tool_call_id %s", tc_id)
 
     return new_messages
 
@@ -139,122 +159,161 @@ class ArtifactRegister:
             lines.append("- **Subagent Results**: (none)")
 
         if self.read_files:
-            lines.append("- **Read Files**: " + ", ".join(f"`{f}`" for f in sorted(self.read_files)))
-        else:
-            lines.append("- **Read Files**: (none)")
+            lines.append("- **Read Files**:")
+            for rf in sorted(self.read_files):
+                lines.append(f"  - `{rf}`")
 
         lines.append("</artifact_register>")
         return "\n".join(lines)
 
+    def clear(self) -> None:
+        self.modified_files.clear()
+        self.git_commits.clear()
+        self.subagent_results.clear()
+        self.read_files.clear()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "modified_files": sorted(list(self.modified_files)),
+            "git_commits": list(self.git_commits),
+            "subagent_results": list(self.subagent_results),
+            "read_files": sorted(list(self.read_files)),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ArtifactRegister":
+        register = cls()
+        if not isinstance(data, dict):
+            return register
+        register.modified_files = set(data.get("modified_files") or [])
+        register.git_commits = list(data.get("git_commits") or [])
+        register.subagent_results = list(data.get("subagent_results") or [])
+        register.read_files = set(data.get("read_files") or [])
+        return register
+
 
 class ContextOverflowGuard:
     """
-    Context Overflow Guard system with Compaction Circuit Breaker & Auditable Tool Tombstoning.
-    Monitors context window usage and enforces thresholds:
-    1. Warning Threshold (70%): Logs warning.
-    2. Critical Threshold (85%): Triggers automatic compression.
-    3. Hard Limit Threshold (95%): Saves checkpoint & raises ContextOverflowError.
-    4. Compaction Circuit Breaker: Trips if effective reduction < 15%.
+    Monitors context window size and enforces bounds via warning, critical, and hard limits.
+    Incorporate artifact register state preservation and observation masking for tool outputs.
     """
+
     def __init__(
         self,
-        workspace: Path,
-        context_window_tokens: int = 4000,
+        workspace_path: Optional[Any] = None,
+        max_context_tokens: int = 128000,
+        context_window_tokens: Optional[int] = None,
         warning_ratio: float = 0.70,
         critical_ratio: float = 0.85,
         hard_limit_ratio: float = 0.95,
-        min_reduction_ratio: float = 0.15,
+        artifact_register: Optional[ArtifactRegister] = None,
+        **kwargs: Any,
     ):
-        self.workspace = workspace
-        self.context_window_tokens = context_window_tokens
-        self.warning_threshold = int(context_window_tokens * warning_ratio)
-        self.critical_threshold = int(context_window_tokens * critical_ratio)
-        self.hard_limit_threshold = int(context_window_tokens * hard_limit_ratio)
-        self._min_reduction_ratio = min_reduction_ratio
+        if isinstance(workspace_path, (int, float)):
+            tokens = int(workspace_path)
+            self.workspace_path = None
+        else:
+            self.workspace_path = workspace_path
+            tokens = context_window_tokens if context_window_tokens is not None else max_context_tokens
+
+        self.max_context_tokens = tokens
+        self.context_window_tokens = tokens
+        self.warning_threshold = int(tokens * warning_ratio)
+        self.critical_threshold = int(tokens * critical_ratio)
+        self.hard_limit_threshold = int(tokens * hard_limit_ratio)
+        self.artifact_register = artifact_register or ArtifactRegister()
         self._circuit_breaker_tripped = False
-        self.learnings_file = workspace / "memory" / "learnings.md"
 
-    def is_circuit_breaker_tripped(self) -> bool:
-        return self._circuit_breaker_tripped
-
-    def evaluate_compaction_effectiveness(self, tokens_before: int, tokens_after: int) -> float:
+    def evaluate(self, current_tokens: int) -> Optional[str]:
         """
-        Evaluates context reduction percentage after compaction.
-        If reduction is less than min_reduction_ratio (15%) when tokens exceed critical threshold,
-        trips circuit breaker and raises CompactionCircuitBreakerError.
+        Evaluates context usage level against thresholds.
+        Returns 'warning', 'compress', or raises ContextOverflowError if above hard limit.
+        """
+        return self.check_usage(current_tokens)
+
+    def evaluate_compaction_effectiveness(self, tokens_before: int, tokens_after: int) -> dict:
+        """
+        Evaluates context compression effectiveness.
+        If reduction ratio (tokens_before - tokens_after) / tokens_before < 0.15 (15%),
+        trips the compaction circuit breaker to prevent compression loops and raises CompactionCircuitBreakerError.
         """
         if tokens_before <= 0:
-            return 0.0
+            reduction_ratio = 0.0
+        else:
+            reduction_ratio = max(0.0, (tokens_before - tokens_after) / float(tokens_before))
 
-        reduction = (tokens_before - tokens_after) / float(tokens_before)
-        logger.info(
-            "ContextOverflowGuard: Compaction evaluated: %d -> %d tokens (%.2f%% reduction)",
-            tokens_before,
-            tokens_after,
-            reduction * 100.0,
-        )
-
-        if tokens_before >= self.critical_threshold and reduction < self._min_reduction_ratio:
+        tripped = reduction_ratio < 0.15
+        if tripped:
             self._circuit_breaker_tripped = True
-            msg = (
-                f"Compaction Circuit Breaker Tripped! Reduction was only {reduction * 100.0:.1f}% "
-                f"(required >= {self._min_reduction_ratio * 100.0:.1f}%). "
-                f"Tokens: {tokens_before} -> {tokens_after}."
+            logger.warning(
+                "ContextOverflowGuard: Compaction Circuit Breaker Tripped: reduction ratio %.2f%% < 15.0%% (before=%d, after=%d)",
+                reduction_ratio * 100.0, tokens_before, tokens_after
             )
-            logger.error(msg)
-            self._log_incident("circuit_breaker_tripped", tokens_after)
-            raise CompactionCircuitBreakerError(msg)
+            raise CompactionCircuitBreakerError(
+                f"Compaction Circuit Breaker Tripped: reduction ratio {reduction_ratio * 100.0:.2f}% < 15.0% (before={tokens_before}, after={tokens_after})"
+            )
+        else:
+            logger.info(
+                "ContextOverflowGuard: Compaction effective: reduction ratio %.2f%% (before=%d, after=%d)",
+                reduction_ratio * 100.0, tokens_before, tokens_after
+            )
 
-        return reduction
+        return {
+            "tripped": tripped,
+            "reduction_ratio": reduction_ratio,
+            "tokens_before": tokens_before,
+            "tokens_after": tokens_after,
+        }
 
-    def evaluate(self, current_tokens: int) -> str:
+    def is_circuit_breaker_tripped(self) -> bool:
+        return getattr(self, "_circuit_breaker_tripped", False)
+
+    def reset_circuit_breaker(self) -> None:
+        self._circuit_breaker_tripped = False
+
+    def check_usage(self, current_tokens: int) -> Optional[str]:
         """
-        Evaluates token usage against thresholds.
-        Returns 'ok', 'warning', 'critical', or raises ContextOverflowError if >= hard_limit_threshold.
+        Check current token usage against thresholds.
+        Raises ContextOverflowError if hard limit is reached.
+        Returns 'compress', 'warning', or None.
         """
         if current_tokens >= self.hard_limit_threshold:
-            self._log_incident("hard_limit_exceeded", current_tokens)
             raise ContextOverflowError(
-                f"Context hard limit reached: {current_tokens} >= {self.hard_limit_threshold} tokens."
+                f"Context hard limit exceeded: {current_tokens} >= {self.hard_limit_threshold}"
             )
-        if current_tokens >= self.critical_threshold:
-            logger.warning("ContextOverflowGuard: Critical threshold reached (%d tokens)", current_tokens)
-            return "critical"
-        if current_tokens >= self.warning_threshold:
-            logger.info("ContextOverflowGuard: Warning threshold reached (%d tokens)", current_tokens)
+        elif current_tokens >= self.critical_threshold:
+            return "compress"
+        elif current_tokens >= self.warning_threshold:
             return "warning"
-        return "ok"
+        return None
 
-    def _log_incident(self, event_type: str, current_tokens: int) -> None:
-        try:
-            self.learnings_file.parent.mkdir(parents=True, exist_ok=True)
-            entry = (
-                f"\n- [Context Overflow Guard] Event: {event_type} | "
-                f"Tokens: {current_tokens} / {self.context_window_tokens} | "
-                f"Action: Enforced threshold guardrails.\n"
-            )
-
-            if self.learnings_file.is_file():
-                content = self.learnings_file.read_text(encoding="utf-8")
-                if entry not in content:
-                    self.learnings_file.write_text(content + entry, encoding="utf-8")
-            else:
-                self.learnings_file.write_text("# Learnings\n" + entry, encoding="utf-8")
-
-            logger.info("ContextOverflowGuard: Logged incident to learnings.md")
-        except Exception as e:
-            logger.error("ContextOverflowGuard: Failed to log incident: %s", e)
-
-    def mask_observations(self, messages: list, keep_recent_turns: int = 3) -> list:
+    def evaluate_usage(self, estimated_tokens: int) -> tuple[str, str]:
         """
-        Tombstones older tool outputs to prevent context rot while preserving schema invariants and tool_call_ids.
+        Evaluate current estimated tokens against context thresholds.
+        Returns (level, action_recommendation).
+        """
+        if estimated_tokens >= self.hard_limit_threshold:
+            return ("hard_limit", "raise_error")
+        elif estimated_tokens >= self.critical_threshold:
+            return ("critical", "compress")
+        elif estimated_tokens >= self.warning_threshold:
+            return ("warning", "summarize")
+        return ("normal", "none")
+
+    def mask_observations(self, messages: list[dict], keep_recent_turns: int = 3) -> list[dict]:
+        """
+        Observation Masking & Auditable Tool Tombstoning.
+        Replaces raw tool outputs older than `keep_recent_turns` assistant turns with auditable tombstone stabs.
+        Preserves assistant thoughts/reasoning, tool call IDs, and system messages while
+        protecting context window from context rot and preserving KV cache ratios.
         """
         if not messages:
             return messages
 
+        # Find indices of assistant messages that made tool calls
         tool_calling_assistant_indices = [
             i for i, msg in enumerate(messages)
-            if isinstance(msg, dict) and msg.get("role") == "assistant" and msg.get("tool_calls")
+            if msg.get("role") == "assistant" and msg.get("tool_calls")
         ]
 
         if len(tool_calling_assistant_indices) >= keep_recent_turns:
@@ -262,7 +321,7 @@ class ContextOverflowGuard:
         else:
             assistant_indices = [
                 i for i, msg in enumerate(messages)
-                if isinstance(msg, dict) and msg.get("role") == "assistant"
+                if msg.get("role") == "assistant"
             ]
             if len(assistant_indices) <= keep_recent_turns:
                 return messages
@@ -271,100 +330,100 @@ class ContextOverflowGuard:
         new_messages = []
         for i, msg in enumerate(messages):
             if i >= cutoff_index:
-                new_messages.append(msg)
-                continue
-
-            if not isinstance(msg, dict):
+                # Recent turn — preserve as-is
                 new_messages.append(msg)
                 continue
 
             role = msg.get("role")
             content = msg.get("content")
 
+            # Check if this message is a tool output
             is_tool_msg = False
             if role == "tool":
                 is_tool_msg = True
             elif role == "user":
                 if isinstance(content, str) and content.lower().startswith("[tool result"):
                     is_tool_msg = True
+                elif isinstance(content, list) and content and isinstance(content[0], dict) and str(content[0].get("text", "")).lower().startswith("[tool result"):
+                    is_tool_msg = True
 
             if is_tool_msg and content and not _pin_message(msg):
                 content_str = content if isinstance(content, str) else str(content)
                 if not content_str.startswith("[Tombstone:") and not content_str.startswith("[Tool result masked"):
-                    new_messages.append(tombstone_tool_result(msg))
-                    logger.info("ContextOverflowGuard: Tombstoned observation at msg index %d", i)
+                    tombstoned_msg = tombstone_tool_result(msg)
+                    new_messages.append(tombstoned_msg)
+                    logger.info("ContextOverflowGuard: Tombstoned observation for tool at msg index %d", i)
                     continue
 
             new_messages.append(msg)
 
-        return new_messages
+        return enforce_schema_invariants(new_messages)
 
     def budget_context(self, messages: list, max_tokens: Optional[int] = None) -> list:
         """
-        Dynamically budgets the context by pruning or tombstoning older messages
-        if the estimated token count exceeds max_tokens.
-        Preserves system prompt, recent turns, and schema invariants.
+        Dynamically budgets the context by pruning or compressing older messages
+        if the estimated token count exceeds the max_tokens budget.
+        Preserves the artifact register state, prompt cache prefix markers, and schema invariants.
         """
         if not messages:
             return messages
-
-        target_budget = max_tokens or self.critical_threshold
 
         tokens_before = sum(
             len(msg.get("content") or "") for msg in messages if isinstance(msg.get("content"), str)
         ) // 4
 
-        # Apply observation tombstoning
+        # Apply observation masking & tombstoning first
         messages = self.mask_observations(messages, keep_recent_turns=3)
 
-        if tokens_before <= target_budget:
-            res = enforce_schema_invariants(messages)
-            tokens_after = sum(
-                len(m.get("content") or "") for m in res if isinstance(m.get("content"), str)
-            ) // 4
-            self.evaluate_compaction_effectiveness(tokens_before, tokens_after)
-            return res
+        target_budget = max_tokens or self.critical_threshold
+
+        estimated_tokens = sum(
+            len(msg.get("content") or "") for msg in messages if isinstance(msg.get("content"), str)
+        ) // 4
+
+        if estimated_tokens <= target_budget:
+            if tokens_before > target_budget:
+                self.evaluate_compaction_effectiveness(tokens_before, estimated_tokens)
+            return enforce_schema_invariants(messages)
 
         logger.warning(
             "ContextOverflowGuard: Estimated tokens (%d) exceed budget (%d). Budgeting context...",
-            tokens_before,
-            target_budget,
+            estimated_tokens,
+            target_budget
         )
 
-        system_prompt = dict(messages[0]) if isinstance(messages[0], dict) else messages[0]
+        system_prompt = dict(messages[0])
+        sys_content = system_prompt.get("content") or ""
+
+        # Inject artifact register if non-empty and not present
+        if not self.artifact_register.is_empty() and "<artifact_register>" not in sys_content:
+            artifact_block = self.artifact_register.render_markdown()
+            sys_content = f"{PROMPT_CACHE_PREFIX_MARKER}\n{artifact_block}\n\n{sys_content}"
+            system_prompt["content"] = sys_content
+
         tail = messages[-3:]
-        middle_messages = messages[1:-3]
+        pinned = [msg for msg in messages[1:-3] if _pin_message(msg)]
+        recent_messages = pinned + tail
+        middle_messages = [msg for msg in messages[1:-3] if not _pin_message(msg)]
 
         budgeted_middle = []
-        current_tokens = (
-            len(system_prompt.get("content") if isinstance(system_prompt, dict) else "")
-            + sum(len(msg.get("content") if isinstance(msg, dict) else "") for msg in tail)
-        ) // 4
+        current_tokens = (len(sys_content) + sum(len(msg.get("content") or "") for msg in recent_messages if isinstance(msg.get("content"), str))) // 4
 
         for msg in reversed(middle_messages):
-            if not isinstance(msg, dict):
-                budgeted_middle.insert(0, msg)
-                continue
-
             msg_content = msg.get("content") or ""
             msg_tokens = len(msg_content) // 4 if isinstance(msg_content, str) else 0
-
             if current_tokens + msg_tokens <= target_budget:
                 budgeted_middle.insert(0, msg)
                 current_tokens += msg_tokens
-            elif msg.get("role") == "tool":
-                tombstoned = tombstone_tool_result(msg)
-                t_tokens = len(tombstoned.get("content") or "") // 4
-                if current_tokens + t_tokens <= target_budget:
-                    budgeted_middle.insert(0, tombstoned)
-                    current_tokens += t_tokens
+            else:
+                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", str(msg_content)[:50])
 
-        result = [system_prompt] + budgeted_middle + tail
-        result = enforce_schema_invariants(result)
+        final_messages = enforce_schema_invariants([system_prompt] + budgeted_middle + recent_messages)
 
         tokens_after = sum(
-            len(m.get("content") or "") for m in result if isinstance(m.get("content"), str)
+            len(msg.get("content") or "") for msg in final_messages if isinstance(msg.get("content"), str)
         ) // 4
+
         self.evaluate_compaction_effectiveness(tokens_before, tokens_after)
 
-        return result
+        return final_messages

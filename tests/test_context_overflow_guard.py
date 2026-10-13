@@ -13,7 +13,7 @@ from shibaclaw.agent.context_overflow_guard import (
 def test_context_overflow_guard_healthy(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.evaluate(500)
-    assert action == "ok"
+    assert action is None
 
 
 def test_context_overflow_guard_warning(tmp_path: Path):
@@ -25,7 +25,7 @@ def test_context_overflow_guard_warning(tmp_path: Path):
 def test_context_overflow_guard_critical(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
     action = guard.evaluate(860)
-    assert action == "critical"
+    assert action == "compress"
 
 
 def test_context_overflow_guard_hard_limit(tmp_path: Path):
@@ -105,8 +105,9 @@ def test_compaction_effectiveness_circuit_breaker(tmp_path: Path):
 
     # Reduction 1000 -> 800 is 20% reduction (>= 15%) -> Does not trip
     guard._circuit_breaker_tripped = False
-    red = guard.evaluate_compaction_effectiveness(1000, 800)
-    assert red == pytest.approx(0.20)
+    res = guard.evaluate_compaction_effectiveness(1000, 800)
+    assert res["tripped"] is False
+    assert res["reduction_ratio"] == pytest.approx(0.20)
     assert guard.is_circuit_breaker_tripped() is False
 
 

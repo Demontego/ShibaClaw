@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/loop.py
 """Agent loop: the core engine where the Shiba hunts for answers."""
 
 from __future__ import annotations
@@ -486,6 +487,22 @@ class ShibaBrain:
 
         self.mcp.restore_active_tools()
 
+        # Workspace Nano Banana tools (image/video via OpenRouter)
+        try:
+            import importlib.util
+            from pathlib import Path as _Path
+
+            _nb = _Path(self.workspace) / "tools" / "nanobanana.py"
+            if _nb.exists():
+                _spec = importlib.util.spec_from_file_location("shibaclaw_ws_nanobanana", _nb)
+                if _spec and _spec.loader:
+                    _mod = importlib.util.module_from_spec(_spec)
+                    _spec.loader.exec_module(_mod)
+                    self.tools.register(_mod.NanoBananaImageTool())
+                    self.tools.register(_mod.NanoBananaVideoTool())
+        except Exception as e:
+            logger.error("Failed to register nanobanana tools: {}", e)
+
     def _apply_permission_mode(self, session: Session | None):
         """Bind per-turn FS/exec permission mode via contextvars; return (mode, tokens)."""
         from shibaclaw.agent.sandbox_ctx import bind_permission_mode
@@ -526,12 +543,55 @@ class ShibaBrain:
 
     # Default-deny for non-allowlisted Telegram (openGroups / Chat Automation peers).
     # Only these tools are exposed; memory/knowledge/FS/exec/MCP/plugins stay owner-side.
+    # Marker: non_owner_guest_allowlist
     _NON_ALLOWLISTED_ALLOWED_TOOLS = frozenset(
         {
             "web_search",
             "web_fetch",
+            "nanobanana_image",
         }
     )
+    _NON_ALLOWLISTED_ALLOWED_MCP_SUFFIXES = frozenset(
+        {
+            "google_calendar_find_free_slots",
+            "google_calendar_get_current_time",
+        }
+    )
+    # Marker: boardnight_group_tools
+    _BOARDNIGHT_CHAT_IDS = frozenset({"-5141262838"})
+    _BOARDNIGHT_ALLOWED_TOOLS = frozenset(
+        {
+            "read_file",
+            "write_file",
+            "edit_file",
+            "list_dir",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "mcp_list_tools",
+            "mcp_call_tool",
+        }
+    )
+
+    def _is_boardnight_group_turn(
+        self,
+        metadata: dict | None,
+        channel: str | None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> bool:
+        """Boardnight Telegram group: repo/GitHub tools for any member in chat."""
+        if str(profile_id or "") == "boardnight" and str(channel or "").lower() == "telegram":
+            return True
+        cid = str(chat_id or (metadata or {}).get("chat_id") or "")
+        return cid in self._BOARDNIGHT_CHAT_IDS
+
+    def _boardnight_tool_allowed(self, tool_name: str) -> bool:
+        if tool_name in self._BOARDNIGHT_ALLOWED_TOOLS:
+            return True
+        return "github" in tool_name.lower() and tool_name.startswith("mcp_")
+
 
     def _is_allowlisted_turn(
         self, metadata: dict | None, channel: str | None = None
@@ -551,14 +611,33 @@ class ShibaBrain:
             return False
         return True
 
-    def _non_allowlisted_tool_allowed(self, tool_name: str) -> bool:
-        return tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS
+    def _non_allowlisted_tool_allowed(
+        self,
+        tool_name: str,
+        metadata: dict | None = None,
+        channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> bool:
+        """Guest/non-allowlisted: search, image gen, calendar free/busy."""
+        if self._is_boardnight_group_turn(metadata, channel, chat_id, profile_id):
+            return self._boardnight_tool_allowed(tool_name)
+        if tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS:
+            return True
+        if not tool_name.startswith("mcp_"):
+            return False
+        for suffix in self._NON_ALLOWLISTED_ALLOWED_MCP_SUFFIXES:
+            if tool_name == suffix or tool_name.endswith("_" + suffix):
+                return True
+        return False
 
     def _filter_tools_for_allowlist(
         self,
         tool_defs: list[dict],
         metadata: dict | None,
         channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
     ) -> list[dict]:
         """Allow-list only for non-allowlisted Telegram turns (default-deny).
 
@@ -572,7 +651,9 @@ class ShibaBrain:
             name = (d.get("function") or {}).get("name") or d.get("name") or ""
             if name == "session_search" and ch not in {"webui", "cli", "system"}:
                 continue
-            if allowlisted or self._non_allowlisted_tool_allowed(name):
+            if allowlisted or self._non_allowlisted_tool_allowed(
+                name, metadata, channel, chat_id=chat_id, profile_id=profile_id
+            ):
                 out.append(d)
         return out
 
@@ -581,13 +662,17 @@ class ShibaBrain:
         tool_name: str,
         metadata: dict | None,
         channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
     ) -> bool:
         ch = str(channel or (metadata or {}).get("channel") or "").lower()
         if tool_name == "session_search" and ch not in {"webui", "cli", "system"}:
             return True
         if self._is_allowlisted_turn(metadata, channel):
             return False
-        return not self._non_allowlisted_tool_allowed(tool_name)
+        return not self._non_allowlisted_tool_allowed(
+            tool_name, metadata, channel, chat_id=chat_id, profile_id=profile_id
+        )
 
     def _set_tool_context(
         self,
@@ -598,16 +683,22 @@ class ShibaBrain:
         model: str | None = None,
         provider: Any | None = None,
         metadata: dict | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
-        for name in ("message", "spawn", "automation", "think"):
+        for name in ("message", "spawn", "spawn_mea", "automation", "think"):
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
-                    elif name == "spawn":
+                    elif name in ("spawn", "spawn_mea"):
                         tool.set_context(
-                            channel, chat_id, session_key, model=model, provider=provider
+                            channel,
+                            chat_id,
+                            session_key,
+                            model=model,
+                            provider=provider,
+                            parent_messages=parent_messages,
                         )
                     else:
                         tool.set_context(channel, chat_id, session_key)
@@ -660,6 +751,26 @@ class ShibaBrain:
             return f'{tc.name}("{val}")'
 
         return ", ".join(_fmt(tc) for tc in tool_calls)
+
+    @staticmethod
+    def _resolve_model(
+        profile_id: str | None,
+        session_metadata: dict | None,
+        workspace: str | Path,
+    ) -> str | None:
+        """Session metadata model wins over profile manifest."""
+        meta = session_metadata or {}
+        raw = meta.get("model")
+        if raw is not None:
+            text = str(raw).strip()
+            if text:
+                return text
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            return ProfileManager(workspace).get_model(profile_id)
+        except Exception:
+            return None
 
     @staticmethod
     def _resolve_temperature(
@@ -775,6 +886,7 @@ class ShibaBrain:
             model=active_model,
             provider=active_provider,
             metadata=metadata,
+            parent_messages=messages,
         )
 
         if not active_provider:
@@ -784,7 +896,9 @@ class ShibaBrain:
         tool_defs = self._filter_tools_for_profile(
             self.tools.get_definitions(), profile_id
         )
-        tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
+        tool_defs = self._filter_tools_for_allowlist(
+            tool_defs, metadata, channel, chat_id=chat_id, profile_id=profile_id
+        )
 
         if session_key:
             self._steering_queues.setdefault(session_key, [])
@@ -883,13 +997,13 @@ class ShibaBrain:
                         if msg.get("timestamp"):
                             entry["timestamp"] = msg.get("timestamp")
 
-                        metadata = {}
+                        steer_meta = {}
                         if msg.get("media"):
-                            metadata["media"] = msg["media"]
+                            steer_meta["media"] = msg["media"]
                         if msg.get("attachments"):
-                            metadata["attachments"] = msg["attachments"]
-                        if metadata:
-                            entry["metadata"] = metadata
+                            steer_meta["attachments"] = msg["attachments"]
+                        if steer_meta:
+                            entry["metadata"] = steer_meta
 
                         messages.append(entry)
                     self._steering_queues[session_key] = []
@@ -935,11 +1049,15 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            # Enforce Harness Context Budgeting
-            messages = context_overflow_guard.budget_context(messages)
+            # Mask a copy for the provider. The wake transcript keeps the real tool output.
+            api_messages = context_overflow_guard.mask_observations(
+                [dict(item) for item in messages],
+                keep_recent_turns=3,
+            )
+            api_messages = context_overflow_guard.budget_context(api_messages)
 
             response = await active_provider.chat_with_retry_streaming(
-                messages=messages,
+                messages=api_messages,
                 on_token=on_response_token,
                 tools=tool_defs,
                 model=active_model,
@@ -959,7 +1077,7 @@ class ShibaBrain:
                             continue
                         logger.info("Trying fallback model: {}", fallback_model)
                         response = await fallback_provider.chat_with_retry_streaming(
-                            messages=messages,
+                            messages=api_messages,
                             on_token=on_response_token,
                             tools=tool_defs,
                             model=fallback_model,
@@ -1098,7 +1216,11 @@ class ShibaBrain:
                         )
                         continue
                     if self._tool_blocked_for_non_allowlisted(
-                        tool_call.name, metadata, channel
+                        tool_call.name,
+                        metadata,
+                        channel,
+                        chat_id=chat_id,
+                        profile_id=profile_id,
                     ):
                         messages = self.context.add_tool_result(
                             messages,
@@ -1106,7 +1228,7 @@ class ShibaBrain:
                             tool_call.name,
                             (
                                 f"Error: Tool '{tool_call.name}' is allowlist-only. "
-                                "Non-allowlisted senders may only use web_search/web_fetch."
+                                "Guests may use search, image gen, and calendar free/busy only."
                             ),
                         )
                         continue
@@ -1587,7 +1709,7 @@ class ShibaBrain:
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=session.metadata.get("model") or None,
+                model=self._resolve_model(profile_id, session.metadata, self.workspace),
                 metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
@@ -1826,7 +1948,7 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=session.metadata.get("model") or None,
+            model=self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
@@ -1898,8 +2020,17 @@ class ShibaBrain:
             return None
         _pre_saved_count = 1
 
+        # Token streaming → Telegram draft / editMessageText progress.
+        # Marker: telegram_token_streaming_bus
+        _is_secretary = bool((msg.metadata or {}).get("secretary_summon"))
+        _stream_buf = ""
+        _last_stream_pub = 0.0
+
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
-            if msg.metadata and msg.metadata.get("secretary_summon"):
+            nonlocal _stream_buf
+            if tool_hint:
+                _stream_buf = ""
+            if _is_secretary:
                 return
             meta = {"_progress": True, "_tool_hint": tool_hint, **(msg.metadata or {})}
             await self.bus.publish_outbound(
@@ -1911,17 +2042,39 @@ class ShibaBrain:
                 )
             )
 
+        async def _bus_token(token: str) -> None:
+            nonlocal _stream_buf, _last_stream_pub
+            if not token or msg.channel != "telegram":
+                return
+            if on_response_token is not None:
+                await on_response_token(token)
+                return
+            _stream_buf += token
+            now = time.monotonic()
+            if now - _last_stream_pub < 0.2:
+                return
+            _last_stream_pub = now
+            meta = {"_progress": True, "_stream": True, **(msg.metadata or {})}
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=_stream_buf,
+                    metadata=meta,
+                )
+            )
+
         _temp = self._resolve_temperature(
             profile_id, session.metadata, self.workspace
         )
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
-            on_response_token=on_response_token,
+            on_response_token=on_response_token or _bus_token,
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=session.metadata.get("model") or None,
+            model=self._resolve_model(profile_id, session.metadata, self.workspace),
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
