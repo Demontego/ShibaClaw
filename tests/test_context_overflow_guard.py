@@ -112,6 +112,13 @@ def test_compaction_effectiveness_circuit_breaker(tmp_path: Path):
     assert guard.is_circuit_breaker_tripped() is False
 
 
+def test_evaluate_compaction_effectiveness_zero_tokens(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path)
+    res = guard.evaluate_compaction_effectiveness(0, 0)
+    assert res["tripped"] is False
+    assert res["reduction_ratio"] == 0.0
+
+
 def test_budget_context_tombstones_tool_result(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)
 
@@ -163,3 +170,12 @@ def test_reset_circuit_breaker(tmp_path: Path):
     guard.reset_circuit_breaker()
     assert guard.is_circuit_breaker_tripped() is False
 
+
+
+def test_get_status_and_custom_min_reduction_ratio(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000, min_reduction_ratio=0.20)
+    status = guard.get_status()
+    assert status["max_context_tokens"] == 1000
+    assert status["min_reduction_ratio"] == 0.20
+    assert status["circuit_breaker_tripped"] is False
+    assert "artifact_register_summary" in status

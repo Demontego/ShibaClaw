@@ -211,6 +211,7 @@ class ContextOverflowGuard:
         critical_ratio: float = 0.85,
         hard_limit_ratio: float = 0.95,
         artifact_register: Optional[ArtifactRegister] = None,
+        min_reduction_ratio: float = 0.15,
         **kwargs: Any,
     ):
         if isinstance(workspace_path, (int, float)):
@@ -222,6 +223,7 @@ class ContextOverflowGuard:
 
         self.max_context_tokens = tokens
         self.context_window_tokens = tokens
+        self.min_reduction_ratio = kwargs.get("min_reduction_ratio", min_reduction_ratio)
         self.warning_threshold = int(tokens * warning_ratio)
         self.critical_threshold = int(tokens * critical_ratio)
         self.hard_limit_threshold = int(tokens * hard_limit_ratio)
@@ -238,23 +240,27 @@ class ContextOverflowGuard:
     def evaluate_compaction_effectiveness(self, tokens_before: int, tokens_after: int) -> dict:
         """
         Evaluates context compression effectiveness.
-        If reduction ratio (tokens_before - tokens_after) / tokens_before < 0.15 (15%),
+        If reduction ratio (tokens_before - tokens_after) / tokens_before < min_reduction_ratio,
         trips the compaction circuit breaker to prevent compression loops and raises CompactionCircuitBreakerError.
         """
         if tokens_before <= 0:
-            reduction_ratio = 0.0
-        else:
-            reduction_ratio = max(0.0, (tokens_before - tokens_after) / float(tokens_before))
+            return {
+                "tripped": False,
+                "reduction_ratio": 0.0,
+                "tokens_before": tokens_before,
+                "tokens_after": tokens_after,
+            }
 
-        tripped = reduction_ratio < 0.15
+        reduction_ratio = max(0.0, (tokens_before - tokens_after) / float(tokens_before))
+        tripped = reduction_ratio < self.min_reduction_ratio
         if tripped:
             self._circuit_breaker_tripped = True
             logger.warning(
-                "ContextOverflowGuard: Compaction Circuit Breaker Tripped: reduction ratio %.2f%% < 15.0%% (before=%d, after=%d)",
-                reduction_ratio * 100.0, tokens_before, tokens_after
+                "ContextOverflowGuard: Compaction Circuit Breaker Tripped: reduction ratio %.2f%% < %.2f%% (before=%d, after=%d)",
+                reduction_ratio * 100.0, self.min_reduction_ratio * 100.0, tokens_before, tokens_after
             )
             raise CompactionCircuitBreakerError(
-                f"Compaction Circuit Breaker Tripped: reduction ratio {reduction_ratio * 100.0:.2f}% < 15.0% (before={tokens_before}, after={tokens_after})"
+                f"Compaction Circuit Breaker Tripped: reduction ratio {reduction_ratio * 100.0:.2f}% < {self.min_reduction_ratio * 100.0:.2f}% (before={tokens_before}, after={tokens_after})"
             )
         else:
             logger.info(
@@ -263,7 +269,7 @@ class ContextOverflowGuard:
             )
 
         return {
-            "tripped": tripped,
+            "tripped": False,
             "reduction_ratio": reduction_ratio,
             "tokens_before": tokens_before,
             "tokens_after": tokens_after,
@@ -274,6 +280,18 @@ class ContextOverflowGuard:
 
     def reset_circuit_breaker(self) -> None:
         self._circuit_breaker_tripped = False
+
+    def get_status(self) -> dict[str, Any]:
+        return {
+            "max_context_tokens": self.max_context_tokens,
+            "context_window_tokens": self.context_window_tokens,
+            "min_reduction_ratio": self.min_reduction_ratio,
+            "circuit_breaker_tripped": self.is_circuit_breaker_tripped(),
+            "warning_threshold": self.warning_threshold,
+            "critical_threshold": self.critical_threshold,
+            "hard_limit_threshold": self.hard_limit_threshold,
+            "artifact_register_summary": self.artifact_register.render_markdown() if hasattr(self, "artifact_register") else "",
+        }
 
     def check_usage(self, current_tokens: int) -> Optional[str]:
         """
