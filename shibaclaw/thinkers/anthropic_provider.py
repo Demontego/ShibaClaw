@@ -1,5 +1,6 @@
 """Anthropic native provider implementation using the official anthropic SDK."""
 
+import asyncio
 import os
 from typing import Any
 
@@ -36,12 +37,37 @@ class AnthropicThinker(Thinker):
         self.default_model = default_model
 
         resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._claude_oauth = False
+        headers = dict(extra_headers or {})
+        if resolved_key:
+            self._client = AsyncAnthropic(
+                api_key=resolved_key,
+                base_url=api_base or None,
+                default_headers=extra_headers,
+            )
+        else:
+            from shibaclaw.cli.subscription_oauth import claude_access_token
 
-        self._client = AsyncAnthropic(
-            api_key=resolved_key or "no-key",
-            base_url=api_base or None,
-            default_headers=extra_headers,
-        )
+            token = claude_access_token()
+            self._claude_oauth = bool(token)
+            headers["anthropic-beta"] = "oauth-2025-04-20"
+            headers.setdefault("User-Agent", "claude-cli/2.1.207 (external, cli)")
+            self._client = AsyncAnthropic(
+                api_key=None,
+                auth_token=token,
+                base_url=api_base or None,
+                default_headers=headers,
+                max_retries=0,
+            )
+
+    def _refresh_claude_oauth(self) -> None:
+        if not self._claude_oauth:
+            return
+        from shibaclaw.cli.subscription_oauth import claude_access_token
+
+        token = claude_access_token()
+        if token:
+            self._client.auth_token = token
 
     def _convert_messages(self, messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
         """Convert standard messages to Anthropic's format and extract system prompt."""
@@ -153,7 +179,8 @@ class AnthropicThinker(Thinker):
 
     async def get_available_models(self) -> list[dict[str, Any]]:
         try:
-            res = await self._client.models.list()
+            self._refresh_claude_oauth()
+            res = await asyncio.wait_for(self._client.models.list(), timeout=8.0)
             models = []
             for model in res.data:
                 entry: dict[str, Any] = {"id": model.id, "name": model.display_name or model.id}
@@ -182,7 +209,7 @@ class AnthropicThinker(Thinker):
         reasoning_effort: str | None = None,
         tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
-
+        self._refresh_claude_oauth()
         model = self._strip_provider_prefix(model or self.default_model, "anthropic")
         system_prompt, anthropic_messages = self._convert_messages(messages)
 
@@ -255,6 +282,7 @@ class AnthropicThinker(Thinker):
         tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
         """Stream Anthropic response, calling on_token for each text delta."""
+        self._refresh_claude_oauth()
         model = self._strip_provider_prefix(model or self.default_model, "anthropic")
         system_prompt, anthropic_messages = self._convert_messages(messages)
 

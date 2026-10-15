@@ -187,6 +187,10 @@
                     </div>
                 </div>
                 <div class="footer-actions">
+                    <button class="btn-command btn-theme btn-icon-only" id="btn-theme" type="button"
+                        data-i18n-title="workspace.theme" data-i18n-aria="workspace.theme" title="Appearance"
+                        aria-label="Appearance"><span class="material-icons-round" id="btn-theme-icon"
+                            aria-hidden="true">routine</span></button>
                     <div class="lang-switcher" id="lang-switcher">
                         <button class="btn-command btn-lang btn-icon-only" id="btn-lang" type="button"
                             data-i18n-title="footer.language" data-i18n-aria="footer.language" title="Language"
@@ -493,13 +497,6 @@
                             data-i18n="settings.tab.agent">Agent</span>
                     </div>
                 </div>
-                <div class="workspace-theme-control"><label for="workspace-theme"
-                        data-i18n="workspace.theme">Appearance</label><select id="workspace-theme"
-                        data-i18n-aria="workspace.theme" aria-label="Appearance">
-                        <option value="system" data-i18n="workspace.theme_system">System</option>
-                        <option value="light" data-i18n="workspace.theme_light">Light</option>
-                        <option value="dark" data-i18n="workspace.theme_dark">Dark</option>
-                    </select></div>
                 <button class="btn-primary" onclick="saveSettings()">
                     <span class="material-icons-round" style="font-size:1rem;vertical-align:middle">save</span> <span
                         data-i18n="settings.save_changes">Save Changes</span>
@@ -1398,6 +1395,12 @@
                                     <label for="ajf-profile" data-i18n="auto.profile">Agent profile</label>
                                     <select id="ajf-profile" class="form-input">
                                         <option value="" data-i18n="common.default">Default</option>
+                                    </select>
+                                </div>
+                                <div class="field-row">
+                                    <label for="ajf-model" data-i18n="auto.model">Model</label>
+                                    <select id="ajf-model" class="form-input">
+                                        <option value="" data-i18n="auto.model_default">Chat default</option>
                                     </select>
                                 </div>
                                 <div class="field-row">

@@ -48,6 +48,8 @@ class AutomationPayload:
     to: str | None = None
     session_key: str | None = None
     profile_id: str | None = None
+    # Turn model for this job only. Empty keeps the agent default.
+    model: str | None = None
     targets: dict[str, str] = field(default_factory=dict)
 
 

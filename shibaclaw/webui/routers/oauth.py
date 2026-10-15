@@ -19,6 +19,8 @@ def get_oauth_providers_status() -> list[dict]:
         {"name": "github_copilot", "label": "GitHub Copilot"},
         {"name": "openai_codex", "label": "OpenAI Codex"},
         {"name": "xai", "label": "xAI / Grok"},
+        {"name": "anthropic", "label": "Claude"},
+        {"name": "google_gemini_cli", "label": "Google Gemini"},
     ]
     result = []
     for p in providers:
@@ -75,6 +77,21 @@ def get_oauth_providers_status() -> list[dict]:
                 else:
                     status = "not_configured"
                     msg = "No credentials found"
+            elif p["name"] == "anthropic":
+                from shibaclaw.cli.subscription_oauth import claude_credentials_present
+
+                if claude_credentials_present():
+                    status, msg = "configured", "Claude Code subscription"
+                else:
+                    status, msg = "not_configured", "No Claude login"
+            elif p["name"] == "google_gemini_cli":
+                from shibaclaw.security.oauth_store import OAuthTokenStore
+
+                token = OAuthTokenStore().load_token("google_gemini_cli")
+                if token and token.get("access_token"):
+                    status, msg = "configured", "Gemini CLI login"
+                else:
+                    status, msg = "not_configured", "No Gemini login"
         except Exception as e:
             status, msg = "error", str(e)
         result.append({**p, "status": status, "message": msg})
@@ -90,7 +107,7 @@ async def api_oauth_login(request: Request):
     generic_providers = {
         "xai": "xAI / Grok",
     }
-    if provider not in ("openrouter", "github_copilot", "openai_codex", "google_gemini_cli") and provider not in generic_providers:
+    if provider not in ("openrouter", "github_copilot", "openai_codex", "google_gemini_cli", "anthropic") and provider not in generic_providers:
         return JSONResponse({"error": "Unknown provider"}, status_code=404)
 
     job_id = str(uuid.uuid4())[:8]
@@ -110,14 +127,13 @@ async def api_oauth_login(request: Request):
 
         return await start_codex_oauth(job_id, jobs)
     elif provider == "google_gemini_cli":
-        from ..oauth_generic import start_google_oauth
-        
-        client_id = os.environ.get("SHIBACLAW_GEMINI_OAUTH_CLIENT_ID")
-        if not client_id:
-            return JSONResponse({"error": "Not configured by administrator"}, status_code=400)
-            
-        client_secret = os.environ.get("SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET", "")
-        return await start_google_oauth(request, job_id, jobs, client_id, client_secret)
+        from shibaclaw.cli.subscription_oauth import start_subscription_login
+
+        return await start_subscription_login(job_id, jobs, "gemini")
+    elif provider == "anthropic":
+        from shibaclaw.cli.subscription_oauth import start_subscription_login
+
+        return await start_subscription_login(job_id, jobs, "anthropic")
     elif provider in generic_providers:
         from ..oauth_generic import start_generic_oauth
         
@@ -163,6 +179,10 @@ async def api_oauth_disconnect(request: Request):
                 os.remove(token_path)
         except Exception:
             pass
+    elif provider == "anthropic":
+        import subprocess
+
+        subprocess.run(["claude", "auth", "logout"], check=False, capture_output=True)
     else:
         from shibaclaw.security.oauth_store import OAuthTokenStore
         store = OAuthTokenStore()

@@ -22,6 +22,14 @@
             ? (systemTheme.matches ? "dark" : "light") : theme;
         const select = document.getElementById("workspace-theme");
         if (select) select.value = theme;
+        const icon = document.getElementById("btn-theme-icon");
+        const themeBtn = document.getElementById("btn-theme");
+        if (icon) icon.textContent = theme === "system" ? "routine" : (document.documentElement.dataset.theme === "light" ? "light_mode" : "dark_mode");
+        if (themeBtn) {
+            const label = typeof t === "function" ? t("workspace.theme") : "Appearance";
+            themeBtn.title = label;
+            themeBtn.setAttribute("aria-label", label);
+        }
         const color = document.documentElement.dataset.theme === "light" ? "#fcfbf9" : "#191918";
         const meta = document.getElementById("theme-color");
         if (meta) meta.setAttribute("content", color);
@@ -257,6 +265,12 @@
         systemTheme.addEventListener("change", applyTheme);
         document.getElementById("workspace-theme")?.addEventListener("change", event => {
             theme = event.target.value;
+            try { localStorage.setItem("shibaclaw_theme", theme); } catch (_) { /* optional storage */ }
+            applyTheme();
+        });
+        document.getElementById("btn-theme")?.addEventListener("click", () => {
+            const order = ["system", "light", "dark"];
+            theme = order[(order.indexOf(theme) + 1) % order.length];
             try { localStorage.setItem("shibaclaw_theme", theme); } catch (_) { /* optional storage */ }
             applyTheme();
         });

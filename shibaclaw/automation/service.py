@@ -533,6 +533,7 @@ class AutomationService:
                 "to": j.payload.to,
                 "sessionKey": j.payload.session_key,
                 "profileId": j.payload.profile_id,
+                "model": j.payload.model,
                 "targets": j.payload.targets,
             },
             "state": {
@@ -575,6 +576,7 @@ class AutomationService:
                 to=p.get("to"),
                 session_key=p.get("sessionKey"),
                 profile_id=p.get("profileId"),
+                model=p.get("model") or None,
                 targets=p.get("targets") or {},
             ),
             state=AutomationJobState(
@@ -721,6 +723,7 @@ class AutomationService:
                 to = p.get("to", job.payload.to)
                 session_key = p.get("sessionKey", p.get("session_key", job.payload.session_key))
                 profile_id = p.get("profileId", p.get("profile_id", job.payload.profile_id))
+                model = p.get("model", job.payload.model)
                 targets = p.get("targets", job.payload.targets)
                 job.payload = AutomationPayload(
                     kind=kind,
@@ -731,6 +734,7 @@ class AutomationService:
                     to=to,
                     session_key=session_key,
                     profile_id=profile_id,
+                    model=model or None,
                     targets=targets or {},
                 )
         new_fp = operation_fingerprint(job.schedule, job.payload)
@@ -1072,6 +1076,7 @@ class AutomationService:
             session_key=session_key,
             profile_id=job.payload.profile_id,
             targets=job.payload.targets or None,
+            model=job.payload.model,
         )
         if response and self._on_notify:
             should_notify = True

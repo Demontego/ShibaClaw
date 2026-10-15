@@ -44,6 +44,17 @@ def _is_oauth_authenticated(spec) -> bool:
         token = store.load_token(spec.name)
         return bool(token and token.get("access_token"))
 
+    if spec.name == "anthropic":
+        from shibaclaw.cli.subscription_oauth import claude_credentials_present
+
+        return claude_credentials_present()
+
+    if spec.name == "google_gemini_cli":
+        from shibaclaw.security.oauth_store import OAuthTokenStore
+
+        token = OAuthTokenStore().load_token("google_gemini_cli")
+        return bool(token and token.get("access_token"))
+
     return False
 
 
@@ -380,3 +391,41 @@ def _login_xai() -> None:
     except Exception as e:
         get_console().print(f"[red]Authentication error: {e}[/red]")
         raise typer.Exit(1)
+
+
+def _login_code_paste(kind: str) -> None:
+    from shibaclaw.cli.subscription_oauth import (
+        claude_authorize_url,
+        exchange_claude_code,
+        exchange_gemini_code,
+        gemini_authorize_url,
+        new_pkce,
+        split_claude_paste,
+    )
+    from shibaclaw.security.oauth_store import OAuthTokenStore
+
+    verifier, challenge, state = new_pkce()
+    if kind == "anthropic":
+        url = claude_authorize_url(challenge, state)
+        get_console().print(url)
+        get_console().print("[dim]Paste the page value, including the #.[/dim]")
+        pasted = typer.prompt("Code")
+        exchange_claude_code(split_claude_paste(pasted, state), state, verifier)
+        get_console().print("[green]✓ Claude subscription connected[/green]")
+        return
+    url = gemini_authorize_url(challenge, state)
+    get_console().print(url)
+    get_console().print("[dim]Paste the code from the Google page.[/dim]")
+    pasted = typer.prompt("Code")
+    OAuthTokenStore().save_token("google_gemini_cli", exchange_gemini_code(pasted, verifier))
+    get_console().print("[green]✓ Gemini connected[/green]")
+
+
+@register_login("anthropic")
+def _login_anthropic() -> None:
+    _login_code_paste("anthropic")
+
+
+@register_login("google_gemini_cli")
+def _login_google_gemini_cli() -> None:
+    _login_code_paste("gemini")
