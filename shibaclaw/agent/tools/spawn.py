@@ -27,6 +27,7 @@ class SpawnTool(Tool):
         session_key: str | None = None,
         model: str | None = None,
         provider: Any | None = None,
+        **kwargs: Any,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
         self._origin_channel = channel
@@ -97,6 +98,7 @@ class SpawnMeaTool(Tool):
         session_key: str | None = None,
         model: str | None = None,
         provider: Any | None = None,
+        **kwargs: Any,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
         self._origin_channel = channel

@@ -90,6 +90,8 @@ class ShibaBrain:
 
     _TOOL_RESULT_MAX_CHARS = 16_000
     _TOOL_RESULT_LOOP_MAX_CHARS = 8_000
+    # Reads and exec must re-run: a cached git status or gate hides fresh state.
+    _IDEMPOTENT_TOOLS = frozenset({"message", "business_send"})
 
     def __init__(
         self,
@@ -173,7 +175,6 @@ class ShibaBrain:
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._provider_cache: dict[str, Thinker] = {}
         self._steering_queues: dict[str, list[dict]] = {}
-        self._idempotency_cache: dict[str, Any] = {}
         self.memory_consolidator = PackMemory(
             workspace=workspace,
             provider=cast(Thinker, provider),
@@ -973,6 +974,7 @@ class ShibaBrain:
         iteration_tool_sequences: list[list[str]] = []
         response_content_history: list[str] = []
         executed_tool_calls = set()
+        idempotency_cache: dict[str, str] = {}
         session_tokens_used: int = 0
 
         while self.max_iterations == 0 or iteration < self.max_iterations:
@@ -1233,12 +1235,15 @@ class ShibaBrain:
                         )
                         continue
 
-                    # Idempotency Guard: check if this tool call has already been executed successfully in this session
+                    # Idempotency Guard: do not repeat a successful send within this turn
                     args_json = json.dumps(tool_call.arguments, sort_keys=True, ensure_ascii=False)
-                    idempotency_key = f"{session_key}:{tool_call.name}:{args_json}"
-                    if session_key and idempotency_key in self._idempotency_cache:
+                    idempotency_key = f"{tool_call.name}:{args_json}"
+                    if (
+                        tool_call.name in self._IDEMPOTENT_TOOLS
+                        and idempotency_key in idempotency_cache
+                    ):
                         logger.info("Idempotency Guard triggered: returning cached result for {}({})", tool_call.name, args_str[:200])
-                        result = self._idempotency_cache[idempotency_key]
+                        result = idempotency_cache[idempotency_key]
                         messages = self.context.add_tool_result(
                             messages, tool_call.id, tool_call.name, result
                         )
@@ -1353,11 +1358,14 @@ class ShibaBrain:
                     if result.startswith("Error:"):
                         if stuck_detector.add_tool_error(tool_call.name, result):
                             messages.append(stuck_detector.get_tool_error_pivot_prompt(tool_call.name, result))
-                    if session_key and not result.startswith("Error:"):
-                        self._idempotency_cache[idempotency_key] = result
+                    if tool_call.name in self._IDEMPOTENT_TOOLS and not result.startswith("Error:"):
+                        idempotency_cache[idempotency_key] = result
 
                 # Stuck Detector: check if the last 3 iterations had the exact same tool sequence
-                tool_names = [tc.name for tc in response.tool_calls]
+                tool_names = [
+                    f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)}"
+                    for tc in response.tool_calls
+                ]
                 iteration_tool_sequences.append(tool_names)
                 sre_monitor.add_tool_sequence(tool_names)
                 if stuck_detector.add_tool_sequence(tool_names):
