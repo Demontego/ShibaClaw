@@ -900,6 +900,13 @@ class ShibaBrain:
         tool_defs = self._filter_tools_for_allowlist(
             tool_defs, metadata, channel, chat_id=chat_id, profile_id=profile_id
         )
+        if (metadata or {}).get("agent_handoff"):
+            tool_defs = [
+                d
+                for d in tool_defs
+                if ((d.get("function") or {}).get("name") or d.get("name"))
+                not in {"spawn", "spawn_mea"}
+            ]
 
         if session_key:
             self._steering_queues.setdefault(session_key, [])
@@ -1234,6 +1241,24 @@ class ShibaBrain:
                             ),
                         )
                         continue
+
+                    # Pre-flight Guard & Argument Schema Normalization
+                    from shibaclaw.agent.tools.preflight import ToolPreflightGuard
+                    tool_inst = self.tools.get(tool_call.name)
+                    preflight_res = ToolPreflightGuard.process(
+                        tool_name=tool_call.name,
+                        args=tool_call.arguments or {},
+                        tool_instance=tool_inst,
+                    )
+                    if not preflight_res.success:
+                        logger.warning("PreflightGuard blocked execution for tool '{}': {}", tool_call.name, preflight_res.error)
+                        result = preflight_res.error
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, result
+                        )
+                        continue
+
+                    tool_call.arguments = preflight_res.arguments
 
                     # Idempotency Guard: do not repeat a successful send within this turn
                     args_json = json.dumps(tool_call.arguments, sort_keys=True, ensure_ascii=False)
@@ -1969,7 +1994,11 @@ class ShibaBrain:
             "business_connection_id"
         ):
             max_age_hours = None
-        history = session.get_history(max_messages=0, max_age_hours=max_age_hours)
+        history = (
+            []
+            if msg.channel == "automation"
+            else session.get_history(max_messages=0, max_age_hours=max_age_hours)
+        )
         current_message = msg.content
         if message_metadata.get("is_guest") or message_metadata.get("secretary_summon"):
             try:
