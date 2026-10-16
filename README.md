@@ -38,15 +38,15 @@
 ---
 
 <details open>
-<summary>🚀 <b>What's new — v1.0.5</b> (click to expand)</summary>
+<summary>🚀 <b>What's new — v1.0.6</b> (click to expand)</summary>
 
-**Version v1.0.5 (2026-10-16):**
+**Version v1.0.6 (2026-10-16):**
 
-- **Specialist profiles and library** — Adds owner-only `agent_send`, a profile graph, and editable soul and people documents. Agent sessions cannot chain messages; private sessions cannot use `agent_send`.
-- **Safer agent runs** — Adds tool-call preflight checks, observation masking, artifact-preserving compaction, circuit breakers, subagent context modes, resource guards, and a CI gate for evolution merges.
-- **Subscription login and model selection** — Adds subscription OAuth flows and model pickers to the WebUI.
-- **Reliability fixes** — Corrects privacy and concurrent context handling, tool-call protocol, Windows frontmatter, approval fingerprints, profile model allowlists, OAuth handling, and packaged frontend assets.
-- **Gemini endpoint validation** — Requires an exact hostname match, blocking lookalike domains from being treated as Google's model catalog.
+- **v1.0.3 design, restored runtime improvements** — Keeps the original v1.0.3 interface design while reintegrating the non-UI improvements and fixes from v1.0.4/v1.0.5: runtime reliability, provider retries and catalogs, subscription OAuth, automation, subagents, and opt-in self-evolution. Privacy protections, exact Gemini catalog host validation, and dependency security updates are retained. The later interface redesign is not included.
+- **Targeted interface fixes** — Keeps sidebar history and footer controls reachable and moves Settings into the compact footer. The context-usage badge is the single accessible context button. Desktop and wider phones use one composer toolbar; narrow phones use two rows with 44px touch targets, single-line model names, and percentage-only context usage. Model, effort, and collection menus share the theme, follow their buttons, and stay inside the viewport.
+- **Subscription login cards restored** — Claude and Google Gemini login cards are available again in Settings, including code entry and connection status. Gemini still requires server-side `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` and `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET` configuration. Live OAuth sign-in has not been verified for this version.
+- **Evolution status panel restored** — Restores access to the read-only Evolution workspace panel in the retained interface.
+- **Library features restored** — Restores the profile relationship graph and profile details, plus editable You and People documents, within the original visual design. Library uses one compact toolbar, with a section selector on narrow screens. Sidebar navigation uses compact icons with hover/focus names and persistent labels on touch screens.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 
@@ -66,8 +66,8 @@ ShibaClaw is a self-hosted AI agent you run on your own machine or server: a Pyt
 
 ## Features
 
-- **Advanced Safety & Resilience (SRE)** — StuckDetector, Cost Circuit Breakers, Context Overflow Guard, Agentic SRE, CheckpointManager, IdempotentSaga, SelfRepair, HardStepCap, SREMonitor, and LayeredDefense
 - **Security-first core** — encrypted credentials vault, install-time CVE audit, prompt-injection wrapping, SSRF/DNS-rebinding guard
+- **Reliable agent runtime** — provider retries, durable tool journaling, context and resource guards, isolated or forked subagents, and opt-in self-evolution with validation gates
 - **Three-tier memory & WebUI Manager** — working, semantic (FAISS), and procedural memory with interactive WebUI management, live editing, dream diary, and safe quarantine
 - **Human-in-the-loop interactive UX** — structured in-turn prompts (`ask_user`), masked vault credentials, progress cards, and dynamic permission sandboxing
 - **28 providers, native SDKs** — OpenAI, Anthropic, Gemini, DeepSeek, and more, no LiteLLM proxy layer
@@ -190,6 +190,7 @@ ShibaClaw uses native SDKs — no LiteLLM proxy — and resolves the provider fr
 | OpenRouter | PKCE browser flow, stores returned API key in provider config | WebUI Settings |
 | GitHub Copilot | Device flow, auto token refresh | `shibaclaw provider login github-copilot` or WebUI Settings |
 | OpenAI Codex | PKCE browser flow | `shibaclaw provider login openai-codex` or WebUI Settings |
+| Claude | PKCE browser flow with authorization-code entry, using the Claude subscription | WebUI Settings |
 | Google Gemini CLI | PKCE browser flow, requires `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` and `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET` env vars. **Note:** Unofficial third-party integration, Google may apply account restrictions. Use a separate account if this is a concern. | WebUI Settings |
 
 For OpenRouter, the callback reuses the current WebUI URL and port by default, so `http://localhost:3000` is not a dedicated OAuth-only port. If you expose the WebUI behind a reverse proxy or need a different public callback origin, set `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://your-public-webui-host` before starting the server.
@@ -281,20 +282,6 @@ Background tasks run on cron-like schedules or event triggers (messages, webhook
 ## Knowledge Base (RAG)
 
 Local, privacy-first retrieval-augmented generation: organize documents into named collections (PDF, CSV, HTML, TXT, Markdown), upload via drag-and-drop, and search with a FAISS index over `all-MiniLM-L6-v2` embeddings. The agent can call `knowledge_search` during conversation, or you can target a specific collection with `@kb:name`. It's an optional dependency — install with `pip install shibaclaw[rag]`.
-
-## Safety & Resilience (SRE)
-
-ShibaClaw includes a suite of advanced, production-grade safety and resilience features to ensure reliable and cost-effective execution:
-
-- **StuckDetector**: Monitors agent progress to detect repetitive actions, tool-call loops, or lack of progress, automatically triggering goal reassessment and recovery prompts.
-- **Cost Circuit Breakers**: Prevents runaway API costs by enforcing strict budget limits per session and automatically halting execution when thresholds are exceeded.
-- **Context Overflow Guard**: A three-threshold guardrail (Warning, Critical, Hard Limit) that manages context window limits with automatic summarization, token compression, and emergency checkpointing.
-- **Agentic SRE**: Specialized Monitor, Recovery, and Audit agents that continuously track liveness, progress, and quality, ensuring autonomous self-healing, system stability, and continuous improvement of the core agent loop.
-- **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks, preventing progress loss, ensuring state consistency, and enabling robust recovery of the execution context, state, memory, and progress tracking capabilities of the core agent loop system architecture design pattern implementation framework library module package bundle component element unit system architecture design pattern architecture design pattern architecture design pattern framework library module package bundle component pattern implementation.
-- **IdempotentSaga**: Ensures safe, transactional execution of multi-step tasks with side effects, automatic rollback capabilities, and strict idempotency guarantees.
-- **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure to maintain operational continuity, system integrity, and self-healing capabilities.
-- **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops, runaway token consumption, and execution stalls.
-- **LayeredDefense**: Integrates all safety and resilience mechanisms into a unified, multi-layered defense system to guarantee robust, fault-tolerant execution and system reliability.
 
 ## Troubleshooting
 

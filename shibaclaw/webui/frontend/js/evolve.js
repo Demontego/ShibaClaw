@@ -49,6 +49,8 @@
     };
 
     let timer = null;
+    let pending = null;
+    let lastData = null;
 
     function L(key) {
         const ru = window.i18n && window.i18n.getLocale && window.i18n.getLocale() === "ru";
@@ -118,21 +120,36 @@
 
     async function loadEvolve() {
         const box = document.getElementById("evolve-content");
-        if (!box) return;
+        const modal = document.getElementById("evolve-modal");
+        if (!box || !modal?.classList.contains("active") || pending) return;
+        const request = {};
+        pending = request;
         if (!box.dataset.loaded) {
             box.innerHTML = `<div class="evolve-loading">${esc(L("loading"))}</div>`;
         }
         try {
             const res = await authFetch("/api/evolve");
             if (!res.ok) throw new Error(String(res.status));
-            render(await res.json());
+            const data = await res.json();
+            if (pending !== request || !modal.classList.contains("active")) return;
+            lastData = data;
+            render(data);
             box.dataset.loaded = "1";
         } catch (err) {
-            box.innerHTML = `<div class="evolve-error">${esc(L("fail"))}: ${esc(err.message)}</div>`;
+            if (pending === request && modal.classList.contains("active")) {
+                box.innerHTML = `<div class="evolve-error">${esc(L("fail"))}: ${esc(err.message)}</div>`;
+            }
+        } finally {
+            if (pending === request) pending = null;
         }
     }
 
     window.loadEvolve = loadEvolve;
+    window.stopEvolvePolling = function () {
+        if (timer) clearInterval(timer);
+        timer = null;
+        pending = null;
+    };
 
     document.addEventListener("shiba-modal-opened", (event) => {
         if (!event.detail || event.detail.id !== "evolve-modal") return;
@@ -141,27 +158,14 @@
         timer = setInterval(() => {
             const modal = document.getElementById("evolve-modal");
             if (!modal || !modal.classList.contains("active")) {
-                clearInterval(timer);
-                timer = null;
+                window.stopEvolvePolling();
                 return;
             }
             loadEvolve();
         }, 8000);
     });
 
-    function localizeButton() {
-        const btn = document.getElementById("btn-evolve");
-        const title = document.getElementById("evolve-title");
-        if (btn) {
-            btn.title = L("title");
-            btn.setAttribute("aria-label", L("title"));
-        }
-        if (title) title.textContent = L("title");
-    }
-
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", localizeButton);
-    } else {
-        localizeButton();
-    }
+    document.addEventListener("shibaclaw:localechange", () => {
+        if (lastData && document.getElementById("evolve-modal")?.classList.contains("active")) render(lastData);
+    });
 })();

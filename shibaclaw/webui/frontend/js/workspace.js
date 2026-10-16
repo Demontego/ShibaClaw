@@ -5,10 +5,11 @@
         "knowledge-modal": "library",
         "memory-modal": "library",
         "automation-modal": "automations",
-        "connected-apps-modal": "apps",
         "evolve-modal": "evolution",
+        "connected-apps-modal": "apps",
     };
     let page = "chat";
+    let navigationTooltipButton = null;
     let activePanel = null;
     let agents = [];
     let agentsRequest = 0;
@@ -22,21 +23,48 @@
             ? (systemTheme.matches ? "dark" : "light") : theme;
         const select = document.getElementById("workspace-theme");
         if (select) select.value = theme;
-        const icon = document.getElementById("btn-theme-icon");
-        const themeBtn = document.getElementById("btn-theme");
-        if (icon) icon.textContent = theme === "system" ? "routine" : (document.documentElement.dataset.theme === "light" ? "light_mode" : "dark_mode");
-        if (themeBtn) {
-            const label = typeof t === "function" ? t("workspace.theme") : "Appearance";
-            themeBtn.title = label;
-            themeBtn.setAttribute("aria-label", label);
+    }
+
+    function hideNavigationTooltip() {
+        const tooltip = document.getElementById("workspace-nav-tooltip");
+        if (tooltip) {
+            tooltip.hidden = true;
+            tooltip.setAttribute("aria-hidden", "true");
         }
-        const color = document.documentElement.dataset.theme === "light" ? "#fcfbf9" : "#191918";
-        const meta = document.getElementById("theme-color");
-        if (meta) meta.setAttribute("content", color);
+        navigationTooltipButton = null;
+    }
+
+    function showNavigationTooltip(button) {
+        if (window.matchMedia("(max-width: 768px), (hover: none), (pointer: coarse)").matches) return;
+        const tooltip = document.getElementById("workspace-nav-tooltip");
+        if (!tooltip) return;
+        navigationTooltipButton = button;
+        tooltip.textContent = button.getAttribute("aria-label") || "";
+        tooltip.hidden = false;
+        tooltip.setAttribute("aria-hidden", "false");
+        const rect = button.getBoundingClientRect();
+        const edge = document.getElementById("sidebar")?.getBoundingClientRect().right || rect.right;
+        const size = tooltip.getBoundingClientRect();
+        tooltip.style.left = `${Math.max(8, Math.min(edge + 10, window.innerWidth - size.width - 8))}px`;
+        tooltip.style.top = `${Math.max(8, Math.min(rect.top + (rect.height - size.height) / 2, window.innerHeight - size.height - 8))}px`;
+    }
+
+    function updateNavigationCaption() {
+        const caption = document.getElementById("workspace-nav-current");
+        if (!caption) return;
+        const current = [...document.querySelectorAll(".workspace-nav-item")].find(button => button.dataset.workspacePage === page);
+        caption.hidden = !current;
+        caption.textContent = current ? t(`workspace.${page === "chat" ? "conversations" : page}`) : "";
     }
 
     window.setWorkspaceNav = function (next) {
         page = next;
+        hideNavigationTooltip();
+        updateNavigationCaption();
+        const view = document.getElementById("workspace-view");
+        if (view) view.dataset.page = next;
+        const librarySelect = document.getElementById("workspace-library-select");
+        if (librarySelect) librarySelect.hidden = next !== "library";
         document.querySelectorAll("[data-workspace-page]").forEach(button => {
             const selected = button.dataset.workspacePage === next;
             button.classList.toggle("active", selected);
@@ -57,26 +85,26 @@
             if (description) description.textContent = t(`workspace.${page}_subtitle`);
         }
         document.querySelectorAll("[data-workspace-page]").forEach(button => {
-            button.title = t(`workspace.${button.dataset.workspacePage === "chat" ? "conversations" : button.dataset.workspacePage}`);
-            button.setAttribute("aria-label", button.title);
+            const label = t(`workspace.${button.dataset.workspacePage === "chat" ? "conversations" : button.dataset.workspacePage}`);
+            button.setAttribute("aria-label", label);
+            if (button.classList.contains("workspace-nav-item")) button.removeAttribute("title");
+            else button.title = label;
         });
+        updateNavigationCaption();
+        if (navigationTooltipButton) showNavigationTooltip(navigationTooltipButton);
         if (page === "agents") renderAgents();
-    }
-
-    function setMainPane(mode) {
-        const open = mode !== "chat";
-        document.body.classList.toggle("workspace-page-open", open);
-        const chat = document.getElementById("chat-area");
-        const view = document.getElementById("workspace-view");
-        if (chat) chat.style.display = open ? "none" : "flex";
-        if (view) view.style.display = open ? "flex" : "none";
     }
 
     window.leaveWorkspace = function () {
         ++agentsRequest;
+        ++libraryRequest;
+        ++libraryDocRequest;
+        if (activePanel === "evolve-modal" && typeof window.stopEvolvePolling === "function") window.stopEvolvePolling();
         Object.keys(panels).forEach(id => document.getElementById(id)?.classList.remove("active"));
         activePanel = null;
-        setMainPane("chat");
+        applyLibraryMode("chat");
+        const view = document.getElementById("workspace-view");
+        if (view) view.style.display = "none";
     };
 
     window.setWorkspaceChatTitle = function (title, key = "workspace.new_chat") {
@@ -89,7 +117,8 @@
     window.showWorkspaceChat = function () {
         window.leaveWorkspace();
         if (typeof window.closeSettingsView === "function") window.closeSettingsView();
-        setMainPane("chat");
+        const chat = document.getElementById("chat-area");
+        if (chat) chat.style.display = "flex";
         window.setWorkspaceNav("chat");
         if (typeof window.closeSidebarOnMobile === "function") window.closeSidebarOnMobile();
     };
@@ -97,15 +126,15 @@
     function showPage(next) {
         window.leaveWorkspace();
         if (typeof window.closeSettingsView === "function") window.closeSettingsView();
-        setMainPane(next);
+        document.getElementById("chat-area").style.display = "none";
+        document.getElementById("workspace-view").style.display = "flex";
         document.getElementById("workspace-agents").hidden = next !== "agents";
         document.getElementById("workspace-library-tabs").hidden = next !== "library";
-        applyLibraryMode(next);
         document.getElementById("workspace-app-actions").hidden = next !== "apps";
-        const evolveActions = document.getElementById("workspace-evolve-actions");
-        if (evolveActions) evolveActions.hidden = next !== "evolution";
+        document.getElementById("workspace-evolve-actions").hidden = next !== "evolution";
         window.setWorkspaceNav(next);
         translateWorkspace();
+        applyLibraryMode(next);
         if (typeof window.closeSidebarOnMobile === "function") window.closeSidebarOnMobile();
     }
 
@@ -129,11 +158,7 @@
         panel.dataset.backdropClose = "false";
         document.getElementById("workspace-stage").appendChild(panel);
         activePanel = id;
-        document.getElementById("workspace-library-book")?.setAttribute("hidden", "");
-        document.getElementById("workspace-agent-graph")?.setAttribute("hidden", "");
-        ["graph", "you", "people"].forEach(name => {
-            document.getElementById("library-tab-" + name)?.classList.remove("active");
-        });
+        applyLibraryMode();
         document.querySelectorAll("[data-workspace-modal]").forEach(button => {
             button.classList.toggle("active", button.dataset.workspaceModal === id);
             button.setAttribute("aria-current", button.dataset.workspaceModal === id ? "page" : "false");
@@ -144,10 +169,7 @@
         if (id === "context-modal") {
             document.getElementById("chat-area").classList.remove("context-visible");
             document.getElementById("workspace-context-toggle").setAttribute("aria-expanded", "false");
-        } else if (id === activePanel) {
-            activePanel = null;
-            window.showWorkspaceChat();
-        }
+        } else if (id === activePanel) window.showWorkspaceChat();
     };
 
     window.toggleWorkspaceContext = function () {
@@ -156,27 +178,10 @@
     };
 
     window.toggleWorkspaceSidebar = function () {
+        hideNavigationTooltip();
         const collapsed = document.body.classList.toggle("workspace-sidebar-collapsed");
         try { localStorage.setItem("shibaclaw_sidebar_collapsed", String(collapsed)); } catch (_) { /* optional storage */ }
     };
-
-    function applySidebarForViewport() {
-        if (window.matchMedia("(max-width: 900px)").matches) {
-            document.body.classList.remove("workspace-sidebar-collapsed");
-            return;
-        }
-        try {
-            const stored = localStorage.getItem("shibaclaw_sidebar_collapsed");
-            if (stored === "true" || stored === "false") {
-                document.body.classList.toggle("workspace-sidebar-collapsed", stored === "true");
-                return;
-            }
-        } catch (_) { /* optional storage */ }
-        document.body.classList.toggle(
-            "workspace-sidebar-collapsed",
-            window.matchMedia("(max-width: 1199px)").matches,
-        );
-    }
 
     function renderAgents() {
         const grid = document.getElementById("workspace-agent-grid");
@@ -259,9 +264,15 @@
     };
 
     let _libraryMode = "graph";
+    let libraryRequest = 0;
+    let libraryDocRequest = 0;
 
     function applyLibraryMode(next = page) {
         const on = next === "library" && !activePanel;
+        const librarySelect = document.getElementById("workspace-library-select");
+        if (librarySelect && next === "library") librarySelect.value = activePanel
+            ? ({ "fs-modal": "files", "knowledge-modal": "knowledge", "memory-modal": "memory" }[activePanel] || "graph")
+            : _libraryMode;
         const graph = document.getElementById("workspace-agent-graph");
         const book = document.getElementById("workspace-library-book");
         const rail = book?.querySelector(".library-rail");
@@ -278,6 +289,10 @@
         document.getElementById("library-people-title")?.toggleAttribute("hidden", !peopleOnly);
         document.getElementById("library-people-search")?.toggleAttribute("hidden", !peopleOnly);
         document.getElementById("library-people")?.toggleAttribute("hidden", !peopleOnly);
+        if (on) document.querySelectorAll("[data-workspace-modal]").forEach(button => {
+            button.classList.remove("active");
+            button.setAttribute("aria-current", "false");
+        });
         ["graph", "you", "people"].forEach(name => {
             const tab = document.getElementById("library-tab-" + name);
             if (!tab) return;
@@ -285,10 +300,6 @@
             tab.classList.toggle("active", current);
             tab.setAttribute("aria-current", current ? "page" : "false");
         });
-    }
-
-    function libraryRu() {
-        return t("workspace.library") === "Библиотека";
     }
 
     function libraryHue(id) {
@@ -439,13 +450,13 @@
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "btn-secondary library-edit";
-        const viewLabel = () => libraryRu() ? "Править" : "Edit";
+        const viewLabel = () => t("common.edit");
         edit.textContent = viewLabel();
         hero.append(edit, status);
         const paint = (editing) => {
             host.classList.toggle("is-editing", editing);
             paintSectionCards(host, text, editing);
-            edit.textContent = editing ? (libraryRu() ? "Сохранить" : "Save") : viewLabel();
+            edit.textContent = editing ? (t("common.save")) : viewLabel();
         };
         paint(false);
         edit.addEventListener("click", async () => {
@@ -459,12 +470,12 @@
             try {
                 const next = kept.head + readSectionCards(host);
                 const ok = await onSave(next);
-                status.textContent = ok ? (libraryRu() ? "Сохранено" : "Saved") : (libraryRu() ? "Ошибка" : "Error");
+                status.textContent = ok ? (t("workspace.library_saved")) : (t("common.error"));
                 if (!ok) return;
                 text = readSectionCards(host);
                 paint(false);
             } catch {
-                status.textContent = libraryRu() ? "Ошибка" : "Error";
+                status.textContent = t("common.error");
             } finally {
                 edit.disabled = false;
             }
@@ -474,6 +485,7 @@
     async function openLibraryDoc(path, title, id) {
         const sheet = document.getElementById("library-sheet");
         if (!sheet) return;
+        const request = ++libraryDocRequest;
         sheet.replaceChildren();
         const inner = document.createElement("div");
         inner.className = "library-sheet-inner";
@@ -490,8 +502,13 @@
         let text = "";
         try {
             const res = await authFetch(`/api/file-get?path=${encodeURIComponent(path)}`);
-            text = res.ok ? await res.text() : "";
-        } catch { /* empty sheet */ }
+            if (!res.ok) throw new Error(String(res.status));
+            text = await res.text();
+        } catch {
+            if (request === libraryDocRequest) sub.textContent = t("workspace.library_load_error");
+            return;
+        }
+        if (request !== libraryDocRequest || page !== "library" || activePanel) return;
         const named = text.match(/^peer_name:\s*(.+)$/m);
         if (named && !named[1].includes("неизвестно")) heading.textContent = named[1].trim();
         const h1 = text.match(/^#\s+(.+)$/m);
@@ -511,23 +528,26 @@
     }
 
     async function loadLibraryBook(mode) {
-        const ru = libraryRu();
+        const request = ++libraryRequest;
         const youTitle = document.getElementById("library-you-title");
         const peopleTitle = document.getElementById("library-people-title");
-        if (youTitle) youTitle.textContent = ru ? "Вы" : "You";
-        if (peopleTitle) peopleTitle.textContent = ru ? "Знакомые" : "People";
+        if (youTitle) youTitle.textContent = t("workspace.library_you");
+        if (peopleTitle) peopleTitle.textContent = t("workspace.library_people");
         const you = document.getElementById("library-you");
         const people = document.getElementById("library-people");
         if (!you || !people) return;
-        you.replaceChildren(libraryItem(ru ? "Вы" : "You", "default", () => openLibraryDoc("USER.md", ru ? "Вы" : "You", "default")));
+        you.replaceChildren(libraryItem(t("workspace.library_you"), "default", () => openLibraryDoc("USER.md", t("workspace.library_you"), "default")));
         if (mode === "you") {
-            openLibraryDoc("USER.md", ru ? "Вы" : "You", "default");
+            openLibraryDoc("USER.md", t("workspace.library_you"), "default");
             return;
         }
         people.replaceChildren();
+        document.getElementById("library-sheet").textContent = t("common.loading");
         try {
             const res = await authFetch("/api/fs/explore?path=" + encodeURIComponent("memory/people"));
+            if (!res.ok) throw new Error(String(res.status));
             const data = await res.json();
+            if (request !== libraryRequest || page !== "library" || activePanel) return;
             const grouped = new Map();
             (data.items || []).forEach(item => {
                 if (item.is_dir || !item.name.endsWith(".md") || item.name === "README.md") return;
@@ -553,8 +573,12 @@
             [...grouped.values()].sort((a, b) => a.title.localeCompare(b.title, "ru")).forEach(item => {
                 people.append(libraryItem(item.title, item.name, () => openLibraryDoc(item.path, item.title, item.name)));
             });
-        } catch { /* empty rail */ }
+        } catch {
+            if (request === libraryRequest) document.getElementById("library-sheet").textContent = t("workspace.library_load_error");
+            return;
+        }
         const search = document.getElementById("library-people-search");
+        if (search) search.value = "";
         if (search && !search.dataset.wired) {
             search.dataset.wired = "1";
             search.addEventListener("input", () => {
@@ -568,7 +592,7 @@
         if (first) first.click();
         else {
             const sheet = document.getElementById("library-sheet");
-            if (sheet) sheet.replaceChildren();
+            if (sheet) sheet.textContent = t("workspace.library_people_empty");
         }
     }
 
@@ -615,6 +639,12 @@
             });
             box.append(row);
         }
+        if (profile._detailUnavailable) {
+            const error = document.createElement("p");
+            error.textContent = t("workspace.library_load_error");
+            box.append(error);
+            return;
+        }
         mountSectionEdit(box, hero, profile.soul || "", async (next) => {
             const res = await authFetch(`/api/profiles/${encodeURIComponent(profile.id)}`, {
                 method: "PUT",
@@ -638,7 +668,7 @@
         return items;
     }
 
-    function paintGraph() {
+    function paintGraph(refreshDetail = true) {
         const stage = document.querySelector(".agent-graph-stage");
         const nodes = document.getElementById("agent-graph-nodes");
         const svg = document.getElementById("agent-graph-svg");
@@ -648,7 +678,7 @@
         const cx = width * 0.5;
         const cy = height * 0.46;
         const ns = "http://www.w3.org/2000/svg";
-        const verb = t("workspace.library") === "Библиотека" ? "будит" : "wakes";
+        const verb = t("workspace.library_wakes");
         const others = _graphProfiles.filter(profile => profile.id !== "default");
         const spots = new Map();
         spots.set("default", { x: cx, y: cy });
@@ -740,39 +770,65 @@
             nodes.append(chip);
         });
         const focus = _graphProfiles.find(profile => profile.id === _graphFocus) || core || _graphProfiles[0];
-        if (focus) showGraphDetail(focus);
+        if (focus && refreshDetail) showGraphDetail(focus);
+        else document.querySelectorAll(".agent-node").forEach(node => node.classList.toggle("is-on", node.dataset.id === _graphFocus));
     }
 
     async function loadAgentGraph() {
-        document.getElementById("library-tab-graph")?.classList.add("active");
-        document.querySelectorAll("[data-workspace-modal]").forEach(button => button.classList.remove("active"));
-        const listed = await authFetch("/api/profiles");
-        const data = await listed.json();
-        const rows = data.profiles || [];
-        _graphProfiles = await Promise.all(rows.map(async row => {
-            try {
-                const res = await authFetch(`/api/profiles/${encodeURIComponent(row.id)}`);
-                if (res.ok) return await res.json();
-            } catch { /* list row is enough */ }
-            return row;
-        }));
-        paintGraph();
+        const request = ++libraryRequest;
+        const box = document.getElementById("agent-graph-detail");
+        box.textContent = t("common.loading");
+        document.getElementById("agent-graph-nodes").replaceChildren();
+        document.getElementById("agent-graph-svg").replaceChildren();
+        try {
+            const listed = await authFetch("/api/profiles");
+            if (!listed.ok) throw new Error(String(listed.status));
+            const data = await listed.json();
+            if (request !== libraryRequest || page !== "library" || _libraryMode !== "graph" || activePanel) return;
+            const rows = Array.isArray(data.profiles) ? data.profiles : [];
+            const profiles = await Promise.all(rows.map(async row => {
+                try {
+                    const res = await authFetch(`/api/profiles/${encodeURIComponent(row.id)}`);
+                    if (res.ok) return await res.json();
+                } catch { /* show the profile with an unavailable detail */ }
+                return { ...row, _detailUnavailable: true };
+            }));
+            if (request !== libraryRequest || page !== "library" || _libraryMode !== "graph" || activePanel) return;
+            _graphProfiles = profiles;
+            if (!_graphProfiles.length) { box.textContent = t("workspace.agents_empty"); return; }
+            paintGraph();
+        } catch {
+            if (request === libraryRequest) box.textContent = t("workspace.library_load_error");
+        }
         if (!window._agentGraphResize) {
             window._agentGraphResize = true;
             window.addEventListener("resize", () => {
                 const graph = document.getElementById("workspace-agent-graph");
                 if (!graph || graph.hidden || !_graphProfiles.length) return;
-                paintGraph();
+                paintGraph(false);
             });
         }
     }
 
     function dismissLibraryPanel() {
         if (!activePanel) return;
+        if (activePanel === "evolve-modal" && typeof window.stopEvolvePolling === "function") window.stopEvolvePolling();
         const panel = document.getElementById(activePanel);
         activePanel = null;
         panel?.classList.remove("active");
     }
+
+    window.openLibrarySection = function (section) {
+        const actions = {
+            graph: window.openWorkspaceLibrary,
+            you: window.openLibraryYou,
+            people: window.openLibraryPeople,
+            files: () => window.openModal("fs-modal"),
+            knowledge: () => window.openModal("knowledge-modal"),
+            memory: () => window.openModal("memory-modal"),
+        };
+        if (Object.prototype.hasOwnProperty.call(actions, section)) return actions[section]();
+    };
 
     window.openWorkspaceLibrary = function () {
         _libraryMode = "graph";
@@ -783,6 +839,8 @@
 
     window.openLibraryYou = function () {
         _libraryMode = "you";
+        ++libraryRequest;
+        ++libraryDocRequest;
         dismissLibraryPanel();
         if (page !== "library") showPage("library");
         else applyLibraryMode();
@@ -791,31 +849,35 @@
 
     window.openLibraryPeople = function () {
         _libraryMode = "people";
+        ++libraryDocRequest;
         dismissLibraryPanel();
         if (page !== "library") showPage("library");
         else applyLibraryMode();
         loadLibraryBook("people");
     };
 
+
     function init() {
         try {
             const stored = localStorage.getItem("shibaclaw_theme");
             if (["system", "light", "dark"].includes(stored)) theme = stored;
+            document.body.classList.toggle("workspace-sidebar-collapsed", localStorage.getItem("shibaclaw_sidebar_collapsed") === "true");
         } catch (_) { /* optional storage */ }
         applyTheme();
-        applySidebarForViewport();
-        window.matchMedia("(max-width: 900px)").addEventListener("change", applySidebarForViewport);
-        window.matchMedia("(max-width: 1199px)").addEventListener("change", applySidebarForViewport);
         window.setWorkspaceNav(page);
+        document.querySelectorAll(".workspace-nav-item").forEach(button => {
+            button.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") showNavigationTooltip(button); });
+            button.addEventListener("pointerleave", hideNavigationTooltip);
+            button.addEventListener("focus", () => showNavigationTooltip(button));
+            button.addEventListener("blur", hideNavigationTooltip);
+            button.addEventListener("click", hideNavigationTooltip);
+        });
+        window.addEventListener("resize", hideNavigationTooltip);
+        window.addEventListener("blur", hideNavigationTooltip);
+        document.addEventListener("scroll", hideNavigationTooltip, true);
         systemTheme.addEventListener("change", applyTheme);
         document.getElementById("workspace-theme")?.addEventListener("change", event => {
             theme = event.target.value;
-            try { localStorage.setItem("shibaclaw_theme", theme); } catch (_) { /* optional storage */ }
-            applyTheme();
-        });
-        document.getElementById("btn-theme")?.addEventListener("click", () => {
-            const order = ["system", "light", "dark"];
-            theme = order[(order.indexOf(theme) + 1) % order.length];
             try { localStorage.setItem("shibaclaw_theme", theme); } catch (_) { /* optional storage */ }
             applyTheme();
         });
@@ -823,74 +885,8 @@
         const profile = document.getElementById("profile-selector");
         const actions = document.querySelector(".input-actions");
         if (profile && actions) actions.prepend(profile);
-        const plus = document.getElementById("btn-composer-plus");
-        const composer = document.querySelector(".workspace-composer");
-        const setPlusOpen = (open) => {
-            composer?.classList.toggle("plus-open", open);
-            plus?.setAttribute("aria-expanded", open ? "true" : "false");
-        };
-        plus?.addEventListener("click", (event) => {
-            event.stopPropagation();
-            setPlusOpen(!composer?.classList.contains("plus-open"));
-        });
-        document.addEventListener("click", (event) => {
-            if (composer?.classList.contains("plus-open") && !event.target.closest(".workspace-composer")) {
-                setPlusOpen(false);
-            }
-        });
-        document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") setPlusOpen(false);
-        });
-        window.syncComposerChips = function () {
-            const box = document.getElementById("composer-chips");
-            if (!box) return;
-            box.replaceChildren();
-            const add = (icon, label, onClear) => {
-                if (!label) return;
-                const chip = document.createElement("span");
-                chip.className = "composer-chip";
-                const glyph = document.createElement("span");
-                glyph.className = "material-icons-round";
-                glyph.textContent = icon;
-                const text = document.createElement("span");
-                text.className = "label";
-                text.textContent = label;
-                chip.append(glyph, text);
-                if (onClear) {
-                    const close = document.createElement("button");
-                    close.type = "button";
-                    close.setAttribute("aria-label", label);
-                    close.innerHTML = '<span class="material-icons-round">close</span>';
-                    close.addEventListener("click", (event) => {
-                        event.stopPropagation();
-                        onClear();
-                    });
-                    chip.appendChild(close);
-                } else {
-                    chip.addEventListener("click", () => setPlusOpen(true));
-                }
-                box.appendChild(chip);
-            };
-            const effortBtn = document.getElementById("btn-reasoning-select");
-            const effort = document.getElementById("active-reasoning-display")?.textContent?.trim() || "";
-            const effortDefault = typeof t === "function" ? t("chat.effort_default") : "Default";
-            const effortNa = typeof t === "function" ? t("chat.effort_na") : "Effort: N/A";
-            if (effortBtn && !effortBtn.classList.contains("disabled") && effort && effort !== effortNa && !effort.endsWith(effortDefault)) {
-                const prefix = typeof t === "function" ? t("chat.effort_prefix") : "Effort: ";
-                add("psychology", effort.startsWith(prefix) ? effort.slice(prefix.length) : effort, () => window.clearComposerEffort?.());
-            }
-            const kb = document.getElementById("active-kb-display")?.textContent || "";
-            const kbCount = Number((kb.match(/(\d+)/) || [])[1] || 0);
-            if (kbCount > 0) add("library_books", kb, () => window.clearComposerKBs?.());
-        };
         const newChat = document.getElementById("btn-new-session");
         newChat?.addEventListener("click", window.showWorkspaceChat, { capture: true });
-        document.querySelector(".logo")?.addEventListener("keydown", event => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                window.showWorkspaceChat();
-            }
-        });
         // Session items are rebuilt by the history renderer; delegation survives rerenders.
         document.getElementById("history-list")?.addEventListener("click", event => {
             if (event.target.closest(".history-item") && !event.target.closest(".btn-session-menu, .session-dropdown")) {
@@ -899,11 +895,16 @@
         }, { capture: true });
         document.addEventListener("shibaclaw:localechange", () => {
             translateWorkspace();
+            if (page === "library" && !activePanel && !document.querySelector(".is-editing")) {
+                if (_libraryMode === "graph") paintGraph();
+                else loadLibraryBook(_libraryMode);
+            }
             if (state.contextModalOpen) void _loadContextModalContent();
             else void refreshTokenBadge();
         });
         translateWorkspace();
         document.addEventListener("keydown", event => {
+            if (event.key === "Escape") hideNavigationTooltip();
             if (event.key === "Escape" && state.contextModalOpen && !document.querySelector("body > .modal-backdrop.active")) {
                 window.closeModal("context-modal");
             }

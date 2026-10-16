@@ -345,6 +345,7 @@ async def api_settings_post(request: Request):
         os.replace(tmp_name, path)
 
         agent_manager.config = new_cfg
+        invalidate_models_cache()
 
         # Detect if network-binding gateway settings changed — those require a full restart
         net_changed = (
@@ -376,6 +377,14 @@ async def api_settings_post(request: Request):
     return JSONResponse({"status": "updated", "restarted": False})
 
 _models_cache: tuple[float, list, list] | None = None
+_models_cache_generation = 0
+
+
+def invalidate_models_cache() -> None:
+    """Refresh catalogs after settings or OAuth credentials change."""
+    global _models_cache, _models_cache_generation
+    _models_cache = None
+    _models_cache_generation += 1
 
 
 async def api_models_get(request: Request):
@@ -407,7 +416,9 @@ async def api_models_get(request: Request):
             return JSONResponse({"error": str(e)}, status_code=500)
         return JSONResponse({"models": models, "errors": []})
 
+    generation = _models_cache_generation
     models, errors = await _fetch_all_configured_provider_models(cfg)
-    if models:
+    # A catalog fetched before an account/settings change must not refill the cache.
+    if models and generation == _models_cache_generation:
         _models_cache = (time.monotonic(), models, errors)
     return JSONResponse({"models": models, "errors": errors})

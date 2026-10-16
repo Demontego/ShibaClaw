@@ -24,7 +24,7 @@ window.openSettingsView = async function () {
         let startTab = "agent";
         try { startTab = localStorage.getItem("shibaclaw_settings_tab") || "agent"; } catch (e) { }
         
-        const isMobile = window.matchMedia("(max-width: 900px)").matches;
+        const isMobile = window.matchMedia("(max-width: 768px)").matches;
         if (isMobile) {
             document.getElementById("settings-mobile-dashboard").style.display = "block";
             document.getElementById("settings-body").style.display = "none";
@@ -82,7 +82,7 @@ window.switchSettingsTab = function (tab, options = {}) {
     }
     try { localStorage.setItem("shibaclaw_settings_tab", tab); } catch (e) { }
 
-    const isMobile = window.matchMedia("(max-width: 900px)").matches;
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
     const subtitleEl = document.getElementById("settings-current-tab-title");
     if (subtitleEl) {
         const label = sidebarEl ? sidebarEl.querySelector("span:last-child")?.textContent || tab : tab;
@@ -358,7 +358,7 @@ async function loadOAuthPanel() {
             const badge = document.getElementById("oauth-badge-" + p.name);
             const logsEl = document.getElementById("oauth-logs-" + p.name);
             btn.disabled = true; btn.innerHTML = '<span class="material-icons-round spin" style="font-size:14px;vertical-align:middle">progress_activity</span> Contacting...';
-            logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : (p.name === "google_gemini_cli" ? "Preparing Google login...\n" : "Requesting device code...\n");
+            logsEl.style.display = "block"; logsEl.innerHTML = p.name === "openrouter" ? "Preparing OpenRouter login...\n" : (p.name === "google_gemini_cli" ? "Preparing Google login...\n" : (p.name === "anthropic" ? "Preparing Claude login...\n" : "Requesting device code...\n"));
             const loginBtnHtml = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">login</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.login") : "Login")}`;
             try {
                 const resp = await authFetch("/api/oauth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: p.name }) });

@@ -171,6 +171,7 @@ function buildTokenCard(tokens) {
 function updateTokenBadge(tokens) {
     const badge = $("token-badge");
     const text = $("token-badge-text");
+    const percent = $("token-badge-percent");
     const fill = $("token-badge-fill");
     if (!badge || !text || !tokens) return;
     const pct = tokens.usage_pct ?? 0;
@@ -178,6 +179,7 @@ function updateTokenBadge(tokens) {
     badge.className = "token-badge usage-" + tier;
     if (fill) fill.style.width = `${pct}%`;
     text.textContent = `${fmtTokens(tokens.total ?? 0)} / ${fmtTokens(tokens.context_window ?? 0)} · ${pct}%`;
+    if (percent) percent.textContent = `${pct}%`;
 
     const modelName = tokens.active_model ? String(tokens.active_model).split("/").pop() : t("common.default");
     const source = tokens.auto_detected === true

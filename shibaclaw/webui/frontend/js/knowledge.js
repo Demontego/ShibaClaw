@@ -296,16 +296,15 @@ function renderKBSelectorDropdown() {
         if (display) {
             display.innerText = typeof t === "function" ? t("chat.kbs_disabled") : "KBs (Disabled)";
         }
-        if (typeof syncComposerChips === "function") syncComposerChips();
         return;
     }
     
     list.innerHTML = allKnowledgeBases.map(kb => {
         const isActive = activeSessionKBs.includes(kb.id);
         return `
-        <div class="model-item premium-kb-item ${isActive ? 'selected' : ''}" onclick="toggleSessionKB('${kb.id}', event)">
-            <span class="model-item-name">${kb.name}</span>
-            <span class="material-icons-round premium-kb-check" style="font-size:18px;">check_circle</span>
+        <div class="model-item ${isActive ? 'selected' : ''}" onclick="toggleSessionKB('${kb.id}', event)">
+            <span class="model-item-name">${escapeHtml(kb.name)}</span>
+            <span class="material-icons-round composer-menu-check" ${isActive ? '' : 'hidden'}>check</span>
         </div>
         `;
     }).join('');
@@ -314,23 +313,7 @@ function renderKBSelectorDropdown() {
     if (display) {
         display.innerText = typeof t === "function" ? t("chat.kbs_count", { n: activeSessionKBs.length }) : `KBs (${activeSessionKBs.length})`;
     }
-    if (typeof syncComposerChips === "function") syncComposerChips();
 }
-
-window.clearComposerKBs = async function () {
-    activeSessionKBs = [];
-    renderKBSelectorDropdown();
-    if (!state.sessionId) return;
-    try {
-        await authFetch(`/api/sessions/${encodeURIComponent(state.sessionId)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ knowledge_bases: [] })
-        });
-    } catch (e) {
-        console.error("Failed to clear session KBs", e);
-    }
-};
 
 async function toggleSessionKB(id, event) {
     if (event) {
@@ -363,7 +346,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btn && menu) {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            if (menu.style.display === 'none') openComposerMenu(btn, menu, 280);
+            else menu.style.display = 'none';
         });
         
         document.addEventListener('click', (e) => {

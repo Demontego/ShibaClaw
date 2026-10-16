@@ -38,15 +38,15 @@
 ---
 
 <details open>
-<summary>🚀 <b>Novità — v1.0.5</b> (fai clic per espandere)</summary>
+<summary>🚀 <b>Novità — v1.0.6</b> (fai clic per espandere)</summary>
 
-**Versione v1.0.5 (2026-10-16):**
+**Versione v1.0.6 (2026-10-16):**
 
-- **Profili specialisti e libreria** — Aggiunge `agent_send` riservato al proprietario, un grafo dei profili e documenti di personalità e persone modificabili. Le sessioni degli agenti non possono concatenare messaggi; le sessioni private non possono usare `agent_send`.
-- **Esecuzione dell'agente più protetta** — Aggiunge controlli preliminari dei tool, mascheramento dei risultati meno recenti, compattazione che preserva gli artefatti, circuit breaker, modalità di contesto per i subagenti, controlli delle risorse e un requisito CI per i merge di auto-evoluzione.
-- **Accesso con abbonamento e scelta del modello** — Aggiunge flussi OAuth per gli abbonamenti e selettori dei modelli nella WebUI.
-- **Correzioni di affidabilità** — Corregge privacy e contesti concorrenti, protocollo dei tool, frontmatter su Windows, impronte delle approvazioni, modelli consentiti per profilo, gestione OAuth e file frontend inclusi nel pacchetto.
-- **Verifica endpoint Gemini** — Richiede una corrispondenza esatta del nome host, bloccando domini simili dall'essere trattati come il catalogo modelli di Google.
+- **Design v1.0.3, miglioramenti del runtime reintegrati** — Mantiene il design originale dell’interfaccia v1.0.3 e reintegra miglioramenti e correzioni non UI di v1.0.4/v1.0.5: affidabilità del runtime, retry e cataloghi dei provider, OAuth in abbonamento, automazioni, subagenti e auto-evoluzione opzionale. Restano le protezioni della privacy, la verifica esatta dell’host del catalogo Gemini e gli aggiornamenti di sicurezza delle dipendenze. Il successivo redesign dell’interfaccia non è incluso.
+- **Correzioni mirate dell’interfaccia** — Mantiene raggiungibili cronologia e comandi della barra laterale e sposta Impostazioni nel footer compatto. Il badge di utilizzo del contesto è l’unico pulsante accessibile per il contesto. Desktop e telefoni più larghi usano una sola barra del compositore; sui telefoni stretti ci sono due righe con comandi touch da 44px, nomi dei modelli su una riga e contesto in percentuale. I menu di modello, ragionamento e raccolta condividono il tema, seguono i pulsanti e restano entro lo schermo.
+- **Schede di login in abbonamento ripristinate** — In Impostazioni tornano le schede Claude e Google Gemini, con inserimento del codice e stato della connessione. Gemini richiede ancora la configurazione sul server di `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` e `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. L’accesso OAuth reale non è stato verificato per questa versione.
+- **Pannello Evolution ripristinato** — Ripristina l’accesso al pannello di stato Evolution, in sola lettura, mantenendo lo stile dell’interfaccia.
+- **Funzioni Library ripristinate** — Ripristina il grafo delle relazioni tra profili e i dettagli dei profili, insieme ai documenti modificabili You e People, mantenendo il design originale. Library usa una sola barra compatta, con un selettore delle sezioni sugli schermi stretti. La navigazione laterale usa icone compatte con nomi in overlay e etichette sempre visibili sugli schermi touch.
 
 Consulta [CHANGELOG.md](./CHANGELOG.md) per la cronologia completa delle versioni.
 
@@ -189,6 +189,7 @@ ShibaClaw utilizza SDK nativi — nessun layer proxy LiteLLM — e risolve il pr
 | OpenRouter | Flusso browser PKCE, memorizza la chiave API restituita nella configurazione del provider | Impostazioni WebUI |
 | GitHub Copilot | Flusso device, refresh automatico del token | `shibaclaw provider login github-copilot` o Impostazioni WebUI |
 | OpenAI Codex | Flusso browser PKCE | `shibaclaw provider login openai-codex` o Impostazioni WebUI |
+| Claude | Flusso browser PKCE con inserimento del codice di autorizzazione, tramite abbonamento Claude | Impostazioni WebUI |
 | Google Gemini CLI | Flusso browser PKCE, richiede le variabili d'ambiente `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` e `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. **Nota:** Integrazione di terze parti non ufficiale; Google potrebbe applicare restrizioni sull'account. Usa un account dedicato se questo è un problema. | Impostazioni WebUI |
 
 Per OpenRouter, il callback riutilizza l'URL e la porta attuali della WebUI come impostazione predefinita, per cui `http://localhost:3000` non è una porta dedicata esclusivamente a OAuth. Se esponi la WebUI dietro un reverse proxy o necessiti di un'origine pubblica di callback differente, imposta `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://tuo-host-webui-pubblico` prima di avviare il server.

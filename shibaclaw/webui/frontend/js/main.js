@@ -1,30 +1,44 @@
 // ── Event Listeners ───────────────────────────────────────────
-const sidebarMediaQuery = window.matchMedia("(max-width: 900px)");
-
 function isMobileSidebar() {
-    return sidebarMediaQuery.matches;
+    return window.matchMedia("(max-width: 768px)").matches;
 }
+
+let sidebarReturnFocus = null;
 
 function setSidebarOpen(open) {
     const sidebar = $("sidebar");
     const backdrop = $("sidebar-backdrop");
     if (!sidebar) return;
 
-    if (open && isMobileSidebar()) {
+    const mobile = isMobileSidebar();
+    const wasOpen = sidebar.classList.contains("open");
+    open = Boolean(open && mobile);
+    document.querySelectorAll("#chat-area, #workspace-view, #settings-view").forEach(view => {
+        view.inert = open;
+    });
+    if (open && !wasOpen) sidebarReturnFocus = document.activeElement;
+    if (!open && sidebar.contains(document.activeElement)) {
+        const trigger = [sidebarReturnFocus, $("mobile-menu-btn"), ...document.querySelectorAll(".workspace-mobile-menu")]
+            .find(element => element && !sidebar.contains(element) && element.getClientRects().length);
+        trigger?.focus({ preventScroll: true });
+    }
+
+    if (open) {
         const nc = $("notification-center");
         if (nc) nc.classList.remove("is-open");
     }
 
     sidebar.classList.toggle("open", open);
-    sidebar.inert = isMobileSidebar() && !open;
-    sidebar.setAttribute("aria-hidden", String(sidebar.inert));
-    document.querySelectorAll(".mobile-menu-btn, .workspace-mobile-menu, .sidebar-toggle").forEach(button => {
+    sidebar.inert = mobile && !open;
+    sidebar.setAttribute("aria-hidden", String(mobile && !open));
+    document.querySelectorAll("#mobile-menu-btn, #sidebar-toggle, .workspace-mobile-menu, #workspace-sidebar-toggle").forEach(button => {
         button.setAttribute("aria-controls", "sidebar");
-        button.setAttribute("aria-expanded", String(open && isMobileSidebar()));
+        button.setAttribute("aria-expanded", String(open || !mobile));
     });
     if (backdrop) {
-        backdrop.classList.toggle("active", open && isMobileSidebar());
+        backdrop.classList.toggle("active", open);
     }
+    if (open && !wasOpen) $("sidebar-toggle")?.focus({ preventScroll: true });
 }
 
 function closeSidebarOnMobile() {
@@ -35,31 +49,41 @@ function closeSidebarOnMobile() {
 
 window.closeSidebarOnMobile = closeSidebarOnMobile;
 
-// Mobile browser toolbars and keyboards can shrink the visual viewport without
-// changing 100dvh. Keep the composer inside the space the user can actually see.
 function syncMobileViewport() {
-    const viewport = window.visualViewport;
-    const style = document.documentElement.style;
-    if (isMobileSidebar() && viewport && viewport.scale === 1) {
-        style.setProperty("--mobile-viewport-height", `${Math.round(viewport.height)}px`);
-        style.setProperty("--mobile-viewport-top", `${Math.round(viewport.offsetTop)}px`);
-    } else {
-        style.removeProperty("--mobile-viewport-height");
-        style.removeProperty("--mobile-viewport-top");
+    const root = document.documentElement;
+    if (!isMobileSidebar()) {
+        ["--mobile-viewport-height", "--mobile-viewport-offset-top", "--mobile-composer-height"]
+            .forEach(name => root.style.removeProperty(name));
+        autoResizeInput();
+        return;
     }
+    const viewport = window.visualViewport;
+    if (viewport && Math.abs(viewport.scale - 1) > 0.01) return;
+    root.style.setProperty("--mobile-viewport-height", `${viewport?.height || window.innerHeight}px`);
+    root.style.setProperty("--mobile-viewport-offset-top", `${viewport?.offsetTop || 0}px`);
     autoResizeInput();
+    const composer = document.querySelector(".input-area");
+    if (composer) root.style.setProperty("--mobile-composer-height", `${composer.getBoundingClientRect().height}px`);
 }
 
 function initListeners() {
     if (state.listenersInitialized) return;
     state.listenersInitialized = true;
 
+    const sidebarMedia = window.matchMedia("(max-width: 768px)");
+    sidebarMedia.addEventListener("change", () => {
+        setSidebarOpen(false);
+        syncMobileViewport();
+    });
     setSidebarOpen(false);
     syncMobileViewport();
+    window.addEventListener("resize", syncMobileViewport);
     window.visualViewport?.addEventListener("resize", syncMobileViewport);
     window.visualViewport?.addEventListener("scroll", syncMobileViewport);
-    window.addEventListener("resize", syncMobileViewport);
-    sidebarMediaQuery.addEventListener("change", () => setSidebarOpen(false));
+    if (typeof ResizeObserver !== "undefined") {
+        const composer = document.querySelector(".input-area");
+        if (composer) new ResizeObserver(syncMobileViewport).observe(composer);
+    }
 
     btnSend.addEventListener("click", sendMessage);
 

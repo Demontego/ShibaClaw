@@ -41,15 +41,15 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novedades — v1.0.5</b> (haz clic para expandir)</summary>
+<summary>🚀 <b>Novedades — v1.0.6</b> (haz clic para expandir)</summary>
 
-**Versión v1.0.5 (2026-10-16):**
+**Versión v1.0.6 (2026-10-16):**
 
-- **Perfiles especialistas y biblioteca** — Añade `agent_send` exclusivo del propietario, un grafo de perfiles y documentos de personalidad y personas editables. Las sesiones de agentes no pueden encadenar mensajes; las sesiones privadas no pueden usar `agent_send`.
-- **Ejecuciones del agente más seguras** — Añade comprobaciones previas de herramientas, enmascaramiento de resultados antiguos, compactación que conserva artefactos, cortacircuitos, modos de contexto para subagentes, controles de recursos y una condición de CI para las fusiones de autoevolución.
-- **Inicio de sesión con suscripción y selección de modelos** — Añade flujos OAuth de suscripción y selectores de modelos a la WebUI.
-- **Correcciones de fiabilidad** — Corrige la privacidad y los contextos concurrentes, el protocolo de herramientas, los metadatos iniciales en Windows, las huellas de aprobación, las listas de modelos permitidos por perfil, OAuth y los archivos de interfaz incluidos en el paquete.
-- **Validación del endpoint de Gemini** — Exige una coincidencia exacta del nombre de host para impedir que dominios similares se traten como el catálogo de modelos de Google.
+- **Diseño v1.0.3, mejoras del motor reintegradas** — Conserva el diseño original de la interfaz de v1.0.3 y reintegra las mejoras y correcciones ajenas a la interfaz de v1.0.4/v1.0.5: fiabilidad del motor, reintentos y catálogos de proveedores, OAuth de suscripción, automatizaciones, subagentes y autoevolución opcional. Mantiene las protecciones de privacidad, la validación exacta del host del catálogo de Gemini y las actualizaciones de seguridad de las dependencias. No incluye el rediseño posterior de la interfaz.
+- **Correcciones específicas de la interfaz** — Mantiene accesibles el historial y los controles de la barra lateral y mueve Ajustes al pie compacto. El indicador de uso del contexto es el único botón accesible de contexto. El escritorio y los teléfonos más anchos usan una barra del editor; los teléfonos estrechos usan dos filas con controles táctiles de 44px, nombres de modelos en una línea y contexto solo en porcentaje. Los menús de modelo, razonamiento y colección comparten el tema, siguen sus botones y permanecen dentro de la pantalla.
+- **Tarjetas de acceso por suscripción restauradas** — Ajustes vuelve a mostrar las tarjetas de Claude y Google Gemini, con entrada de código y estado de conexión. Gemini sigue requiriendo configurar en el servidor `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` y `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. No se ha verificado el inicio de sesión OAuth real para esta versión.
+- **Panel de estado Evolution restaurado** — Recupera el acceso al panel Evolution de solo lectura, manteniendo el estilo de la interfaz.
+- **Funciones de Library restauradas** — Recupera el grafo de relaciones entre perfiles y sus detalles, junto con los documentos editables You y People, manteniendo el diseño original. Library utiliza una sola barra compacta y un selector de sección en pantallas estrechas. La barra lateral usa iconos compactos con nombres al pasar el cursor o enfocar y etiquetas visibles en pantallas táctiles.
 
 Consulta el [Changelog](./CHANGELOG.md) para el historial completo de versiones.
 
@@ -193,6 +193,7 @@ ShibaClaw usa SDK nativos —— sin proxy LiteLLM —— y resuelve el proveedo
 | OpenRouter | Flujo PKCE en navegador, guarda la API key devuelta en la config del proveedor | Ajustes WebUI |
 | GitHub Copilot | Flujo de dispositivo, refresco automático de token | `shibaclaw provider login github-copilot` o Ajustes WebUI |
 | OpenAI Codex | Flujo PKCE en navegador | `shibaclaw provider login openai-codex` o Ajustes WebUI |
+| Claude | Flujo PKCE en el navegador con entrada del código de autorización, mediante suscripción de Claude | Ajustes WebUI |
 | Google Gemini CLI | Flujo PKCE en navegador, requiere las variables `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` y `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. **Nota:** Integración de terceros no oficial; Google puede aplicar restricciones de cuenta. Usa una cuenta separada si es un problema. | Ajustes WebUI |
 
 Para OpenRouter, la callback reutiliza por defecto la URL y puerto actuales de la WebUI, por lo que `http://localhost:3000` no es un puerto exclusivo de OAuth. Si expones la WebUI detrás de un proxy inverso o necesitas un origen de callback público distinto, define `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://your-public-webui-host` antes de iniciar el servidor.

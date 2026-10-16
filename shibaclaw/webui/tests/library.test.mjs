@@ -62,3 +62,67 @@ test('library graph and personal tabs dismiss existing panels and profile nodes 
     assert.equal(nodes['workspace-library-book'].hidden, false);
     assert.equal(nodes['library-tab-you'].getAttribute('aria-current'), 'page');
 });
+
+test('failed document reads expose an error without offering an empty overwrite', async () => {
+    const { context: app, nodes, requests } = browserFixture();
+    app.openLibraryYou();
+    requests[0].resolve({ ok: false, status: 404 });
+    await settle();
+    assert.match(nodes['library-sheet'].textContent, /Unable to load/);
+    assert.equal(nodes['library-sheet'].querySelector('.library-edit'), null);
+    assert.equal(requests.length, 1);
+});
+
+test('an obsolete graph response cannot replace personal documents', async () => {
+    const { context: app, nodes, requests } = browserFixture();
+    app.openWorkspaceLibrary();
+    app.openLibraryYou();
+    requests[1].resolve({ ok: true, text: async () => '# Current user\n\nNotes' });
+    await settle();
+    requests[0].resolve(profileResponse([{ id: 'obsolete' }]));
+    await settle();
+    assert.equal(requests.length, 2, 'obsolete lists must not trigger detail requests');
+    assert.equal(nodes['workspace-agent-graph'].hidden, true);
+    assert.match(nodes['library-sheet'].textContent, /Current user/);
+});
+
+test('People lists existing documents, filters names and retains edits on save failure', async () => {
+    const { context: app, nodes, requests } = browserFixture();
+    app.openLibraryPeople();
+    requests[0].resolve({ ok: true, json: async () => ({ items: [
+        { name: 'README.md', path: 'memory/people/README.md' },
+        { name: '12_Alex.md', path: 'memory/people/12_Alex.md' },
+        { name: '13_Sam.md', path: 'memory/people/13_Sam.md' },
+    ] }) });
+    await settle();
+    const buttons = nodes['library-people'].querySelectorAll('.library-rail-item');
+    assert.equal(buttons.length, 2);
+    // The real DOM click method is represented by dispatchEvent in this fixture.
+    requests[1].resolve({ ok: true, text: async () => '## Preferences\n\nOriginal' });
+    await settle();
+    nodes['library-people-search'].value = 'alex';
+    nodes['library-people-search'].dispatchEvent({ type: 'input' });
+    assert.equal(buttons[0].hidden, false);
+    assert.equal(buttons[1].hidden, true);
+    const sheet = nodes['library-sheet'];
+    const edit = sheet.querySelector('.library-edit');
+    edit.dispatchEvent({ type: 'click' });
+    sheet.querySelector('[data-role=body]').value = 'Unsaved';
+    edit.dispatchEvent({ type: 'click' });
+    assert.equal(JSON.parse(requests[2].options.body).path, 'memory/people/12_Alex.md');
+    requests[2].resolve({ ok: false, status: 403 });
+    await settle();
+    assert.equal(sheet.querySelector('[data-role=body]').value, 'Unsaved');
+    assert.equal(sheet.querySelector('.library-editor-status').textContent, 'Error');
+});
+
+test('profile detail failures cannot save a fabricated empty soul', async () => {
+    const { context: app, nodes, requests } = browserFixture();
+    app.openWorkspaceLibrary();
+    requests[0].resolve(profileResponse([{ id: 'default', label: '<Owner>' }]));
+    await settle();
+    requests[1].resolve({ ok: false, status: 403 });
+    await settle();
+    assert.match(nodes['agent-graph-detail'].textContent, /Unable to load/);
+    assert.equal(nodes['agent-graph-detail'].querySelector('.library-edit'), null);
+});

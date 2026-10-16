@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from shibaclaw.webui.agent_manager import agent_manager
+from shibaclaw.webui.routers.settings import invalidate_models_cache
 
 
 def get_oauth_providers_status() -> list[dict]:
@@ -191,6 +192,7 @@ async def api_oauth_disconnect(request: Request):
         store = OAuthTokenStore()
         store.delete_token(provider)
 
+    invalidate_models_cache()
     return JSONResponse({"ok": True})
 
 async def api_oauth_job(request: Request):
@@ -199,6 +201,8 @@ async def api_oauth_job(request: Request):
     j = jobs.get(job_id)
     if not j:
         return JSONResponse({"error": "Job not found"}, status_code=404)
+    if j.get("status") == "done":
+        invalidate_models_cache()
     return JSONResponse({"job": {k: v for k, v in j.items() if not k.startswith("_")}})
 
 

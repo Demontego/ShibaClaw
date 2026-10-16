@@ -1,5 +1,30 @@
 ## [Unreleased]
 
+## [1.0.6] - 2026-10-16
+
+### Changed
+- **v1.0.3 design with restored runtime improvements** — Keeps the original v1.0.3 interface design while reintegrating the non-UI improvements and fixes from v1.0.4 and v1.0.5 under version 1.0.6. The original visual design remains the baseline, with targeted mobile usability fixes and restored Library and Evolution workspace features.
+- **Runtime reliability and delegation** — Restores provider retry and explicit model fallbacks, safe outage caching, durable turn journaling, coordinated cancellation and reset, tool and context guards, artifact-preserving compaction, resource monitoring, `spawn_mea`, isolated and forked subagent contexts, and owner-only `agent_send` sessions.
+- **Automation, OAuth, and evolution** — Restores concurrent automation-store updates and approval compatibility, profile model restrictions, subscription OAuth and authenticated model catalogs, and opt-in self-evolution with local Ruff/pytest and PR CI merge gates. These runtime and backend capabilities use the retained v1.0.3 interface design.
+
+### Fixed
+- **Library workspace features** — Restores the profile relationship graph and profile details, plus editable You and People documents, within the original visual design. A single compact toolbar combines the title and section tabs; narrow layouts use a section selector without repeating the page title and subtitle.
+- **Evolution status panel** — Restores access to the read-only Evolution workspace panel in the retained interface.
+- **Subscription logins in settings** — Restores the Claude and Google Gemini OAuth login cards in the retained interface, including authorization-code entry and connection status. Gemini still requires server-side `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` and `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET` configuration; live OAuth sign-in has not been verified for this version.
+- **Consistent composer menus** — Aligns model, reasoning-effort, and collection menus with their buttons, shares their surfaces, borders, option rows and selection checks, and keeps open menus bounded after resizing.
+- **Compact sidebar navigation** — Uses a six-icon grid with full names in hover/focus overlays, a visible current-section caption, and persistent labels on touch layouts. Existing accessible names, active-page state and navigation actions are retained.
+- **Compact sidebar settings** — Places Settings alongside the footer icons and reduces footer spacing, with accessible labels and mobile touch targets.
+- **Streamlined chat controls** — Uses the accessible context-usage button as the single context control and places attachment, microphone, selectors, context usage, and send controls in one toolbar on desktop and at widths of 520px or more. Narrower phones use two toolbar rows with 44px touch targets. Mobile clips long model names to one line with an ellipsis and shows context usage as a percentage. The model dropdown opens above its compact button and stays inside the viewport after resizing.
+- **Mobile sidebar access** — Makes the sidebar's middle section scroll independently so history and footer controls remain reachable, and aligns menu focus, `inert`, and accessibility state when opening and closing navigation.
+- **Mobile chat composer** — Fits the shell to the visible viewport, including keyboard-related viewport changes, caps and scrolls multiline input, and provides separate touch controls of at least 44px. Profile, model, reasoning, knowledge-base, and language dropdowns stay bounded and scrollable.
+- **Privacy and tool protocol** — Reintegrates private-session and concurrent-context isolation, complete tool-call/result ordering during compaction and delegation, fresh file reads, and safe preflight path normalization from v1.0.4/v1.0.5.
+- **OAuth credentials and responsiveness** — Restores token exchanges off the event loop and targeted removal of Claude subscription credentials on disconnect.
+- **Fresh model catalogs** — Invalidates the backend model cache after settings and OAuth account changes; a request already in progress cannot refill the cache with the previous catalog.
+
+### Security
+- **Gemini catalog host validation** — Restores the provider catalog code with an exact parsed host check for `generativelanguage.googleapis.com`, preventing lookalike hosts from selecting Google's model catalog endpoint.
+- **Dependency baseline** — Retains the PyJWT minimum of 2.14.0, locked urllib3 2.8.0 and pypdf 6.19.0, and the WhatsApp bridge's `music-metadata` override alongside its existing `sharp` and `protobufjs` overrides.
+
 ## [1.0.5] - 2026-10-16
 
 ### Added

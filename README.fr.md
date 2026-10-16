@@ -41,15 +41,15 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Nouveautés — v1.0.5</b> (cliquez pour déplier)</summary>
+<summary>🚀 <b>Nouveautés — v1.0.6</b> (cliquez pour déplier)</summary>
 
-**Version v1.0.5 (2026-10-16) :**
+**Version v1.0.6 (2026-10-16) :**
 
-- **Profils spécialisés et bibliothèque** — Ajoute `agent_send` réservé au propriétaire, un graphe des profils et des documents de personnalité et de personnes modifiables. Les sessions d'agents ne peuvent pas enchaîner les messages ; les sessions privées ne peuvent pas utiliser `agent_send`.
-- **Exécutions de l'agent mieux protégées** — Ajoute des vérifications préalables des outils, le masquage des anciens résultats, une compression préservant les artefacts, des coupe-circuits, des modes de contexte pour les sous-agents, des contrôles de ressources et un contrôle CI avant les fusions d'auto-évolution.
-- **Connexion par abonnement et choix du modèle** — Ajoute des parcours OAuth pour les abonnements et des sélecteurs de modèles dans la WebUI.
-- **Corrections de fiabilité** — Corrige la confidentialité et les contextes concurrents, le protocole des outils, les métadonnées initiales sous Windows, les empreintes d'approbation, les listes de modèles autorisés par profil, OAuth et les fichiers d'interface inclus dans le paquet.
-- **Validation du point de terminaison Gemini** — Exige une correspondance exacte du nom d'hôte afin que les domaines similaires ne soient pas traités comme le catalogue de modèles de Google.
+- **Design v1.0.3, améliorations du moteur réintégrées** — Conserve le design original de l’interface de v1.0.3 et réintègre les améliorations et correctifs hors interface de v1.0.4/v1.0.5 : fiabilité du moteur, nouvelles tentatives et catalogues des fournisseurs, OAuth par abonnement, automatisations, sous-agents et auto-évolution facultative. Les protections de confidentialité, la validation exacte de l’hôte du catalogue Gemini et les mises à jour de sécurité des dépendances sont conservées. La refonte ultérieure de l’interface n’est pas incluse.
+- **Corrections ciblées de l’interface** — Garde accessibles l’historique et les commandes de la barre latérale et place les paramètres dans son pied compact. L’indicateur de contexte devient l’unique bouton de contexte accessible. L’ordinateur et les téléphones larges utilisent une seule barre de saisie ; les téléphones étroits utilisent deux rangées avec des cibles tactiles de 44px, des noms de modèles sur une ligne et le contexte en pourcentage. Les menus de modèle, d’effort de raisonnement et de collection partagent le thème, suivent leurs boutons et restent dans l’écran.
+- **Cartes de connexion par abonnement rétablies** — Les paramètres affichent de nouveau Claude et Google Gemini, avec saisie du code et état de connexion. Gemini exige toujours la configuration côté serveur de `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` et `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. La connexion OAuth réelle n’a pas été vérifiée pour cette version.
+- **Panneau d’état Evolution rétabli** — Rétablit l’accès au panneau Evolution en lecture seule, en conservant le style de l’interface.
+- **Fonctions Library rétablies** — Rétablit le graphe des relations entre profils et leurs détails, ainsi que les documents modifiables You et People, dans le design original. Library utilise une seule barre compacte et un sélecteur de section sur les écrans étroits. La navigation latérale utilise des icônes compactes avec les noms au survol ou au focus et des libellés visibles sur écran tactile.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
 
@@ -193,6 +193,7 @@ ShibaClaw utilise des SDK natifs —— sans proxy LiteLLM —— et résout le 
 | OpenRouter | Flux PKCE navigateur, stocke la clé API renvoyée dans la config du fournisseur | Paramètres WebUI |
 | GitHub Copilot | Flux device, rafraîchissement automatique du jeton | `shibaclaw provider login github-copilot` ou Paramètres WebUI |
 | OpenAI Codex | Flux PKCE navigateur | `shibaclaw provider login openai-codex` ou Paramètres WebUI |
+| Claude | Flux PKCE dans le navigateur avec saisie du code d’autorisation, via l’abonnement Claude | Paramètres WebUI |
 | Google Gemini CLI | Flux PKCE navigateur, nécessite les variables d'environnement `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` et `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`. **Note :** Intégration tierce non officielle ; Google peut appliquer des restrictions de compte. Utilisez un compte séparé si cela vous préoccupe. | Paramètres WebUI |
 
 Pour OpenRouter, le callback réutilise par défaut l'URL et le port actuels de la WebUI, donc `http://localhost:3000` n'est pas un port OAuth dédié. Si vous exposez la WebUI derrière un proxy inverse ou avez besoin d'une origine de callback publique différente, définissez `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://your-public-webui-host` avant de démarrer le serveur.
