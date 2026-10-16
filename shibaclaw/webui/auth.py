@@ -94,7 +94,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if any(path.startswith(p) for p in PUBLIC_PATHS):
             return await call_next(request)
-        if path in {"/", "/classic"}:
+        if path in {"/", "/desktop"}:
             return await call_next(request)
         if not check_token(request):
             return JSONResponse({"error": "Unauthorized"}, status_code=401)

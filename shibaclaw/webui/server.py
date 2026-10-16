@@ -184,8 +184,8 @@ def create_app(
         return response
 
     routes = [
-        Route("/", desktop_index),
-        Route("/classic", index),
+        Route("/", index),
+        Route("/desktop", desktop_index),
         Route("/api/auth/verify", api_auth_verify, methods=["POST"]),
         Route("/api/auth/status", api_auth_status, methods=["GET"]),
         Route("/api/auth/setup", api_auth_setup, methods=["POST"]),

@@ -215,8 +215,8 @@ export function App() {
             </section>
           ))}
         </div>
-        <a href="/classic" className="border-t border-white/10 px-4 py-3 text-[12px] text-[#98989d] hover:text-white">
-          Classic tools
+        <a href="/" className="border-t border-white/10 px-4 py-3 text-[12px] text-[#98989d] hover:text-white">
+          Full app
         </a>
       </aside>
 
