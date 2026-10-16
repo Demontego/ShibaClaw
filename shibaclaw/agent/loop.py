@@ -27,6 +27,7 @@ from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
+from shibaclaw.agent.tools.preflight import ToolPreflightGuard
 from shibaclaw.agent.turn_journal import REFUSAL, JournalError, TurnJournal
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
@@ -448,6 +449,16 @@ class ShibaBrain:
                 router=self.session_router,
             )
         )
+        from shibaclaw.agent.tools.agent_send import AgentSendTool
+
+        self.tools.register(
+            AgentSendTool(
+                sessions=self.sessions,
+                bus=self.bus,
+                workspace=self.workspace,
+                owner_ids=_telegram_allow_from_ids(self.channels_config),
+            )
+        )
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(SpawnMeaTool(manager=self.subagents))
         if self.automation_service:
@@ -590,6 +601,8 @@ class ShibaBrain:
         model: str | None = None,
         provider: Any | None = None,
         metadata: dict | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
+        profile_id: str | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
         for name in ("message", "spawn", "spawn_mea", "automation", "think"):
@@ -598,7 +611,11 @@ class ShibaBrain:
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
                     elif name in {"spawn", "spawn_mea"}:
-                        kwargs = {"model": model, "provider": provider}
+                        kwargs = {
+                            "model": model,
+                            "provider": provider,
+                            "parent_messages": parent_messages,
+                        }
                         if name == "spawn_mea":
                             kwargs["ephemeral"] = self._checkpoint_forbidden(session_key, metadata)
                         tool.set_context(
@@ -625,6 +642,15 @@ class ShibaBrain:
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     tool.set_context(channel, chat_id, metadata=metadata or {})
+        if tool := self.tools.get("agent_send"):
+            if hasattr(tool, "set_context"):
+                tool.set_context(
+                    channel,
+                    chat_id,
+                    session_key,
+                    metadata=metadata or {},
+                    profile_id=profile_id,
+                )
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -655,6 +681,26 @@ class ShibaBrain:
             return f'{tc.name}("{val}")'
 
         return ", ".join(_fmt(tc) for tc in tool_calls)
+
+    @staticmethod
+    def _resolve_model(
+        profile_id: str | None,
+        session_metadata: dict | None,
+        workspace: str | Path,
+    ) -> str | None:
+        """Session metadata model wins over profile manifest."""
+        meta = session_metadata or {}
+        raw = meta.get("model")
+        if raw is not None:
+            text = str(raw).strip()
+            if text:
+                return text
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            return ProfileManager(workspace).get_model(profile_id)
+        except Exception:
+            return None
 
     @staticmethod
     def _resolve_temperature(
@@ -813,6 +859,8 @@ class ShibaBrain:
             model=active_model,
             provider=active_provider,
             metadata=metadata,
+            parent_messages=messages,
+            profile_id=profile_id,
         )
 
         if not active_provider:
@@ -823,6 +871,9 @@ class ShibaBrain:
             self.tools.get_definitions(), profile_id
         )
         tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
+        from shibaclaw.agent.tools.agent_send import hide_agent_send
+
+        tool_defs = hide_agent_send(tool_defs, session_key)
 
         if session_key:
             self._steering_queues.setdefault(session_key, [])
@@ -964,7 +1015,13 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            prompt_messages = context_overflow_guard.budget_context(messages)
+            # Mask a copy for the provider. The wake transcript keeps the real tool output.
+            prompt_messages = context_overflow_guard.budget_context(
+                context_overflow_guard.mask_observations(
+                    [dict(item) for item in messages],
+                    keep_recent_turns=3,
+                )
+            )
 
             response = await active_provider.chat_with_retry_streaming(
                 messages=prompt_messages,
@@ -989,7 +1046,12 @@ class ShibaBrain:
                         session_key=session_key or "",
                     )
                     if overflow_action == "compress":
-                        prompt_messages = context_overflow_guard.budget_context(messages)
+                        prompt_messages = context_overflow_guard.budget_context(
+                            context_overflow_guard.mask_observations(
+                                [dict(item) for item in messages],
+                                keep_recent_turns=3,
+                            )
+                        )
                 except ContextOverflowError as exc:
                     logger.error("ContextOverflowGuard hard limit: {}", exc)
                     keep_checkpoint = True
@@ -1058,6 +1120,15 @@ class ShibaBrain:
                         )
                         answered_calls.add(tool_call.id)
                         continue
+                    if tool_call.name == "agent_send" and str(session_key or "").startswith("agent:"):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            "Error: agent_send is hidden on an agent session.",
+                        )
+                        answered_calls.add(tool_call.id)
+                        continue
                     if self._tool_disabled_for_profile(tool_call.name, profile_id):
                         messages = self.context.add_tool_result(
                             messages,
@@ -1084,6 +1155,23 @@ class ShibaBrain:
                         )
                         answered_calls.add(tool_call.id)
                         continue
+                    preflight_res = ToolPreflightGuard.process(
+                        tool_name=tool_call.name,
+                        args=tool_call.arguments or {},
+                        tool_instance=self.tools.get(tool_call.name),
+                    )
+                    if not preflight_res.success:
+                        logger.warning(
+                            "PreflightGuard blocked execution for tool '{}': {}",
+                            tool_call.name,
+                            preflight_res.error,
+                        )
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, preflight_res.error
+                        )
+                        answered_calls.add(tool_call.id)
+                        continue
+                    tool_call.arguments = preflight_res.arguments
                     async def _run_tool(call: Any = tool_call) -> str:
                         result = ""
                         for tool_attempt in range(1, 4):
@@ -1615,6 +1703,7 @@ class ShibaBrain:
         on_progress: Callable[[str, bool], Awaitable[None]] | None = None,
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
+        model_override: str | None = None,
     ) -> OutboundMessage | None:
         cmd_head = msg.content.strip().lower().split()
         head = cmd_head[0].split("@", 1)[0] if cmd_head else ""
@@ -1642,8 +1731,9 @@ class ShibaBrain:
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=session.metadata.get("model") or None,
+                model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
                 metadata=msg.metadata,
+                profile_id=profile_id,
             )
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
@@ -1688,7 +1778,7 @@ class ShibaBrain:
         preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
         key = session_key or msg.session_key
 
-        if self.session_router:
+        if self.session_router and not str(key).startswith("agent:"):
             if resolved_key := self.session_router.resolve(key):
                 logger.info("Cross-session route: {} -> {}", key, resolved_key)
                 key = resolved_key
@@ -1901,8 +1991,9 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=session.metadata.get("model") or None,
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
+            profile_id=profile_id,
         )
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
@@ -2002,7 +2093,7 @@ class ShibaBrain:
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=session.metadata.get("model") or None,
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
@@ -2150,6 +2241,7 @@ class ShibaBrain:
         media: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         profile_id: str | None = None,
+        model: str | None = None,
     ) -> OutboundMessage | None:
         await self.mcp.connect()
         msg = InboundMessage(
@@ -2171,6 +2263,7 @@ class ShibaBrain:
                 on_progress=on_progress,
                 on_response_token=on_response_token,
                 profile_id_override=profile_id,
+                model_override=model,
             )
         finally:
             if task is not None:

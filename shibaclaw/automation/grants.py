@@ -32,6 +32,7 @@ def operation_fingerprint(
             "to": payload.to,
             "session_key": payload.session_key,
             "profile_id": payload.profile_id,
+            "model": payload.model,
             "targets": payload.targets,
         },
     }

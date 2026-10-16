@@ -64,6 +64,7 @@ ShibaClaw is a self-hosted AI agent you run on your own machine or server: a Pyt
 
 ## Features
 
+- **Advanced Safety & Resilience (SRE)** — StuckDetector, Cost Circuit Breakers, Context Overflow Guard, Agentic SRE, CheckpointManager, IdempotentSaga, SelfRepair, HardStepCap, SREMonitor, and LayeredDefense
 - **Security-first core** — encrypted credentials vault, install-time CVE audit, prompt-injection wrapping, SSRF/DNS-rebinding guard
 - **Three-tier memory & WebUI Manager** — working, semantic (FAISS), and procedural memory with interactive WebUI management, live editing, dream diary, and safe quarantine
 - **Human-in-the-loop interactive UX** — structured in-turn prompts (`ask_user`), masked vault credentials, progress cards, and dynamic permission sandboxing
@@ -278,6 +279,20 @@ Background tasks run on cron-like schedules or event triggers (messages, webhook
 ## Knowledge Base (RAG)
 
 Local, privacy-first retrieval-augmented generation: organize documents into named collections (PDF, CSV, HTML, TXT, Markdown), upload via drag-and-drop, and search with a FAISS index over `all-MiniLM-L6-v2` embeddings. The agent can call `knowledge_search` during conversation, or you can target a specific collection with `@kb:name`. It's an optional dependency — install with `pip install shibaclaw[rag]`.
+
+## Safety & Resilience (SRE)
+
+ShibaClaw includes a suite of advanced, production-grade safety and resilience features to ensure reliable and cost-effective execution:
+
+- **StuckDetector**: Monitors agent progress to detect repetitive actions, tool-call loops, or lack of progress, automatically triggering goal reassessment and recovery prompts.
+- **Cost Circuit Breakers**: Prevents runaway API costs by enforcing strict budget limits per session and automatically halting execution when thresholds are exceeded.
+- **Context Overflow Guard**: A three-threshold guardrail (Warning, Critical, Hard Limit) that manages context window limits with automatic summarization, token compression, and emergency checkpointing.
+- **Agentic SRE**: Specialized Monitor, Recovery, and Audit agents that continuously track liveness, progress, and quality, ensuring autonomous self-healing, system stability, and continuous improvement of the core agent loop.
+- **CheckpointManager**: Saves and restores agent state to allow seamless resumption of long-running tasks, preventing progress loss, ensuring state consistency, and enabling robust recovery of the execution context, state, memory, and progress tracking capabilities of the core agent loop system architecture design pattern implementation framework library module package bundle component element unit system architecture design pattern architecture design pattern architecture design pattern framework library module package bundle component pattern implementation.
+- **IdempotentSaga**: Ensures safe, transactional execution of multi-step tasks with side effects, automatic rollback capabilities, and strict idempotency guarantees.
+- **Self-Repair**: Automatically diagnoses and repairs internal control mechanisms upon failure to maintain operational continuity, system integrity, and self-healing capabilities.
+- **Hard Step Caps**: Enforces strict limits on the number of execution steps to prevent infinite loops, runaway token consumption, and execution stalls.
+- **LayeredDefense**: Integrates all safety and resilience mechanisms into a unified, multi-layered defense system to guarantee robust, fault-tolerant execution and system reliability.
 
 ## Troubleshooting
 

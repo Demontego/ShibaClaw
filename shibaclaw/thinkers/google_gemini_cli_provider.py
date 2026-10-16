@@ -1,6 +1,5 @@
 """Google Gemini CLI provider."""
 
-import os
 from typing import Any
 
 import httpx
@@ -48,8 +47,9 @@ class GoogleGeminiCLIThinker(OpenAIThinker):
                 "Please login again."
             )
 
-        client_id = os.environ.get("SHIBACLAW_GEMINI_OAUTH_CLIENT_ID", "").strip()
-        client_secret = os.environ.get("SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET", "").strip()
+        from shibaclaw.cli.subscription_oauth import gemini_client
+
+        client_id, client_secret = gemini_client()
 
         if not client_id:
             raise ValueError(
@@ -98,7 +98,13 @@ class GoogleGeminiCLIThinker(OpenAIThinker):
             logger.error("Failed to authenticate Google Gemini CLI while fetching models: {}", e)
             return []
 
-        return await super().get_available_models()
+        models = await super().get_available_models()
+        if models:
+            return models
+        from shibaclaw.cli.model_info import get_all_models
+
+        # shortcut: the CLI token is accepted for chat, but the model-list call returns 403.
+        return [{"id": mid, "name": mid} for mid in get_all_models() if mid.startswith("gemini-")]
 
     async def chat(
         self,

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from shibaclaw.automation.types import AutomationPayload, AutomationSchedule
+from shibaclaw.evolve.ci_gate import github_ci, run_local_ci
 from shibaclaw.evolve.gate import (
     ALARM_MS,
     CAMPAIGN,
@@ -180,7 +181,7 @@ def handle(
 
         if repo is None:
             return "evolve check needs --repo", 64
-        reason = check_repo(repo)
+        reason = check_repo(repo) or run_local_ci(repo) or github_ci(repo)
         if reason:
             return reason, 1
         return "evolve check ok", 0

@@ -103,22 +103,29 @@ function findAvailableModel(modelId) {
     }) || null;
 }
 
-function createModelListItem(model, currentModelId, onSelect) {
+function _modelGroupKey(model) {
+    return model.provider_label || model.provider || "";
+}
+
+function _modelRowName(model, group) {
+    const name = String(model.name || model.raw_id || model.id || "");
+    const prefix = group + ":";
+    if (group && name.startsWith(prefix)) return name.slice(prefix.length).trim();
+    return name;
+}
+
+function createModelListItem(model, currentModelId, onSelect, rowName) {
     const item = document.createElement("div");
     item.className = "model-item" + (model.id === currentModelId ? " selected" : "");
 
     const nameEl = document.createElement("span");
     nameEl.className = "model-item-name";
-    nameEl.textContent = model.name || model.raw_id || model.id || "";
-
-    const providerEl = document.createElement("span");
-    providerEl.className = "model-item-provider";
-    providerEl.textContent = model.provider_label || model.provider || "";
+    nameEl.textContent = rowName || model.name || model.raw_id || model.id || "";
 
     item.appendChild(nameEl);
-    item.appendChild(providerEl);
     item.title = [model.raw_id || model.id || "", model.provider_label || model.provider || ""].filter(Boolean).join(" • ");
-    item.addEventListener("click", (e) => {
+    item.addEventListener("mousedown", (e) => {
+        e.preventDefault();
         e.stopPropagation();
         onSelect(model);
     });
@@ -127,12 +134,28 @@ function createModelListItem(model, currentModelId, onSelect) {
 
 function renderModelList(list, models, currentModelId, onSelect, extraItems = []) {
     list.innerHTML = "";
-    const allItems = [...extraItems, ...models];
-    if (!allItems.length) {
+    if (!extraItems.length && !models.length) {
         list.innerHTML = `<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${escapeHtml(typeof t === "function" ? t("chat.no_models") : "No models found")}</div>`;
         return;
     }
-    allItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
+    extraItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
+    const groups = new Map();
+    for (const model of models) {
+        const key = _modelGroupKey(model) || (model.provider_label || "");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(model);
+    }
+    for (const [key, items] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        if (key) {
+            const head = document.createElement("div");
+            head.className = "model-group-label";
+            head.textContent = key;
+            list.appendChild(head);
+        }
+        for (const model of items) {
+            list.appendChild(createModelListItem(model, currentModelId, onSelect, _modelRowName(model, key)));
+        }
+    }
 }
 
 let _activeSessionReasoningEffort = null;
@@ -215,6 +238,7 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
         btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";
         if (menu) menu.style.display = "none";
+        if (typeof syncComposerChips === "function") syncComposerChips();
         return;
     }
 
@@ -237,7 +261,23 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
     if (list) {
         renderReasoningDropdownList(list, effortStr, currentModel);
     }
+    if (typeof syncComposerChips === "function") syncComposerChips();
 }
+
+window.clearComposerEffort = async function () {
+    _activeSessionReasoningEffort = null;
+    updateReasoningSelectorDisplay(null, state.activeModelId);
+    if (!state.sessionId) return;
+    try {
+        await authFetch("/api/sessions/" + encodeURIComponent(state.sessionId), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reasoning_effort: null }),
+        });
+    } catch (e) {
+        console.error("Failed to clear session reasoning effort", e);
+    }
+};
 
 function renderReasoningDropdownList(container, currentEffort, modelId = null) {
     container.innerHTML = "";
@@ -342,11 +382,13 @@ async function updateModelSelectorDisplay(modelId) {
     }
 
     state.activeModelId = resolvedModelId || "";
+    display.textContent = resolvedModelId || "Default";
 
     await ensureAvailableModels();
     const match = findAvailableModel(resolvedModelId);
     const fullName = match ? (match.name || match.raw_id || match.id) : (resolvedModelId || "Default");
-    display.textContent = fullName;
+    const provider = match ? (match.provider_label || match.provider || "") : "";
+    display.textContent = provider ? `${match.name || fullName} · ${provider}` : fullName;
 
     if (btn) {
         const providerText = match && (match.provider_label || match.provider) ? ` (${match.provider_label || match.provider})` : "";
@@ -360,6 +402,20 @@ async function updateModelSelectorDisplay(modelId) {
     }
 }
 
+
+function placeSettingsModelMenu(button, menu) {
+    const rect = button.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 16;
+    const spaceAbove = rect.top - 16;
+    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const height = Math.max(180, Math.min(420, openUp ? spaceAbove : spaceBelow));
+    menu.style.position = "fixed";
+    menu.style.left = `${Math.max(8, rect.left)}px`;
+    menu.style.width = `${rect.width}px`;
+    menu.style.zIndex = "2000";
+    menu.style.maxHeight = `${height}px`;
+    menu.style.top = openUp ? `${rect.top - 8 - height}px` : `${rect.bottom + 8}px`;
+}
 
 function closeSettingsModelMenus(exceptMenu = null) {
     SETTINGS_MODEL_PICKERS.forEach(cfg => {
@@ -465,10 +521,11 @@ function setupSettingsModelPickers() {
 
             closeSettingsModelMenus(menu);
             menu.style.display = "flex";
+            placeSettingsModelMenu(button, menu);
             await ensureAvailableModels(list);
             search.value = "";
             renderSettingsModelPickerOptions(config);
-            search.focus();
+            search.focus({ preventScroll: true });
         });
 
         menu.addEventListener("click", (e) => e.stopPropagation());
@@ -476,6 +533,7 @@ function setupSettingsModelPickers() {
     });
 
     document.addEventListener("click", () => closeSettingsModelMenus());
+    document.getElementById("settings-body")?.addEventListener("scroll", () => closeSettingsModelMenus(), { passive: true });
     _settingsModelPickersInitialized = true;
 }
 
