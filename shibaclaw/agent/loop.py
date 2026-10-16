@@ -663,6 +663,26 @@ class ShibaBrain:
         return ", ".join(_fmt(tc) for tc in tool_calls)
 
     @staticmethod
+    def _resolve_model(
+        profile_id: str | None,
+        session_metadata: dict | None,
+        workspace: str | Path,
+    ) -> str | None:
+        """Session metadata model wins over profile manifest."""
+        meta = session_metadata or {}
+        raw = meta.get("model")
+        if raw is not None:
+            text = str(raw).strip()
+            if text:
+                return text
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            return ProfileManager(workspace).get_model(profile_id)
+        except Exception:
+            return None
+
+    @staticmethod
     def _resolve_temperature(
         profile_id: str | None,
         session_metadata: dict | None,
@@ -1678,7 +1698,7 @@ class ShibaBrain:
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=model_override or session.metadata.get("model") or None,
+                model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
                 metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
@@ -1937,7 +1957,7 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=model_override or session.metadata.get("model") or None,
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
@@ -2038,7 +2058,7 @@ class ShibaBrain:
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=model_override or session.metadata.get("model") or None,
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
