@@ -100,6 +100,7 @@
         setMainPane(next);
         document.getElementById("workspace-agents").hidden = next !== "agents";
         document.getElementById("workspace-library-tabs").hidden = next !== "library";
+        applyLibraryMode(next);
         document.getElementById("workspace-app-actions").hidden = next !== "apps";
         const evolveActions = document.getElementById("workspace-evolve-actions");
         if (evolveActions) evolveActions.hidden = next !== "evolution";
@@ -128,6 +129,11 @@
         panel.dataset.backdropClose = "false";
         document.getElementById("workspace-stage").appendChild(panel);
         activePanel = id;
+        document.getElementById("workspace-library-book")?.setAttribute("hidden", "");
+        document.getElementById("workspace-agent-graph")?.setAttribute("hidden", "");
+        ["graph", "you", "people"].forEach(name => {
+            document.getElementById("library-tab-" + name)?.classList.remove("active");
+        });
         document.querySelectorAll("[data-workspace-modal]").forEach(button => {
             button.classList.toggle("active", button.dataset.workspaceModal === id);
             button.setAttribute("aria-current", button.dataset.workspaceModal === id ? "page" : "false");
@@ -250,6 +256,540 @@
         await window.openSettingsView();
         window.switchSettingsTab(extensions ? "extensions" : "tools");
         if (extensions) window.switchExtensionsSubTab("mcp");
+    };
+
+    let _libraryMode = "graph";
+
+    function applyLibraryMode(next = page) {
+        const on = next === "library" && !activePanel;
+        const graph = document.getElementById("workspace-agent-graph");
+        const book = document.getElementById("workspace-library-book");
+        const rail = book?.querySelector(".library-rail");
+        if (graph) graph.hidden = !on || _libraryMode !== "graph";
+        if (book) {
+            book.hidden = !on || _libraryMode === "graph";
+            book.classList.toggle("is-solo", on && _libraryMode === "you");
+            book.style.gridTemplateColumns = _libraryMode === "people" ? "" : "minmax(0, 1fr)";
+        }
+        if (rail) rail.hidden = _libraryMode !== "people";
+        const peopleOnly = _libraryMode === "people";
+        document.getElementById("library-you-title")?.toggleAttribute("hidden", peopleOnly);
+        document.getElementById("library-you")?.toggleAttribute("hidden", peopleOnly);
+        document.getElementById("library-people-title")?.toggleAttribute("hidden", !peopleOnly);
+        document.getElementById("library-people-search")?.toggleAttribute("hidden", !peopleOnly);
+        document.getElementById("library-people")?.toggleAttribute("hidden", !peopleOnly);
+        ["graph", "you", "people"].forEach(name => {
+            const tab = document.getElementById("library-tab-" + name);
+            if (!tab) return;
+            const current = on && _libraryMode === name;
+            tab.classList.toggle("active", current);
+            tab.setAttribute("aria-current", current ? "page" : "false");
+        });
+    }
+
+    function libraryRu() {
+        return t("workspace.library") === "Библиотека";
+    }
+
+    function libraryHue(id) {
+        let hue = 0;
+        for (const ch of String(id)) hue = (hue * 33 + ch.charCodeAt(0)) % 360;
+        return hue;
+    }
+
+    function libraryAvatar(id) {
+        const img = document.createElement("img");
+        img.src = "/static/shibaclaw_logo.webp";
+        img.alt = "";
+        const hue = libraryHue(id);
+        if (hue) img.style.filter = `hue-rotate(${hue}deg)`;
+        return img;
+    }
+
+    function libraryItem(title, id, onClick) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "library-rail-item";
+        const label = document.createElement("span");
+        label.textContent = title;
+        button.append(libraryAvatar(id), label);
+        button.addEventListener("click", () => {
+            document.querySelectorAll(".library-rail-item").forEach(item => item.classList.remove("active"));
+            button.classList.add("active");
+            onClick();
+        });
+        return button;
+    }
+
+    function librarySections(text) {
+        const body = String(text || "").replace(/^---[\s\S]*?---\s*/, "").trim();
+        const sections = [];
+        for (const part of body.split(/\n(?=## )/)) {
+            const block = part.trim();
+            if (!block) continue;
+            if (block.startsWith("## ")) {
+                const cut = block.indexOf("\n");
+                sections.push({
+                    title: (cut === -1 ? block.slice(3) : block.slice(3, cut)).trim(),
+                    body: cut === -1 ? "" : block.slice(cut + 1).trim(),
+                });
+            } else {
+                sections.push({ title: "", body: block });
+            }
+        }
+        return sections;
+    }
+
+    function fillLibraryBody(el, text) {
+        let list = null;
+        for (const line of String(text || "").split("\n")) {
+            const item = line.match(/^\s*[-*]\s+(.*)$/);
+            if (item) {
+                if (!list) {
+                    list = document.createElement("ul");
+                    el.append(list);
+                }
+                const li = document.createElement("li");
+                li.textContent = item[1].replace(/\*\*/g, "").replace(/`([^`]+)`/g, "$1");
+                list.append(li);
+                continue;
+            }
+            list = null;
+            const plain = line.trim().replace(/\*\*/g, "").replace(/`([^`]+)`/g, "$1");
+            if (!plain || plain === "---") continue;
+            const p = document.createElement("p");
+            p.textContent = plain.replace(/^#+\s+/, "");
+            el.append(p);
+        }
+    }
+
+    function paintSectionCards(host, source, editing) {
+        host.querySelectorAll(".library-doc").forEach(node => node.remove());
+        const sections = librarySections(source);
+        const rows = sections.length ? sections : [{ title: "", body: "" }];
+        for (const section of rows) {
+            const doc = document.createElement("article");
+            doc.className = "library-doc";
+            if (editing) {
+                if (section.title) {
+                    const head = document.createElement("div");
+                    head.className = "library-doc-head";
+                    const input = document.createElement("input");
+                    input.className = "library-doc-title";
+                    input.dataset.role = "title";
+                    input.value = section.title;
+                    head.append(input);
+                    doc.append(head);
+                }
+                const area = document.createElement("textarea");
+                area.className = "library-doc-edit";
+                area.dataset.role = "body";
+                area.value = section.body;
+                area.rows = Math.min(14, Math.max(3, section.body.split("\n").length));
+                doc.append(area);
+            } else if (section.title || section.body) {
+                if (section.title) {
+                    const head = document.createElement("div");
+                    head.className = "library-doc-head";
+                    const strong = document.createElement("strong");
+                    strong.textContent = section.title;
+                    head.append(strong);
+                    doc.append(head);
+                }
+                const body = document.createElement("div");
+                body.className = "library-doc-body";
+                fillLibraryBody(body, section.body);
+                doc.append(body);
+            }
+            host.append(doc);
+        }
+    }
+
+    function readSectionCards(host) {
+        const parts = [];
+        host.querySelectorAll(".library-doc").forEach(doc => {
+            const title = doc.querySelector("[data-role=title]")?.value.trim() || "";
+            const body = (doc.querySelector("[data-role=body]")?.value || "").trim();
+            if (!title && !body) return;
+            parts.push(title ? `## ${title}\n\n${body}` : body);
+        });
+        return parts.length ? parts.join("\n\n") + "\n" : "";
+    }
+
+    function visibleProfile(source) {
+        const front = String(source || "").match(/^---\n[\s\S]*?\n---\n*/);
+        const head = front ? front[0] : "";
+        const rest = source.slice(head.length);
+        const sections = librarySections(rest);
+        const first = sections[0];
+        if (!first || first.title) return { head, body: rest };
+        const lines = first.body.split("\n").map(line => line.trim()).filter(Boolean);
+        const stub = lines.length > 0 && lines.every(line => /^#+\s/.test(line) || /^[A-Za-z0-9_]+:\s*\S/.test(line));
+        if (!stub) return { head, body: rest };
+        const body = sections.slice(1).map(section => `## ${section.title}\n\n${section.body.trim()}`).join("\n\n");
+        return { head: `${head}${first.body.trim()}\n\n`, body: body ? `${body}\n` : "" };
+    }
+
+    function mountSectionEdit(host, hero, source, onSave) {
+        const kept = visibleProfile(source);
+        let text = kept.body;
+        const status = document.createElement("span");
+        status.className = "library-editor-status";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "btn-secondary library-edit";
+        const viewLabel = () => libraryRu() ? "Править" : "Edit";
+        edit.textContent = viewLabel();
+        hero.append(edit, status);
+        const paint = (editing) => {
+            host.classList.toggle("is-editing", editing);
+            paintSectionCards(host, text, editing);
+            edit.textContent = editing ? (libraryRu() ? "Сохранить" : "Save") : viewLabel();
+        };
+        paint(false);
+        edit.addEventListener("click", async () => {
+            if (!host.classList.contains("is-editing")) {
+                paint(true);
+                host.querySelector(".library-doc-edit")?.focus();
+                return;
+            }
+            edit.disabled = true;
+            status.textContent = "";
+            try {
+                const next = kept.head + readSectionCards(host);
+                const ok = await onSave(next);
+                status.textContent = ok ? (libraryRu() ? "Сохранено" : "Saved") : (libraryRu() ? "Ошибка" : "Error");
+                if (!ok) return;
+                text = readSectionCards(host);
+                paint(false);
+            } catch {
+                status.textContent = libraryRu() ? "Ошибка" : "Error";
+            } finally {
+                edit.disabled = false;
+            }
+        });
+    }
+
+    async function openLibraryDoc(path, title, id) {
+        const sheet = document.getElementById("library-sheet");
+        if (!sheet) return;
+        sheet.replaceChildren();
+        const inner = document.createElement("div");
+        inner.className = "library-sheet-inner";
+        const hero = document.createElement("div");
+        hero.className = "library-sheet-hero";
+        const titles = document.createElement("div");
+        const heading = document.createElement("h3");
+        heading.textContent = title;
+        const sub = document.createElement("p");
+        titles.append(heading, sub);
+        hero.append(libraryAvatar(id), titles);
+        inner.append(hero);
+        sheet.append(inner);
+        let text = "";
+        try {
+            const res = await authFetch(`/api/file-get?path=${encodeURIComponent(path)}`);
+            text = res.ok ? await res.text() : "";
+        } catch { /* empty sheet */ }
+        const named = text.match(/^peer_name:\s*(.+)$/m);
+        if (named && !named[1].includes("неизвестно")) heading.textContent = named[1].trim();
+        const h1 = text.match(/^#\s+(.+)$/m);
+        if (!named && h1) heading.textContent = h1[1].trim();
+        const sections = librarySections(text);
+        const lead = sections[0]?.body.split("\n").map(line => line.trim()).find(line => line && !line.startsWith("-") && !line.startsWith("#") && !/^[A-Za-z0-9_]+:\s/.test(line));
+        sub.textContent = (lead || "").replace(/\*\*/g, "").replace(/`([^`]+)`/g, "$1").slice(0, 140);
+        sub.hidden = !sub.textContent;
+        mountSectionEdit(inner, hero, text, async (next) => {
+            const res = await authFetch("/api/file-save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path, content: next }),
+            });
+            return res.ok;
+        });
+    }
+
+    async function loadLibraryBook(mode) {
+        const ru = libraryRu();
+        const youTitle = document.getElementById("library-you-title");
+        const peopleTitle = document.getElementById("library-people-title");
+        if (youTitle) youTitle.textContent = ru ? "Вы" : "You";
+        if (peopleTitle) peopleTitle.textContent = ru ? "Знакомые" : "People";
+        const you = document.getElementById("library-you");
+        const people = document.getElementById("library-people");
+        if (!you || !people) return;
+        you.replaceChildren(libraryItem(ru ? "Вы" : "You", "default", () => openLibraryDoc("USER.md", ru ? "Вы" : "You", "default")));
+        if (mode === "you") {
+            openLibraryDoc("USER.md", ru ? "Вы" : "You", "default");
+            return;
+        }
+        people.replaceChildren();
+        try {
+            const res = await authFetch("/api/fs/explore?path=" + encodeURIComponent("memory/people"));
+            const data = await res.json();
+            const grouped = new Map();
+            (data.items || []).forEach(item => {
+                if (item.is_dir || !item.name.endsWith(".md") || item.name === "README.md") return;
+                const title = item.name.replace(/^\d+_/, "").replace(/\.md$/, "");
+                const id = (item.name.match(/^(\d+)_/) || [null, item.name])[1];
+                const row = { ...item, title };
+                const prev = grouped.get(id);
+                if (!prev) {
+                    grouped.set(id, row);
+                    return;
+                }
+                const rowCyr = /[А-Яа-яЁё]/.test(title);
+                const prevCyr = /[А-Яа-яЁё]/.test(prev.title);
+                const newer = (item.mtime || 0) > (prev.mtime || 0);
+                const sameTime = (item.mtime || 0) === (prev.mtime || 0);
+                if (newer || (sameTime && rowCyr && !prevCyr)) {
+                    row.title = rowCyr || !prevCyr ? title : prev.title;
+                    grouped.set(id, row);
+                } else if (rowCyr && !prevCyr) {
+                    prev.title = title;
+                }
+            });
+            [...grouped.values()].sort((a, b) => a.title.localeCompare(b.title, "ru")).forEach(item => {
+                people.append(libraryItem(item.title, item.name, () => openLibraryDoc(item.path, item.title, item.name)));
+            });
+        } catch { /* empty rail */ }
+        const search = document.getElementById("library-people-search");
+        if (search && !search.dataset.wired) {
+            search.dataset.wired = "1";
+            search.addEventListener("input", () => {
+                const query = search.value.trim().toLowerCase();
+                people.querySelectorAll(".library-rail-item").forEach(item => {
+                    item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+                });
+            });
+        }
+        const first = people.querySelector(".library-rail-item");
+        if (first) first.click();
+        else {
+            const sheet = document.getElementById("library-sheet");
+            if (sheet) sheet.replaceChildren();
+        }
+    }
+
+    const _GRAPH_HUE = { default: 0, polymarket: 108, dungeon: 248, gym: 332, boardnight: 196 };
+    let _graphProfiles = [];
+    let _graphFocus = null;
+
+    function graphHue(id) {
+        if (Object.prototype.hasOwnProperty.call(_GRAPH_HUE, id)) return _GRAPH_HUE[id];
+        return libraryHue(id);
+    }
+
+    function showGraphDetail(profile) {
+        const box = document.getElementById("agent-graph-detail");
+        if (!box) return;
+        box.replaceChildren();
+        _graphFocus = profile.id;
+        document.querySelectorAll(".agent-node").forEach(node => {
+            node.classList.toggle("is-on", node.dataset.id === profile.id);
+        });
+        const hero = document.createElement("div");
+        hero.className = "library-sheet-hero";
+        const titles = document.createElement("div");
+        const heading = document.createElement("h3");
+        heading.textContent = profile.label || profile.id;
+        const sub = document.createElement("p");
+        sub.textContent = profile.description || "";
+        sub.hidden = !sub.textContent;
+        titles.append(heading, sub);
+        const face = libraryAvatar(profile.id);
+        face.style.filter = graphHue(profile.id) ? `hue-rotate(${graphHue(profile.id)}deg)` : "";
+        hero.append(face, titles);
+        box.append(hero);
+        const skills = profile.pinned_skills || [];
+        const bases = profile.knowledge_bases || [];
+        if (skills.length || bases.length) {
+            const row = document.createElement("div");
+            row.className = "agent-graph-chips";
+            [...skills, ...bases].forEach(name => {
+                const chip = document.createElement("span");
+                chip.className = "library-chip";
+                chip.textContent = name;
+                row.append(chip);
+            });
+            box.append(row);
+        }
+        mountSectionEdit(box, hero, profile.soul || "", async (next) => {
+            const res = await authFetch(`/api/profiles/${encodeURIComponent(profile.id)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ soul: next }),
+            });
+            if (!res.ok) return false;
+            profile.soul = next;
+            return true;
+        });
+    }
+
+    function graphConcepts(profile) {
+        const items = [];
+        for (const name of profile.pinned_skills || []) {
+            items.push({ id: `${profile.id}:skill:${name}`, label: name, kind: "skill" });
+        }
+        for (const name of profile.knowledge_bases || []) {
+            items.push({ id: `${profile.id}:kb:${name}`, label: name, kind: "kb" });
+        }
+        return items;
+    }
+
+    function paintGraph() {
+        const stage = document.querySelector(".agent-graph-stage");
+        const nodes = document.getElementById("agent-graph-nodes");
+        const svg = document.getElementById("agent-graph-svg");
+        if (!stage || !nodes || !svg) return;
+        const width = stage.clientWidth || 640;
+        const height = stage.clientHeight || 420;
+        const cx = width * 0.5;
+        const cy = height * 0.46;
+        const ns = "http://www.w3.org/2000/svg";
+        const verb = t("workspace.library") === "Библиотека" ? "будит" : "wakes";
+        const others = _graphProfiles.filter(profile => profile.id !== "default");
+        const spots = new Map();
+        spots.set("default", { x: cx, y: cy });
+        others.forEach((profile, index) => {
+            const angle = (-Math.PI / 2) + (index / Math.max(others.length, 1)) * Math.PI * 2;
+            spots.set(profile.id, {
+                x: cx + Math.cos(angle) * width * 0.28,
+                y: cy + Math.sin(angle) * height * 0.28,
+            });
+            graphConcepts(profile).forEach((item, itemIndex, list) => {
+                const spread = (itemIndex - (list.length - 1) / 2) * 0.22;
+                spots.set(item.id, {
+                    x: cx + Math.cos(angle + spread) * width * 0.44,
+                    y: cy + Math.sin(angle + spread) * height * 0.42,
+                    concept: item,
+                    owner: profile.id,
+                });
+            });
+        });
+        const core = _graphProfiles.find(profile => profile.id === "default");
+        if (core) {
+            graphConcepts(core).forEach((item, itemIndex, list) => {
+                spots.set(item.id, {
+                    x: cx + (itemIndex - (list.length - 1) / 2) * 96,
+                    y: Math.min(height - 28, cy + height * 0.34),
+                    concept: item,
+                    owner: core.id,
+                });
+            });
+        }
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.replaceChildren();
+        const drawLine = (from, to, kind) => {
+            const line = document.createElementNS(ns, "line");
+            line.setAttribute("x1", from.x);
+            line.setAttribute("y1", from.y);
+            line.setAttribute("x2", to.x);
+            line.setAttribute("y2", to.y);
+            if (kind) line.setAttribute("class", kind);
+            svg.append(line);
+            return line;
+        };
+        others.forEach(profile => {
+            const from = spots.get("default");
+            const to = spots.get(profile.id);
+            drawLine(from, to, "is-wake");
+            const text = document.createElementNS(ns, "text");
+            text.setAttribute("x", (from.x + to.x) / 2);
+            text.setAttribute("y", (from.y + to.y) / 2 - 8);
+            text.setAttribute("text-anchor", "middle");
+            text.textContent = verb;
+            svg.append(text);
+        });
+        spots.forEach(spot => {
+            if (!spot.concept) return;
+            drawLine(spots.get(spot.owner), spot, "is-link");
+        });
+        nodes.replaceChildren();
+        _graphProfiles.forEach(profile => {
+            const spot = spots.get(profile.id);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "agent-node" + (profile.id === "default" ? " is-core" : "");
+            button.dataset.id = profile.id;
+            button.style.left = `${spot.x}px`;
+            button.style.top = `${spot.y}px`;
+            const face = libraryAvatar(profile.id);
+            face.style.filter = graphHue(profile.id) ? `hue-rotate(${graphHue(profile.id)}deg)` : "";
+            const label = document.createElement("span");
+            label.textContent = profile.label || profile.id;
+            button.append(face, label);
+            button.addEventListener("click", () => showGraphDetail(profile));
+            nodes.append(button);
+        });
+        spots.forEach(spot => {
+            if (!spot.concept) return;
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "agent-node is-concept";
+            chip.style.left = `${spot.x}px`;
+            chip.style.top = `${spot.y}px`;
+            chip.textContent = spot.concept.label;
+            const owner = _graphProfiles.find(profile => profile.id === spot.owner);
+            chip.addEventListener("click", () => owner && showGraphDetail(owner));
+            nodes.append(chip);
+        });
+        const focus = _graphProfiles.find(profile => profile.id === _graphFocus) || core || _graphProfiles[0];
+        if (focus) showGraphDetail(focus);
+    }
+
+    async function loadAgentGraph() {
+        document.getElementById("library-tab-graph")?.classList.add("active");
+        document.querySelectorAll("[data-workspace-modal]").forEach(button => button.classList.remove("active"));
+        const listed = await authFetch("/api/profiles");
+        const data = await listed.json();
+        const rows = data.profiles || [];
+        _graphProfiles = await Promise.all(rows.map(async row => {
+            try {
+                const res = await authFetch(`/api/profiles/${encodeURIComponent(row.id)}`);
+                if (res.ok) return await res.json();
+            } catch { /* list row is enough */ }
+            return row;
+        }));
+        paintGraph();
+        if (!window._agentGraphResize) {
+            window._agentGraphResize = true;
+            window.addEventListener("resize", () => {
+                const graph = document.getElementById("workspace-agent-graph");
+                if (!graph || graph.hidden || !_graphProfiles.length) return;
+                paintGraph();
+            });
+        }
+    }
+
+    function dismissLibraryPanel() {
+        if (!activePanel) return;
+        const panel = document.getElementById(activePanel);
+        activePanel = null;
+        panel?.classList.remove("active");
+    }
+
+    window.openWorkspaceLibrary = function () {
+        _libraryMode = "graph";
+        dismissLibraryPanel();
+        showPage("library");
+        loadAgentGraph();
+    };
+
+    window.openLibraryYou = function () {
+        _libraryMode = "you";
+        dismissLibraryPanel();
+        if (page !== "library") showPage("library");
+        else applyLibraryMode();
+        loadLibraryBook("you");
+    };
+
+    window.openLibraryPeople = function () {
+        _libraryMode = "people";
+        dismissLibraryPanel();
+        if (page !== "library") showPage("library");
+        else applyLibraryMode();
+        loadLibraryBook("people");
     };
 
     function init() {

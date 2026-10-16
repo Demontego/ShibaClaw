@@ -128,7 +128,7 @@
                         class="automation-badge-mini" id="automation-badge-mini" style="display:none"></span>
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="library"
-                    onclick="openModal('fs-modal')">
+                    onclick="openWorkspaceLibrary()">
                     <span class="material-icons-round" aria-hidden="true">folder_open</span><span
                         class="workspace-nav-label" data-i18n="workspace.library">Library</span>
                 </button>
@@ -1210,14 +1210,32 @@
             </div>
             <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library"
                 data-i18n-aria="workspace.library" hidden>
-                <button type="button" data-workspace-modal="fs-modal" onclick="openModal('fs-modal')"
-                    data-i18n="nav.files">Files</button>
+                <button type="button" id="library-tab-graph" onclick="openWorkspaceLibrary()">Связи</button>
+                <button type="button" id="library-tab-you" onclick="openLibraryYou()">Вы</button>
+                <button type="button" id="library-tab-people" onclick="openLibraryPeople()">Знакомые</button>
                 <button type="button" data-workspace-modal="knowledge-modal" onclick="openModal('knowledge-modal')"
                     data-i18n="nav.knowledge">Knowledge Base</button>
                 <button type="button" data-workspace-modal="memory-modal" onclick="openModal('memory-modal')"
                     data-i18n="memory.tab_memory">Memory</button>
             </nav>
             <div id="workspace-stage" class="workspace-stage">
+                <div id="workspace-agent-graph" class="agent-graph" hidden>
+                    <div class="agent-graph-stage">
+                        <svg id="agent-graph-svg" aria-hidden="true"></svg>
+                        <div id="agent-graph-nodes"></div>
+                    </div>
+                    <div id="agent-graph-detail" class="agent-graph-detail"></div>
+                </div>
+                <div id="workspace-library-book" class="library-book" hidden>
+                    <aside class="library-rail">
+                        <div class="library-rail-title" id="library-you-title">You</div>
+                        <div id="library-you"></div>
+                        <div class="library-rail-title" id="library-people-title">People</div>
+                        <input id="library-people-search" class="library-people-search" type="search" aria-label="People">
+                        <div id="library-people" class="library-people-list"></div>
+                    </aside>
+                    <div id="library-sheet" class="library-sheet"></div>
+                </div>
                 <div id="workspace-agents" class="workspace-agents" hidden>
                     <div class="workspace-page-actions"><button type="button" class="btn-secondary"
                             onclick="refreshWorkspaceAgents()" data-i18n-aria="common.refresh"

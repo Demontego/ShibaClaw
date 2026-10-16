@@ -46,8 +46,31 @@ function _appendFsBreadcrumbItem(breadcrumb, label, onClick, { active = false } 
     breadcrumb.appendChild(item);
 }
 
+function _renderLibraryCrumb(breadcrumb, path, activeLabel) {
+    breadcrumb.replaceChildren();
+    const parts = String(path || ".").split(/[/\\]/).filter(part => part && part !== ".");
+    const rootName = typeof t === "function" ? t("nav.files") : "Files";
+    const title = document.createElement("span");
+    title.className = "fs-crumb-title";
+    title.textContent = activeLabel || parts[parts.length - 1] || (rootName === "nav.files" ? "Files" : rootName);
+    if (parts.length || activeLabel) {
+        const back = document.createElement("button");
+        back.type = "button";
+        back.className = "fs-back";
+        back.appendChild(createMaterialIcon("chevron_left"));
+        const parent = activeLabel ? (parts.join("/") || ".") : (parts.slice(0, -1).join("/") || ".");
+        back.addEventListener("click", () => window.loadFs(parent));
+        breadcrumb.append(back);
+    }
+    breadcrumb.append(title);
+}
+
 function _renderFsBreadcrumb(breadcrumb, path, activeLabel = null) {
     if (!breadcrumb) return;
+    if (breadcrumb.closest(".workspace-panel")) {
+        _renderLibraryCrumb(breadcrumb, path, activeLabel);
+        return;
+    }
 
     breadcrumb.replaceChildren();
     _appendFsBreadcrumbItem(breadcrumb, "root", () => window.loadFs("."));
@@ -65,6 +88,27 @@ function _renderFsBreadcrumb(breadcrumb, path, activeLabel = null) {
         _appendFsBreadcrumbSeparator(breadcrumb);
         _appendFsBreadcrumbItem(breadcrumb, activeLabel, null, { active: true });
     }
+}
+
+const _TILE_COLORS = ["#e39a4a", "#2f9e6b", "#7c5cbf", "#e15b6a", "#3d7ee8"];
+
+function _createFsTile(file, mtime, index, onClick) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = file.is_dir ? "fs-tile is-dir" : "fs-tile";
+    const mark = document.createElement("span");
+    mark.className = "fs-tile-mark";
+    if (file.is_dir) mark.style.background = _TILE_COLORS[index % _TILE_COLORS.length];
+    mark.appendChild(createMaterialIcon(file.is_dir ? "folder" : "description"));
+    const name = document.createElement("span");
+    name.className = "fs-tile-name";
+    name.textContent = file.name;
+    const when = document.createElement("span");
+    when.className = "fs-tile-when";
+    when.textContent = mtime;
+    tile.append(mark, name, when);
+    tile.addEventListener("click", onClick);
+    return tile;
 }
 
 function _createFsRow({ icon, name, size = "", mtime = "", isDir = false, onClick }) {
@@ -321,7 +365,8 @@ window.loadFs = async function(path = ".") {
 
         list.replaceChildren();
         
-        if (path !== "." && path !== "/" && parts.length > 0) {
+        const inLibrary = Boolean(list.closest(".workspace-panel"));
+        if (!inLibrary && path !== "." && path !== "/" && parts.length > 0) {
             const parentPath = parts.slice(0, -1).join("/") || ".";
             const row = _createFsRow({
                 icon: "folder_open",
@@ -331,27 +376,37 @@ window.loadFs = async function(path = ".") {
             list.appendChild(row);
         }
 
+        const libraryRoot = inLibrary && (path === "." || path === "" || path === "/");
+        const hiddenRoot = new Set([".venv", ".pytest_cache", "__pycache__", "node_modules", "_old"]);
+        list.classList.toggle("fs-tiles", inLibrary);
+        let tileIndex = 0;
         data.items.forEach(f => {
-            const icon = f.is_dir ? "folder" : "insert_drive_file";
-            const size = f.is_dir ? "" : formatSize(f.size);
-            const mtime = new Date(f.mtime * 1000).toLocaleString();
-
-            const row = _createFsRow({
-                icon,
+            if (libraryRoot && (f.name.startsWith(".") || hiddenRoot.has(f.name))) return;
+            const when = new Date(f.mtime * 1000);
+            const mtime = inLibrary ? when.toLocaleDateString() : when.toLocaleString();
+            const open = () => {
+                if (f.is_dir) window.loadFs(f.path);
+                else openFileEditor(f.path, f.name);
+            };
+            if (inLibrary) {
+                list.appendChild(_createFsTile(f, mtime, tileIndex, open));
+                tileIndex += 1;
+                return;
+            }
+            list.appendChild(_createFsRow({
+                icon: f.is_dir ? "folder" : "insert_drive_file",
                 name: f.name,
-                size,
+                size: f.is_dir ? "" : formatSize(f.size),
                 mtime,
                 isDir: f.is_dir,
-                onClick: () => {
-                    if (f.is_dir) {
-                        window.loadFs(f.path);
-                    } else {
-                        openFileEditor(f.path, f.name);
-                    }
-                },
-            });
-            list.appendChild(row);
+                onClick: open,
+            }));
         });
+        if (inLibrary) {
+            list.classList.remove("fs-enter");
+            void list.offsetWidth;
+            list.classList.add("fs-enter");
+        }
 
     } catch (e) {
         _setFsMessage(list, "Error loading files", { color: "var(--accent-red)" });

@@ -449,6 +449,16 @@ class ShibaBrain:
                 router=self.session_router,
             )
         )
+        from shibaclaw.agent.tools.agent_send import AgentSendTool
+
+        self.tools.register(
+            AgentSendTool(
+                sessions=self.sessions,
+                bus=self.bus,
+                workspace=self.workspace,
+                owner_ids=_telegram_allow_from_ids(self.channels_config),
+            )
+        )
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(SpawnMeaTool(manager=self.subagents))
         if self.automation_service:
@@ -592,6 +602,7 @@ class ShibaBrain:
         provider: Any | None = None,
         metadata: dict | None = None,
         parent_messages: list[dict[str, Any]] | None = None,
+        profile_id: str | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
         for name in ("message", "spawn", "spawn_mea", "automation", "think"):
@@ -631,6 +642,15 @@ class ShibaBrain:
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     tool.set_context(channel, chat_id, metadata=metadata or {})
+        if tool := self.tools.get("agent_send"):
+            if hasattr(tool, "set_context"):
+                tool.set_context(
+                    channel,
+                    chat_id,
+                    session_key,
+                    metadata=metadata or {},
+                    profile_id=profile_id,
+                )
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -840,6 +860,7 @@ class ShibaBrain:
             provider=active_provider,
             metadata=metadata,
             parent_messages=messages,
+            profile_id=profile_id,
         )
 
         if not active_provider:
@@ -850,6 +871,9 @@ class ShibaBrain:
             self.tools.get_definitions(), profile_id
         )
         tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
+        from shibaclaw.agent.tools.agent_send import hide_agent_send
+
+        tool_defs = hide_agent_send(tool_defs, session_key)
 
         if session_key:
             self._steering_queues.setdefault(session_key, [])
@@ -1093,6 +1117,15 @@ class ShibaBrain:
                                 f"with the exact same arguments {occurrences} times. "
                                 "Please reassess your goal and try a different approach."
                             ),
+                        )
+                        answered_calls.add(tool_call.id)
+                        continue
+                    if tool_call.name == "agent_send" and str(session_key or "").startswith("agent:"):
+                        messages = self.context.add_tool_result(
+                            messages,
+                            tool_call.id,
+                            tool_call.name,
+                            "Error: agent_send is hidden on an agent session.",
                         )
                         answered_calls.add(tool_call.id)
                         continue
@@ -1700,6 +1733,7 @@ class ShibaBrain:
                 session_key=key,
                 model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
                 metadata=msg.metadata,
+                profile_id=profile_id,
             )
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
@@ -1744,7 +1778,7 @@ class ShibaBrain:
         preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
         key = session_key or msg.session_key
 
-        if self.session_router:
+        if self.session_router and not str(key).startswith("agent:"):
             if resolved_key := self.session_router.resolve(key):
                 logger.info("Cross-session route: {} -> {}", key, resolved_key)
                 key = resolved_key
@@ -1959,6 +1993,7 @@ class ShibaBrain:
             session_key=key,
             model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
+            profile_id=profile_id,
         )
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
