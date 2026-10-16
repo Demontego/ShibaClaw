@@ -18,6 +18,11 @@ def test_semantic_tool_circuit_breaker_trips(tmp_path):
     msg = breaker.get_tripped_message(tool_name)
     assert "BreakerTripped" in msg
     assert "read_file" in msg
+    assert msg.startswith("[CircuitBreaker: Tool execution stalled")
+    assert breaker.is_tripped(tool_name, arguments, result)
+    assert breaker.get_call_count(tool_name, arguments, result) == 3
+    breaker.reset()
+    assert breaker.get_call_count(tool_name, arguments, result) == 0
 
 def test_semantic_tool_circuit_breaker_no_trip_different_args(tmp_path):
     breaker = SemanticToolCircuitBreaker(tmp_path)
