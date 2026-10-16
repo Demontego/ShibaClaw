@@ -51,9 +51,9 @@ class AskUserTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Ask the user a structured question with optional clickable choices. "
-            "Prefer this over guessing when a clear decision is needed. "
-            "Returns the selected option id/label (or free-text / skip)."
+            "Ask the user a choice or an approval with clickable buttons. "
+            "Use this instead of a plain-text question when a decision is needed. "
+            "Pass 2–4 options. Returns the selected option id/label (or free-text / skip)."
         )
 
     @property

@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/webui/server.py
 """WebUI server module."""
 
 from __future__ import annotations
@@ -291,32 +292,17 @@ def create_app(
 async def _check_update_on_startup() -> None:
     try:
         await asyncio.sleep(3)
-        from shibaclaw.helpers.notification_manager import notification_manager
         from shibaclaw.updater.checker import check_for_update
 
         result = await asyncio.get_event_loop().run_in_executor(None, check_for_update)
-        if result.get("update_available"):
-            current_label = result.get("display_current") or result.get("current")
-            latest_label = result.get("display_latest") or result.get("latest")
-            notification = result.get("notification") or {}
-            notif = notification_manager.create_from_event(
-                content=notification.get("text") or result.get("summary") or "Update available",
-                source="update",
-                metadata=notification,
-                msg_type="notification",
-            )
-            try:
-                from shibaclaw.webui.ws_handler import broadcast_notification
-                await broadcast_notification(notif)
-            except Exception:
-                pass
-            logger.info(
-                "🆕 ShibaClaw update available: {} → {}",
-                current_label,
-                latest_label,
-            )
+        if not result.get("update_available"):
+            return
+        latest = result.get("display_latest") or result.get("latest")
+        current = result.get("display_current") or result.get("current")
+        # Patched fork: do not pip-upgrade and do not message the owner.
+        logger.info("Update available: {} → {}. Auto-upgrade is off.", current, latest)
     except Exception:
-        pass
+        logger.exception("Auto-update check failed")
 
 
 async def _sync_skills_on_startup() -> None:

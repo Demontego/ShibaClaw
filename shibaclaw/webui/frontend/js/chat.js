@@ -5,7 +5,7 @@ function createAudioPlayer(file, autoPlay = false) {
     container.className = "custom-audio-player";
     
     const audio = document.createElement("audio");
-    audio.src = authUrl(file.url);
+    bindAuthedMedia(audio, file.url);
     audio.preload = "metadata";
     container.appendChild(audio);
     
@@ -122,9 +122,9 @@ function _renderMessageBubble(content, attachments = [], autoPlayAudio = false) 
         const isAudio = typeof file.type === "string" && file.type.startsWith("audio/");
         if (isImage) {
             const img = document.createElement("img");
-            img.src = authUrl(file.url);
+            bindAuthedMedia(img, file.url);
             img.onload = () => { if (typeof scrollToBottom === 'function') scrollToBottom(); };
-            img.onclick = () => window.open(authUrl(file.url), "_blank");
+            img.onclick = () => openAuthedMedia(file.url);
             bubble.appendChild(img);
         } else if (isAudio) {
             const player = createAudioPlayer(file, autoPlayAudio);
@@ -162,77 +162,8 @@ function addAgentMessage(id, content, attachments = []) {
 
 
 // ── Process Groups (collapsible thinking/tool steps) ──────────
-function addProcessStep(msgId, content, badge) {
-    activateChat();
-
-    let pg = state.processGroups[msgId];
-    if (!pg) {
-        const container = document.createElement("div");
-        container.id = `pg-${msgId}`;
-        container.className = "process-group expanded";
-
-        const header = document.createElement("div");
-        header.className = "process-group-header";
-        header.onclick = () => {
-            const pg = container.pgData;
-            if (pg) pg.el.classList.toggle("expanded");
-        };
-        header.innerHTML = `
-            <span class="pg-expand-icon"></span>
-            <span class="pg-title">Processing...</span>
-            <span class="step-badge ${badge}">${badge}</span>
-            <span class="pg-metrics">
-                <span class="material-icons-round" style="font-size:13px">schedule</span>
-                <span class="pg-time">0s</span>
-                <span class="material-icons-round" style="font-size:13px;margin-left:8px">footprint</span>
-                <span class="pg-count">0</span>
-            </span>
-        `;
-        container.appendChild(header);
-
-        const stepsContainer = document.createElement("div");
-        stepsContainer.className = "pg-content";
-        container.appendChild(stepsContainer);
-
-        chatHistory.appendChild(container);
-
-        pg = {
-            el: container,
-            stepsEl: stepsContainer,
-            headerEl: header,
-            startTime: Date.now(),
-            stepCount: 0,
-            genCount: 0,
-            exeCount: 0,
-            collapsed: false,
-            timer: setInterval(() => updateProcessGroupTime(msgId), 1000),
-        };
-        container.pgData = pg;
-        state.processGroups[msgId] = pg;
-    }
-
-    pg.stepCount++;
-    pg.headerEl.querySelector(".pg-count").textContent = pg.stepCount;
-    if (badge === "GEN") pg.genCount++;
-    else if (badge === "EXE") pg.exeCount++;
-
-    const badgeEl = pg.headerEl.querySelector(".step-badge");
-    badgeEl.className = `step-badge ${badge}`;
-    badgeEl.textContent = badge;
-
-    const title = pg.headerEl.querySelector(".pg-title");
-    title.textContent = truncate(content, 60);
-    title.classList.add("shiny-text");
-
-    const step = document.createElement("div");
-    step.className = "pg-step";
-    step.innerHTML = `
-        <span class="step-badge ${badge}">${badge}</span>
-        <span class="pg-step-text">${escapeHtml(truncate(content, 300))}</span>
-    `;
-
-    pg.stepsEl.appendChild(step);
-    scrollToBottom();
+function addProcessStep(_msgId, _content, _badge) {
+    // Tool names stay out of the chat. Typing dots cover the wait.
 }
 
 function updateProcessGroupTime(msgId) {
@@ -280,50 +211,8 @@ function collapseProcessGroup(msgId) {
 }
 
 
-function renderProcessGroupFromHistory(turnId, steps, targetContainer = chatHistory) {
-    const id = `hist-${turnId}`;
-    const groupEl = document.createElement("div");
-    groupEl.className = "process-group completed";
-    groupEl.id = `pg-${id}`;
-
-    const header = document.createElement("div");
-    header.className = "process-group-header";
-    header.onclick = () => {
-        groupEl.classList.toggle("expanded");
-    };
-
-    const lastStep = steps[steps.length - 1];
-    const genCount = steps.filter(s => s.badge === "GEN").length;
-    const exeCount = steps.filter(s => s.badge === "EXE").length;
-    const summaryParts = [];
-    if (genCount > 0) summaryParts.push(`${genCount} thinking`);
-    if (exeCount > 0) summaryParts.push(`${exeCount} tool`);
-
-    header.innerHTML = `
-        <span class="pg-expand-icon"></span>
-        <span class="pg-title">${escapeHtml(truncate(lastStep.text, 60))}</span>
-        <span class="step-badge END">END</span>
-        <span class="pg-metrics">
-            <span class="material-icons-round" style="font-size:13px">footprint</span>
-            <span class="pg-count">${steps.length}</span>
-            <span class="pg-summary">${summaryParts.join(" · ")}</span>
-        </span>
-    `;
-    groupEl.appendChild(header);
-
-    const stepsContainer = document.createElement("div");
-    stepsContainer.className = "pg-content";
-    for (const step of steps) {
-        const row = document.createElement("div");
-        row.className = "pg-step";
-        row.innerHTML = `
-            <span class="step-badge ${step.badge}">${step.badge}</span>
-            <span class="pg-step-text">${escapeHtml(truncate(step.text, 300))}</span>
-        `;
-        stepsContainer.appendChild(row);
-    }
-    groupEl.appendChild(stepsContainer);
-    targetContainer.appendChild(groupEl);
+function renderProcessGroupFromHistory(_turnId, _steps, _targetContainer = chatHistory) {
+    // Old sessions keep tool rows in the transcript file. The chat does not draw them.
 }
 
 // Owner Telegram ids from channels.telegram.allowFrom (cached).
@@ -600,23 +489,60 @@ function enhanceCodeBlocks(container) {
 }
 
 
-// ── Typing Bubble (shown while agent is working, before any event) ──
-function showTypingBubble() {
-    if (document.getElementById("typing-bubble")) return;
-    activateChat();
-    const group = createMessageGroup("agent");
-    group.id = "typing-bubble";
-    group.innerHTML = group.innerHTML;
-    const content = group.querySelector(".message-content");
-    const bubble = document.createElement("div");
-    bubble.className = "message-bubble typing-bubble";
-    bubble.innerHTML = `
-        <div class="typing-dots-inline">
-            <span></span><span></span><span></span>
-        </div>`;
-    content.appendChild(bubble);
-    chatHistory.appendChild(group);
-    scrollToBottom();
+// ── Typing Bubble: one live line, not a tool log ─────────────
+function _statusRu() {
+    const loc = window.i18n && window.i18n.getLocale && window.i18n.getLocale();
+    return !loc || loc === "ru";
+}
+
+function workStatus(raw) {
+    const ru = _statusRu();
+    const idle = ru ? "Думаю" : "Thinking";
+    const text = String(raw || "").trim();
+    if (!text) return idle;
+    const re = /([A-Za-z_][\w]*)(?:\("((?:[^"\\]|\\.)*)"\))?/g;
+    let last = null;
+    let match;
+    while ((match = re.exec(text))) last = match;
+    if (!last) return idle;
+    const name = last[1];
+    let arg = (last[2] || "").replace(/\\"/g, '"').replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+    const verbs = ru
+        ? { web_search: "Ищу", web_fetch: "Читаю", web_deep_search: "Копаю источники", exec: "Запускаю", read_file: "Открываю", write_file: "Пишу", edit_file: "Правлю", ask_user: "Жду выбор" }
+        : { web_search: "Searching", web_fetch: "Reading", web_deep_search: "Digging", exec: "Running", read_file: "Opening", write_file: "Writing", edit_file: "Editing", ask_user: "Waiting" };
+    const verb = verbs[name] || (ru ? "Работаю" : "Working");
+    if (!arg) return verb;
+    if (name === "exec") {
+        const bin = arg.split(" ")[0].split("/").pop();
+        return bin ? `${verb} ${bin}` : verb;
+    }
+    if (/^https?:\/\//i.test(arg)) {
+        try { arg = new URL(arg).hostname.replace(/^www\./, ""); } catch { arg = ""; }
+    } else if (arg.includes("/") && !arg.includes(" ")) {
+        arg = arg.split("/").filter(Boolean).pop() || arg;
+    }
+    if (!arg) return verb;
+    if (arg.length > 42) arg = arg.slice(0, 41) + "…";
+    return `${verb} · ${arg}`;
+}
+
+function showTypingBubble(label) {
+    const text = label || (_statusRu() ? "Думаю" : "Thinking");
+    let group = document.getElementById("typing-bubble");
+    if (!group) {
+        activateChat();
+        group = createMessageGroup("agent");
+        group.id = "typing-bubble";
+        const content = group.querySelector(".message-content");
+        const bubble = document.createElement("div");
+        bubble.className = "message-bubble typing-bubble";
+        bubble.innerHTML = `<span class="typing-status"></span>`;
+        content.appendChild(bubble);
+        chatHistory.appendChild(group);
+        scrollToBottom();
+    }
+    const status = group.querySelector(".typing-status");
+    if (status) status.textContent = text;
 }
 
 function hideTypingBubble() {

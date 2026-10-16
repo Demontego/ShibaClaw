@@ -114,6 +114,12 @@ function truncate(str, maxLen) {
     return str.length > maxLen ? str.slice(0, maxLen) + "…" : str;
 }
 
+function formatProcessStepLabel(content) {
+    const text = (content && String(content).trim()) || "";
+    if (!text) return "Processing...";
+    return text.replace(/^mcp_[^_]+_/, "");
+}
+
 function fmtTokens(n) {
     if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
     return String(n);

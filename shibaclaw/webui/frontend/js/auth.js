@@ -63,11 +63,23 @@ async function authFetch(url, opts = {}) {
 }
 
 function authUrl(url) {
-    if (!url || !url.startsWith("/api/file-get")) return url;
-    const token = getStoredToken();
-    if (!token) return url;
-    const separator = url.includes("?") ? "&" : "?";
-    return `${url}${separator}token=${encodeURIComponent(token)}`;
+    return url;
+}
+
+function bindAuthedMedia(el, url) {
+    authFetch(url).then(async (res) => {
+        if (!res.ok) return;
+        const blob = await res.blob();
+        el.src = URL.createObjectURL(blob);
+    }).catch((err) => console.error("media load failed", err));
+}
+
+function openAuthedMedia(url) {
+    authFetch(url).then(async (res) => {
+        if (!res.ok) return;
+        const blob = await res.blob();
+        window.open(URL.createObjectURL(blob), "_blank");
+    }).catch((err) => console.error("media open failed", err));
 }
 
 

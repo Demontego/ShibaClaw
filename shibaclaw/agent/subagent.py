@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/subagent.py
 """Subagent manager for background task execution."""
 
 import asyncio

@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/tools/secretary/preamble.py
 """Prompt context for Telegram Guest Mode and secretary summons."""
 
 from __future__ import annotations
@@ -107,17 +108,31 @@ def build_secretary_preamble(
         "Reply in this same DM as the owner's secretary.",
     ]
     if is_owner:
-        lines.append("This speaker is the owner.")
+        # Marker: owner_secretary_full_tools
+        lines.append(
+            "This speaker is the owner (allowFrom). Full tools are available this turn — "
+            "including Google Calendar create/update, Gmail, Drive, business_search, etc. "
+            "Do not refuse calendar/mail/drive as 'secretary mode limitations'; those apply "
+            "only to non-owner peers. Prior peer tool-deny errors in this chat do not apply. "
+            "Your FINAL reply is posted into this peer DM as Rinat — that text IS the message "
+            "to the peer. Do NOT call business_send. Do NOT send meta «Готово/отправил»."
+        )
     else:
         lines.extend(
             [
                 "This speaker is not the owner. Address this speaker, never call them owner.",
+                "Allowed tools only: web_search, web_fetch, nanobanana_image, and Google Calendar "
+                "free/busy (find_free_slots / get_current_time). No create_event / Gmail / Drive.",
                 "Use only this-DM context. Refuse business_search, business_send, the full secretary "
                 "archive, other chats, and owner secrets.",
             ]
         )
     if archive := _archive(sessions, chat_id, owner_ids=owner_ids):
         lines.extend(["Recent Chat Automation archive for this DM only (newest last):", *archive])
+        if is_owner:
+            lines.append(
+                "If you need older/more lines, call business_search (mode=recent or mode=search)."
+            )
     else:
         lines.append("No secretary archive matched this DM.")
     return "\n".join([*lines, "[End Secretary summon context]", ""])

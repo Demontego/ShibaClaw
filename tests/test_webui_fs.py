@@ -50,6 +50,14 @@ async def test_media_files_are_readable_but_cannot_be_saved(monkeypatch, tmp_pat
     )
 
     assert media_get.status_code == 200
+    assert media_get.headers["cache-control"] == "no-store"
+
+    monkeypatch.setattr("shibaclaw.webui.auth._auth_enabled", lambda: True)
+    monkeypatch.setattr("shibaclaw.webui.auth._verify_session_token", lambda token: token == "good")
+    denied = await api_file_get(
+        _request("GET", query=f"path={media_file.as_posix()}&token=good")
+    )
+    assert denied.status_code == 401
     assert media_save.status_code == 403
     assert media_file.read_text(encoding="utf-8") == "original"
     assert workspace_save.status_code == 200

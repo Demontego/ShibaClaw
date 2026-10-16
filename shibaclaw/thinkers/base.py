@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/thinkers/base.py
 """Base LLM provider interface."""
 
 import asyncio

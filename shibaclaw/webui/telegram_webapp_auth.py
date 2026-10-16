@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/webui/telegram_webapp_auth.py
 """Validate Telegram Mini App initData (WebApp data-check-string)."""
 
 from __future__ import annotations

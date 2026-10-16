@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/cli/gateway.py
 """Gateway service runner and health server for the ShibaClaw CLI."""
 
 from __future__ import annotations
@@ -18,6 +19,36 @@ from shibaclaw import __logo__, __version__
 from shibaclaw.helpers.logging import setup_shiba_logging
 
 from .utils import get_console
+
+
+def parse_http_target(request_line: str) -> tuple[str, str]:
+    """Return the method and path. The path has no query string."""
+    parts = request_line.split(" ")
+    method = parts[0].upper() if parts else ""
+    raw = parts[1] if len(parts) > 1 else ""
+    return method, raw.split("?", 1)[0]
+
+
+def path_segment(path: str, prefix: str) -> str | None:
+    """Return one path segment after prefix, or None when the tail has a slash."""
+    if not path.startswith(prefix):
+        return None
+    rest = path[len(prefix):]
+    if not rest or "/" in rest:
+        return None
+    return rest
+
+
+def suffixed_job_id(path: str, suffix: str) -> str | None:
+    """Return the job id in /api/automation/jobs/{id}/{suffix}."""
+    prefix = "/api/automation/jobs/"
+    marker = f"/{suffix}"
+    if not (path.startswith(prefix) and path.endswith(marker)):
+        return None
+    job_id = path[len(prefix):-len(marker)]
+    if not job_id or "/" in job_id:
+        return None
+    return job_id
 
 
 from .gateway_utils import (
@@ -218,6 +249,20 @@ async def gateway_command(
         """Execute a scheduled job: run an agent turn then optionally deliver."""
         session_key = job.payload.session_key or job.name or f"automation:{job.id}"
 
+        # evolve_session_rotate: one wake, one transcript. Prior jsonl is archived.
+        if session_key == "automation:shiba-evolve":
+            import subprocess
+            from pathlib import Path
+
+            active = [
+                task
+                for task in (getattr(agent, "_active_tasks", {}).get(session_key) or [])
+                if not task.done()
+            ]
+            if not active:
+                script = Path.home() / ".shibaclaw" / "scripts" / "evolve_ctl.py"
+                subprocess.run([str(script), "rotate-session"], check=False)
+
         async def _noop_progress(*_args, **_kwargs) -> None:
             return None
 
@@ -403,23 +448,10 @@ async def gateway_command(
 
                 result = await asyncio.get_event_loop().run_in_executor(None, check_for_update)
                 if result.get("update_available"):
-                    notification = result.get("notification") or {}
                     current = result.get("display_current") or result.get("current", "?")
                     latest = result.get("display_latest") or result.get("latest", "?")
-                    msg = (
-                        notification.get("text")
-                        or result.get("summary")
-                        or (f"🆕 *ShibaClaw update available!*\n{current} → {latest}")
-                    )
-                    if result.get("action_kind") == "automatic":
-                        msg += "\n\n💡 _You can type_ `/update` _to install it now._"
-                    logger.info("🆕 Update available: {} → {}", current, latest)
-                    await on_automation_notify(
-                        msg,
-                        source="update",
-                        metadata=notification,
-                        msg_type="response",
-                    )
+                    # Patched fork: do not DM the owner and do not pip-upgrade.
+                    logger.info("Update available: {} → {}. Owner is not notified.", current, latest)
                 else:
                     logger.debug(
                         "Update check: already on latest version ({}).", result.get("current", "?")
@@ -868,6 +900,7 @@ async def gateway_command(
             try:
                 data = await asyncio.wait_for(reader.read(65536), timeout=5)
                 request_line = data.split(b"\r\n", 1)[0].decode(errors="ignore")
+                method, path = parse_http_target(request_line)
 
                 def _check_auth() -> bool:
                     expected_token = _current_auth_token()
@@ -889,7 +922,7 @@ async def gateway_command(
 
                 _serialize_job = serialize_automation_job
 
-                if "POST" in request_line and "/restart" in request_line:
+                if method == "POST" and path == "/restart":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
@@ -898,7 +931,7 @@ async def gateway_command(
                         _state["restart"] = True
                         asyncio.ensure_future(_trigger_restart())
 
-                elif "POST" in request_line and "/reload" in request_line:
+                elif method == "POST" and path == "/reload":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
@@ -907,13 +940,10 @@ async def gateway_command(
                         asyncio.create_task(_do_reload())
 
                 # --- Automation HTTP endpoints (new) ---
-                elif "GET" in request_line and (
-                    "/api/automation/jobs" in request_line or "/api/automation/list" in request_line
-                ):
-                    parts = request_line.split(" ")
-                    path = parts[1] if len(parts) > 1 else ""
-                    path = path.split("?")[0]
-                    if path in ("/api/automation/jobs", "/api/automation/list"):
+                elif method == "GET" and path in ("/api/automation/jobs", "/api/automation/list"):
+                    if not _check_auth():
+                        writer.write(_json_response({"error": "unauthorized"}, 401))
+                    else:
                         writer.write(
                             _json_response(
                                 {
@@ -924,97 +954,88 @@ async def gateway_command(
                                 }
                             )
                         )
-                    elif path.startswith("/api/automation/jobs/"):
-                        job_id = path.split("/api/automation/jobs/")[1]
+                elif method == "GET" and (job_id := path_segment(path, "/api/automation/jobs/")):
+                    if not _check_auth():
+                        writer.write(_json_response({"error": "unauthorized"}, 401))
+                    else:
                         job = automation.get_job(job_id)
                         if job:
                             writer.write(_json_response(_serialize_job(job)))
                         else:
                             writer.write(_json_response({"error": "not found"}, 404))
 
-                elif "GET" in request_line and "/api/automation/status" in request_line:
-                    writer.write(_json_response(automation.status()))
-
-                elif "POST" in request_line and "/api/automation/jobs" in request_line:
+                elif method == "GET" and path == "/api/automation/status":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
-                        parts = request_line.split(" ")
-                        path = parts[1] if len(parts) > 1 else ""
-                        path = path.split("?")[0]
-                        if path == "/api/automation/jobs":
-                            body = _parse_body()
-                            from shibaclaw.automation.types import (
-                                AutomationPayload,
-                                AutomationSchedule,
-                            )
+                        writer.write(_json_response(automation.status()))
 
-                            s = body.get("schedule", {})
-                            p = body.get("payload", {})
-                            name = body.get("name", "")
-                            delete_after_run = body.get(
-                                "deleteAfterRun", body.get("delete_after_run", False)
-                            )
-                            schedule = AutomationSchedule(
-                                kind=s.get("kind", "every"),
-                                at_ms=s.get("atMs", s.get("at_ms")),
-                                every_ms=s.get("everyMs", s.get("every_ms")),
-                                expr=s.get("expr"),
-                                tz=s.get("tz"),
-                            )
-                            payload_obj = AutomationPayload(
-                                kind=p.get("kind", "scheduled"),
-                                message=p.get("message", ""),
-                                heartbeat_file=p.get("heartbeatFile", p.get("heartbeat_file")),
-                                deliver=p.get("deliver", False),
-                                channel=p.get("channel"),
-                                to=p.get("to"),
-                                session_key=p.get("sessionKey", p.get("session_key")),
-                                profile_id=p.get("profileId", p.get("profile_id")),
-                                model=p.get("model") or None,
-                                targets=p.get("targets") or {},
-                            )
-                            job = automation.add_job(name, schedule, payload_obj, delete_after_run)
+                elif method == "POST" and path.startswith("/api/automation/jobs"):
+                    if not _check_auth():
+                        writer.write(_json_response({"error": "unauthorized"}, 401))
+                    elif path == "/api/automation/jobs":
+                        body = _parse_body()
+                        from shibaclaw.automation.types import (
+                            AutomationPayload,
+                            AutomationSchedule,
+                        )
 
-                            writer.write(_json_response(_serialize_job(job), 201))
-                        elif path.endswith("/update"):
-                            job_id = path.split("/api/automation/jobs/")[1].split("/update")[0]
-                            body = _parse_body()
-                            job = automation.update_job(job_id, body)
+                        s = body.get("schedule", {})
+                        p = body.get("payload", {})
+                        name = body.get("name", "")
+                        delete_after_run = body.get(
+                            "deleteAfterRun", body.get("delete_after_run", False)
+                        )
+                        schedule = AutomationSchedule(
+                            kind=s.get("kind", "every"),
+                            at_ms=s.get("atMs", s.get("at_ms")),
+                            every_ms=s.get("everyMs", s.get("every_ms")),
+                            expr=s.get("expr"),
+                            tz=s.get("tz"),
+                        )
+                        payload_obj = AutomationPayload(
+                            kind=p.get("kind", "scheduled"),
+                            message=p.get("message", ""),
+                            heartbeat_file=p.get("heartbeatFile", p.get("heartbeat_file")),
+                            deliver=p.get("deliver", False),
+                            channel=p.get("channel"),
+                            to=p.get("to"),
+                            session_key=p.get("sessionKey", p.get("session_key")),
+                            profile_id=p.get("profileId", p.get("profile_id")),
+                            model=p.get("model") or None,
+                            targets=p.get("targets") or {},
+                        )
+                        job = automation.add_job(name, schedule, payload_obj, delete_after_run)
 
-                            if job:
-                                writer.write(_json_response(_serialize_job(job)))
-                            else:
-                                writer.write(_json_response({"error": "not found"}, 404))
-                        elif path.endswith("/trigger"):
-                            job_id = path.split("/api/automation/jobs/")[1].split("/trigger")[0]
-                            ran = await automation.run_job(job_id, force=True)
-                            writer.write(_json_response({"triggered": ran}))
+                        writer.write(_json_response(_serialize_job(job), 201))
+                    elif update_id := suffixed_job_id(path, "update"):
+                        body = _parse_body()
+                        job = automation.update_job(update_id, body)
+                        if job:
+                            writer.write(_json_response(_serialize_job(job)))
+                        else:
+                            writer.write(_json_response({"error": "not found"}, 404))
+                    elif trigger_id := suffixed_job_id(path, "trigger"):
+                        ran = await automation.run_job(trigger_id, force=True)
+                        writer.write(_json_response({"triggered": ran}))
+                    else:
+                        writer.write(_json_response({"error": "not found"}, 404))
 
-                elif "DELETE" in request_line and "/api/automation/jobs/" in request_line:
+                elif method == "DELETE" and (job_id := path_segment(path, "/api/automation/jobs/")):
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
-                        parts = request_line.split(" ")
-                        path = parts[1] if len(parts) > 1 else ""
-                        path = path.split("?")[0]
-                        job_id = path.split("/api/automation/jobs/")[1]
                         removed = automation.remove_job(job_id)
                         writer.write(_json_response({"removed": removed}))
 
-                elif "POST" in request_line and "/api/automation/trigger/" in request_line:
+                elif method == "POST" and (job_id := path_segment(path, "/api/automation/trigger/")):
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
-                        job_id = (
-                            request_line.split("/api/automation/trigger/")[1]
-                            .split(" ")[0]
-                            .split("?")[0]
-                        )
                         ran = await automation.run_job(job_id, force=True)
                         writer.write(_json_response({"triggered": ran}))
 
-                elif "POST" in request_line and "/api/automation/trigger-heartbeats" in request_line:
+                elif method == "POST" and path == "/api/automation/trigger-heartbeats":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
@@ -1029,7 +1050,7 @@ async def gateway_command(
                                 _json_response({"triggered": False, "error": "no heartbeat job"})
                             )
 
-                elif "POST" in request_line and "/api/chat" in request_line:
+                elif method == "POST" and path == "/api/chat":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     elif not provider:
@@ -1085,24 +1106,29 @@ async def gateway_command(
                                 ).encode()
                             )
 
-                elif "POST" in request_line and "/api/archive" in request_line:
+                elif method == "POST" and path == "/api/archive":
                     if not _check_auth():
                         writer.write(_json_response({"error": "unauthorized"}, 401))
                     else:
                         body = _parse_body()
                         snapshot = body.get("snapshot", [])
                         archived = False
+                        error = None
                         if snapshot and hasattr(agent, "memory_consolidator"):
                             try:
                                 await agent.memory_consolidator.archive_snapshot(
                                     snapshot, session_key=body.get("session_key")
                                 )
                                 archived = True
-                            except Exception as _e:
-                                logger.debug("Ignored error: {}", _e)
-                        writer.write(_json_response({"archived": archived}))
+                            except Exception as exc:
+                                logger.warning("Archive snapshot failed: {}", exc)
+                                error = str(exc)
+                        payload = {"archived": archived}
+                        if error:
+                            payload["error"] = error
+                        writer.write(_json_response(payload))
 
-                elif "GET" in request_line:
+                elif method == "GET" and path in ("/", "/health"):
                     writer.write(
                         _json_response(
                             {
@@ -1118,7 +1144,17 @@ async def gateway_command(
                     writer.write(_json_response({"error": "not found"}, 404))
                 await writer.drain()
             except Exception as _e:
-                logger.debug("Ignored error: {}", _e)
+                name = type(_e).__name__
+                if name in {"ConnectionResetError", "BrokenPipeError", "ConnectionAbortedError"}:
+                    logger.debug("Gateway HTTP client closed: {}", name)
+                else:
+                    logger.warning("Gateway HTTP: {}", _e)
+                    try:
+                        from shibaclaw.agent.incidents import note as note_incident
+
+                        note_incident("gateway", name, str(_e)[:200])
+                    except Exception:
+                        logger.debug("incident note failed")
             finally:
                 writer.close()
 
@@ -1130,6 +1166,28 @@ async def gateway_command(
 
         try:
             await automation.start()
+
+            async def _heal_evolve_job() -> None:
+                from pathlib import Path
+
+                script = Path.home() / ".shibaclaw" / "scripts" / "evolve_ctl.py"
+                if not script.is_file():
+                    return
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        sys.executable,
+                        str(script),
+                        "heal",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+                    line = (stdout or stderr or b"").decode(errors="replace").strip()
+                    logger.info("evolve heal: {}", line[:200])
+                except Exception as exc:
+                    logger.warning("evolve heal failed: {}", exc)
+
+            asyncio.create_task(_heal_evolve_job())
 
             async def _clear_starting():
                 await asyncio.sleep(4.0)

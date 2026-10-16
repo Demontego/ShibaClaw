@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/webui/utils.py
 """Shared utilities and helpers for the WebUI API routes."""
 
 from __future__ import annotations

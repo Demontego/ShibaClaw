@@ -80,6 +80,22 @@ def _tools():
 
 
 @pytest.mark.asyncio
+async def test_hard_limit_after_reply_keeps_the_answer(tmp_path):
+    answer = LLMResponse(
+        content="the answer",
+        usage={"prompt_tokens": 3900, "completion_tokens": 200},
+    )
+    brain, provider = _brain(tmp_path, [answer])
+    brain.context_window_tokens = 4000
+    provider.chat_with_retry_streaming = AsyncMock(return_value=answer)
+    final_content, _, _ = await brain._run_agent_loop(
+        [{"role": "system", "content": "s"}, {"role": "user", "content": "task"}],
+        session_key=KEY,
+    )
+    assert final_content == "the answer"
+
+
+@pytest.mark.asyncio
 async def test_new_removes_checkpoint_and_old_task_from_next_prompt(tmp_path):
     brain, provider = _brain(tmp_path, [_tool("old-call", "old-task"), LLMResponse(content="new answer")])
     brain.max_iterations = 1

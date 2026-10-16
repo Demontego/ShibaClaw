@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/tools/shell.py
 """Shell execution tool."""
 
 import asyncio
@@ -211,11 +212,15 @@ class ExecTool(Tool):
             return guard_error
 
         # ── Smart Install Guard: audit before executing ──
+        audit_result = None
         if self.install_audit:
             audit_result = await self._audit_install_command(command, cwd)
             if audit_result is not None and not audit_result.allowed:
                 report = audit_result.format_report()
                 return f"Error: Install blocked by vulnerability audit\n\n{report}"
+
+        # RTK: compact supported CLI outputs before they hit the LLM context
+        command = await self._maybe_rtk_rewrite(command)
 
         cmd_lower = command.strip().lower()
         if cmd_lower in ("ls", "dir", "ls -l", "ls -la", "ls -a", "dir /w", "dir /w /p"):
@@ -385,6 +390,33 @@ class ExecTool(Tool):
         except Exception as e:
             return f"Error executing command: {str(e)}"
 
+
+    async def _maybe_rtk_rewrite(self, command: str) -> str:
+        """Rewrite supported shell commands via `rtk rewrite` (exit 0) or keep as-is."""
+        try:
+            env = os.environ.copy()
+            if self.path_append:
+                env["PATH"] = env.get("PATH", "") + os.pathsep + self.path_append
+            proc = await asyncio.create_subprocess_exec(
+                "rtk",
+                "rewrite",
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=env,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+            # rtk docs say exit 0 on rewrite / 1 if unsupported; 0.44.x
+            # sometimes exits 3 after a successful rewrite — trust non-empty stdout.
+            rewritten = stdout.decode("utf-8", errors="replace").strip()
+            if rewritten:
+                if rewritten != command:
+                    logger.debug("rtk rewrite: {!r} -> {!r}", command, rewritten)
+                return rewritten
+        except Exception as e:
+            logger.debug("rtk rewrite skipped: {}", e)
+        return command
+
     async def _audit_install_command(
         self,
         command: str,
@@ -448,26 +480,91 @@ class ExecTool(Tool):
 
             # (Note: Interpreter execution is allowed within workspace limits)
 
-            # Block output redirects to absolute paths outside workspace
-            redirect_targets = re.findall(r">{1,2}\s*([^\s|&;]+)", normalized)
+            # Block output redirects / absolute paths outside workspace,
+            # but allow workspace/repositories/* symlink targets (live checkouts).
             cwd_path = Path(cwd).resolve()
+            repo_targets: list[Path] = []
+            if self.working_dir:
+                try:
+                    repos = Path(self.working_dir).resolve() / "repositories"
+                    if repos.is_dir():
+                        for child in repos.iterdir():
+                            if child.is_symlink():
+                                repo_targets.append(child.resolve())
+                except OSError:
+                    pass
+
+            def _under_repo(path: Path) -> bool:
+                for target in repo_targets:
+                    if path == target or target in path.parents:
+                        return True
+                return False
+
+            redirect_targets = re.findall(r">{1,2}\s*([^\s|&;]+)", normalized)
             for target in redirect_targets:
                 try:
                     t = Path(target).expanduser().resolve()
-                    if t.is_absolute() and cwd_path not in t.parents and t != cwd_path:
+                    if (
+                        t.is_absolute()
+                        and cwd_path not in t.parents
+                        and t != cwd_path
+                        and not _under_repo(t)
+                    ):
                         return (
                             "Error: Command blocked by safety guard (redirect outside working dir)"
                         )
                 except Exception:
                     continue
 
+            # evolve script allow: only evolve_*.py plus the shebang on that command.
+            # A bare interpreter (python -c) stays outside. config.json stays outside.
+            evolve_scripts: set[Path] = set()
+            evolve_interps: set[Path] = set()
+            scripts_dir = Path.home() / ".shibaclaw" / "scripts"
+            for _name in (
+                "evolve_ctl.py",
+                "evolve_apply.py",
+                "evolve_review.py",
+                "evolve_ship.py",
+                "evolve_body.py",
+                "evolve_stage.py",
+                "evolve_test.py",
+            ):
+                _script = scripts_dir / _name
+                try:
+                    if not _script.is_file():
+                        continue
+                    evolve_scripts.add(_script.resolve())
+                    _shebang = _script.read_text(encoding="utf-8", errors="replace").split("\n", 1)[0]
+                except OSError:
+                    continue
+                if _shebang.startswith("#!"):
+                    _interp = Path(_shebang[2:].strip().split()[0])
+                    try:
+                        if _interp.is_file():
+                            evolve_interps.add(_interp.resolve())
+                    except OSError:
+                        pass
+
+            outside: list[Path] = []
             for raw in self._extract_absolute_paths(cmd):
                 try:
                     expanded = os.path.expandvars(raw.strip())
                     p = Path(expanded).expanduser().resolve()
                 except Exception:
                     continue
-                if p.is_absolute() and cwd_path not in p.parents and p != cwd_path:
+                if (
+                    p.is_absolute()
+                    and cwd_path not in p.parents
+                    and p != cwd_path
+                    and not _under_repo(p)
+                ):
+                    outside.append(p)
+            if outside:
+                _ok = evolve_scripts | evolve_interps
+                if any(p not in _ok for p in outside) or not any(
+                    p in evolve_scripts for p in outside
+                ):
                     return "Error: Command blocked by safety guard (path outside working dir)"
 
         return None

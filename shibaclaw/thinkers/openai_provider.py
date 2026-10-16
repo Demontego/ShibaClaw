@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/thinkers/openai_provider.py
 """OpenAI-compatible provider implementation using the official openai SDK."""
 
 import asyncio
@@ -192,6 +193,23 @@ class OpenAIThinker(Thinker):
 
         return model
 
+    def _pin_openrouter_byok(self, model: str, kwargs: dict[str, Any]) -> None:
+        """Route OpenRouter Gemini only through the BYOK key. Marker: openrouter_byok_only.
+
+        A possible shared-capacity fallback makes OpenRouter hold credits for max_tokens
+        and reject with 402 before the provider key is used.
+        """
+        if self._provider_name != "openrouter":
+            return
+        if not str(model).lower().startswith("google/"):
+            return
+        extra = dict(kwargs.get("extra_body") or {})
+        route = dict(extra.get("provider") or {})
+        route["only"] = ["google-ai-studio", "google-ai-studio/flex"]
+        route["allow_fallbacks"] = False
+        extra["provider"] = route
+        kwargs["extra_body"] = extra
+
     def _apply_model_overrides(self, model: str, kwargs: dict[str, Any]) -> None:
         """Apply model-specific parameter overrides from the registry."""
         model_lower = model.lower()
@@ -323,6 +341,7 @@ class OpenAIThinker(Thinker):
         }
 
         self._apply_model_overrides(original_model, kwargs)
+        self._pin_openrouter_byok(original_model, kwargs)
 
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
@@ -426,6 +445,7 @@ class OpenAIThinker(Thinker):
         }
 
         self._apply_model_overrides(original_model, kwargs)
+        self._pin_openrouter_byok(original_model, kwargs)
 
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort

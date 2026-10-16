@@ -130,20 +130,48 @@ function enterTelegramMiniChatMode() {
     // Full chat UI — do not force-open settings
 }
 
+function bindTelegramTokenStorage() {
+    if (window._tgTokenBound) return;
+    window._tgTokenBound = true;
+    window.__shibaMemToken = window.__shibaMemToken || "";
+    const origGet = typeof getStoredToken === "function" ? getStoredToken : function () { return ""; };
+    const origSet = typeof setStoredToken === "function" ? setStoredToken : function () {};
+    const origClear = typeof clearStoredToken === "function" ? clearStoredToken : function () {};
+    function memGet() {
+        if (window.__shibaMemToken) return window.__shibaMemToken;
+        try {
+            const s = sessionStorage.getItem("shibaclaw_token");
+            if (s) return s;
+        } catch (_) { /* ignore */ }
+        try { return origGet() || ""; } catch (_) { return ""; }
+    }
+    function memSet(token) {
+        window.__shibaMemToken = token || "";
+        try { origSet(token); } catch (_) { /* ignore */ }
+        try { sessionStorage.setItem("shibaclaw_token", token || ""); } catch (_) { /* ignore */ }
+    }
+    function memClear() {
+        window.__shibaMemToken = "";
+        try { origClear(); } catch (_) { /* ignore */ }
+        try { sessionStorage.removeItem("shibaclaw_token"); } catch (_) { /* ignore */ }
+    }
+    getStoredToken = memGet;
+    setStoredToken = memSet;
+    clearStoredToken = memClear;
+    window.getStoredToken = memGet;
+    window.setStoredToken = memSet;
+    window.clearStoredToken = memClear;
+}
+
 function safeSetStoredToken(token) {
+    bindTelegramTokenStorage();
     try {
         setStoredToken(token);
-        return true;
+        return !!getStoredToken();
     } catch (e) {
-        console.warn("localStorage set failed", e);
-        try {
-            sessionStorage.setItem("shibaclaw_token", token);
-            window.getStoredToken = () => sessionStorage.getItem("shibaclaw_token") || "";
-            return true;
-        } catch (e2) {
-            console.warn("sessionStorage set failed", e2);
-            return false;
-        }
+        console.warn("token store failed", e);
+        window.__shibaMemToken = token || "";
+        return !!token;
     }
 }
 
@@ -190,7 +218,18 @@ async function loginWithTelegramInitData(initData) {
     return { ok: false, error: data.error || ("HTTP " + res.status) };
 }
 
+let _tgAuthInFlight = null;
+
 async function attemptTelegramMiniAuth() {
+    if (_tgAuthInFlight) return _tgAuthInFlight;
+    bindTelegramTokenStorage();
+    _tgAuthInFlight = _attemptTelegramMiniAuthBody().finally(() => {
+        _tgAuthInFlight = null;
+    });
+    return _tgAuthInFlight;
+}
+
+async function _attemptTelegramMiniAuthBody() {
     const wa = getTelegramWebApp();
     // CDN stub is always present in browser — refuse unless this is a real Mini App launch
     if (!wa || !isTelegramMiniApp()) return false;
@@ -266,6 +305,7 @@ async function attemptTelegramMiniAuth() {
     window.handleUnauthorized = function (message) {
         // Only re-auth via Telegram inside a real Mini App — never in browser/iframe stub
         if (isTelegramMiniApp()) {
+            if (_tgAuthInFlight) return;
             try { clearStoredToken(); } catch (_) { /* ignore */ }
             void attemptTelegramMiniAuth();
             return;

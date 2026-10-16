@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import hashlib
+import json
 import logging
 from typing import Any, Optional
 
@@ -17,6 +18,8 @@ class CompactionCircuitBreakerError(ContextOverflowError):
 
 
 PROMPT_CACHE_PREFIX_MARKER = "<!-- PROMPT_CACHE_PREFIX_MARKER -->"
+# JetBrains 2025: keep about 10 recent tool turns verbatim. Older tool text is a stub, not a summary.
+KEEP_RECENT_TOOL_TURNS = 10
 # A wake must still see the backlog and the evolve script reply after older tools are stubbed.
 _PIN_MARKERS = ("## Open", "refuse:", "need web_search", "gate open", "[CircuitBreaker: Tool execution stalled")
 
@@ -26,6 +29,22 @@ def _pin_message(msg: dict) -> bool:
     if not isinstance(content, str):
         return False
     return any(marker in content for marker in _PIN_MARKERS)
+
+
+def message_chars(msg: dict) -> int:
+    """Count text the model must read, including tool-call arguments."""
+    if not isinstance(msg, dict):
+        return 0
+    total = 0
+    content = msg.get("content")
+    if isinstance(content, str):
+        total += len(content)
+    elif content is not None:
+        total += len(str(content))
+    calls = msg.get("tool_calls")
+    if calls:
+        total += len(json.dumps(calls, ensure_ascii=False, default=str))
+    return total
 
 
 def tombstone_tool_result(msg: dict) -> dict:
@@ -347,7 +366,7 @@ class ContextOverflowGuard:
         """Keep the artifact register next to a compaction summary."""
         return f"{self.artifact_register.render_markdown()}\n\n{summary}"
 
-    def mask_observations(self, messages: list[dict], keep_recent_turns: int = 3) -> list[dict]:
+    def mask_observations(self, messages: list[dict], keep_recent_turns: int = KEEP_RECENT_TOOL_TURNS) -> list[dict]:
         """
         Observation Masking & Auditable Tool Tombstoning.
         Replaces raw tool outputs older than `keep_recent_turns` assistant turns with auditable tombstone stabs.
@@ -415,18 +434,14 @@ class ContextOverflowGuard:
         if not messages:
             return messages
 
-        tokens_before = sum(
-            len(msg.get("content") or "") for msg in messages if isinstance(msg.get("content"), str)
-        ) // 4
+        tokens_before = sum(message_chars(msg) for msg in messages) // 4
 
         # Apply observation masking & tombstoning first
-        messages = self.mask_observations(messages, keep_recent_turns=3)
+        messages = self.mask_observations(messages, keep_recent_turns=KEEP_RECENT_TOOL_TURNS)
 
         target_budget = max_tokens or self.critical_threshold
 
-        estimated_tokens = sum(
-            len(msg.get("content") or "") for msg in messages if isinstance(msg.get("content"), str)
-        ) // 4
+        estimated_tokens = sum(message_chars(msg) for msg in messages) // 4
 
         if estimated_tokens <= target_budget:
             if tokens_before > target_budget:
@@ -467,7 +482,7 @@ class ContextOverflowGuard:
                 groups.append((index, [msg]))
 
         def group_chars(group: list[dict]) -> int:
-            return sum(len(msg["content"]) for msg in group if isinstance(msg.get("content"), str))
+            return sum(message_chars(msg) for msg in group)
 
         selected = {
             index: group
@@ -493,9 +508,7 @@ class ContextOverflowGuard:
             [system_prompt] + [msg for index, _ in groups for msg in selected.get(index, [])]
         )
 
-        tokens_after = sum(
-            len(msg.get("content") or "") for msg in final_messages if isinstance(msg.get("content"), str)
-        ) // 4
+        tokens_after = sum(message_chars(msg) for msg in final_messages) // 4
 
         try:
             self.evaluate_compaction_effectiveness(tokens_before, tokens_after)
@@ -504,38 +517,13 @@ class ContextOverflowGuard:
 
         return final_messages
 
-def _message_text(msg: dict) -> str:
-    content = msg.get("content") or ""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return " ".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-    return str(content)
-
-
 class ContextWindowRecovery:
-    """Compress older turns into one summary when the window is over budget."""
+    """Fit the window by masking old tool output, then dropping what still does not fit."""
 
     def __init__(self, guard: ContextOverflowGuard):
         self.guard = guard
 
     def recover_context(self, messages: list, max_tokens: int) -> list:
-        if not messages or len(messages) <= 4:
+        if not messages:
             return messages
-        estimated_tokens = sum(len(_message_text(msg)) for msg in messages) // 4
-        if estimated_tokens <= max_tokens:
-            return messages
-        system_prompt = messages[0]
-        recent_messages = messages[-3:]
-        middle_messages = messages[1:-3]
-        summary_content = "Summary of previous conversation turns:\n"
-        for msg in middle_messages:
-            role = msg.get("role", "unknown")
-            content = _message_text(msg)
-            truncated = content[:100] + "..." if len(content) > 100 else content
-            summary_content += f"- {role}: {truncated}\n"
-        summary_message = {
-            "role": "system",
-            "content": f"[Context Window Recovery] {summary_content}",
-        }
-        return [system_prompt, summary_message] + recent_messages
+        return self.guard.budget_context(messages, max_tokens=max_tokens)

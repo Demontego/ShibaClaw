@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/tools/filesystem.py
 """File system tools: read, write, edit, list."""
 
 import asyncio
@@ -24,6 +25,16 @@ def _resolve_path(
     resolved = p.resolve()
     if allowed_dir:
         all_dirs = [allowed_dir] + (extra_allowed_dirs or [])
+        # workspace/repositories/* symlinks may point at live checkouts outside workspace
+        if workspace is not None:
+            repos = Path(workspace) / "repositories"
+            try:
+                if repos.is_dir():
+                    for child in repos.iterdir():
+                        if child.is_symlink():
+                            all_dirs.append(child.resolve())
+            except OSError:
+                pass
         if not any(_is_under(resolved, d) for d in all_dirs):
             raise PermissionError(f"Path {path} is outside allowed directory {allowed_dir}")
     return resolved

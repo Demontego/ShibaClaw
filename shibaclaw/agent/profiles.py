@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/profiles.py
 """Agent profile management for session-level persona switching."""
 
 import json
@@ -65,6 +66,16 @@ class ProfileManager:
         if not isinstance(enabled, list):
             return None
         return [str(x) for x in enabled]
+
+    def get_model(self, profile_id: str | None) -> str | None:
+        """Return profile model override, or None for global default."""
+        pid = profile_id or DEFAULT_PROFILE_ID
+        meta = self._load_manifest().get(pid, {})
+        model = meta.get("model")
+        if model is None:
+            return None
+        text = str(model).strip()
+        return text or None
 
     def get_temperature(self, profile_id: str | None) -> float | None:
         """Return profile temperature override, or None for global default."""

@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/loop.py
 """Agent loop: the core engine where the Shiba hunts for answers."""
 
 from __future__ import annotations
@@ -489,6 +490,22 @@ class ShibaBrain:
 
         self.mcp.restore_active_tools()
 
+        # Workspace Nano Banana tools (image/video via OpenRouter)
+        try:
+            import importlib.util
+            from pathlib import Path as _Path
+
+            _nb = _Path(self.workspace) / "tools" / "nanobanana.py"
+            if _nb.exists():
+                _spec = importlib.util.spec_from_file_location("shibaclaw_ws_nanobanana", _nb)
+                if _spec and _spec.loader:
+                    _mod = importlib.util.module_from_spec(_spec)
+                    _spec.loader.exec_module(_mod)
+                    self.tools.register(_mod.NanoBananaImageTool())
+                    self.tools.register(_mod.NanoBananaVideoTool())
+        except Exception as e:
+            logger.error("Failed to register nanobanana tools: {}", e)
+
     def _apply_permission_mode(self, session: Session | None):
         """Bind per-turn FS/exec permission mode via contextvars; return (mode, tokens)."""
         from shibaclaw.agent.sandbox_ctx import bind_permission_mode
@@ -529,12 +546,55 @@ class ShibaBrain:
 
     # Default-deny for non-allowlisted Telegram (openGroups / Chat Automation peers).
     # Only these tools are exposed; memory/knowledge/FS/exec/MCP/plugins stay owner-side.
+    # Marker: non_owner_guest_allowlist
     _NON_ALLOWLISTED_ALLOWED_TOOLS = frozenset(
         {
             "web_search",
             "web_fetch",
+            "nanobanana_image",
         }
     )
+    _NON_ALLOWLISTED_ALLOWED_MCP_SUFFIXES = frozenset(
+        {
+            "google_calendar_find_free_slots",
+            "google_calendar_get_current_time",
+        }
+    )
+    # Marker: boardnight_group_tools
+    _BOARDNIGHT_CHAT_IDS = frozenset({"-5141262838"})
+    _BOARDNIGHT_ALLOWED_TOOLS = frozenset(
+        {
+            "read_file",
+            "write_file",
+            "edit_file",
+            "list_dir",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "mcp_list_tools",
+            "mcp_call_tool",
+        }
+    )
+
+    def _is_boardnight_group_turn(
+        self,
+        metadata: dict | None,
+        channel: str | None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> bool:
+        """Boardnight Telegram group: repo/GitHub tools for any member in chat."""
+        if str(profile_id or "") == "boardnight" and str(channel or "").lower() == "telegram":
+            return True
+        cid = str(chat_id or (metadata or {}).get("chat_id") or "")
+        return cid in self._BOARDNIGHT_CHAT_IDS
+
+    def _boardnight_tool_allowed(self, tool_name: str) -> bool:
+        if tool_name in self._BOARDNIGHT_ALLOWED_TOOLS:
+            return True
+        return "github" in tool_name.lower() and tool_name.startswith("mcp_")
+
 
     def _is_allowlisted_turn(
         self, metadata: dict | None, channel: str | None = None
@@ -554,14 +614,33 @@ class ShibaBrain:
             return False
         return True
 
-    def _non_allowlisted_tool_allowed(self, tool_name: str) -> bool:
-        return tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS
+    def _non_allowlisted_tool_allowed(
+        self,
+        tool_name: str,
+        metadata: dict | None = None,
+        channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> bool:
+        """Guest/non-allowlisted: search, image gen, calendar free/busy."""
+        if self._is_boardnight_group_turn(metadata, channel, chat_id, profile_id):
+            return self._boardnight_tool_allowed(tool_name)
+        if tool_name in self._NON_ALLOWLISTED_ALLOWED_TOOLS:
+            return True
+        if not tool_name.startswith("mcp_"):
+            return False
+        for suffix in self._NON_ALLOWLISTED_ALLOWED_MCP_SUFFIXES:
+            if tool_name == suffix or tool_name.endswith("_" + suffix):
+                return True
+        return False
 
     def _filter_tools_for_allowlist(
         self,
         tool_defs: list[dict],
         metadata: dict | None,
         channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
     ) -> list[dict]:
         """Allow-list only for non-allowlisted Telegram turns (default-deny).
 
@@ -575,7 +654,9 @@ class ShibaBrain:
             name = (d.get("function") or {}).get("name") or d.get("name") or ""
             if name == "session_search" and ch not in {"webui", "cli", "system"}:
                 continue
-            if allowlisted or self._non_allowlisted_tool_allowed(name):
+            if allowlisted or self._non_allowlisted_tool_allowed(
+                name, metadata, channel, chat_id=chat_id, profile_id=profile_id
+            ):
                 out.append(d)
         return out
 
@@ -584,13 +665,17 @@ class ShibaBrain:
         tool_name: str,
         metadata: dict | None,
         channel: str | None = None,
+        chat_id: str | None = None,
+        profile_id: str | None = None,
     ) -> bool:
         ch = str(channel or (metadata or {}).get("channel") or "").lower()
         if tool_name == "session_search" and ch not in {"webui", "cli", "system"}:
             return True
         if self._is_allowlisted_turn(metadata, channel):
             return False
-        return not self._non_allowlisted_tool_allowed(tool_name)
+        return not self._non_allowlisted_tool_allowed(
+            tool_name, metadata, channel, chat_id=chat_id, profile_id=profile_id
+        )
 
     def _set_tool_context(
         self,
@@ -879,7 +964,9 @@ class ShibaBrain:
         tool_defs = self._filter_tools_for_profile(
             self.tools.get_definitions(), profile_id
         )
-        tool_defs = self._filter_tools_for_allowlist(tool_defs, metadata, channel)
+        tool_defs = self._filter_tools_for_allowlist(
+            tool_defs, metadata, channel, chat_id=chat_id, profile_id=profile_id
+        )
         from shibaclaw.agent.tools.agent_send import hide_agent_send
 
         tool_defs = hide_agent_send(tool_defs, session_key)
@@ -969,13 +1056,13 @@ class ShibaBrain:
                         if msg.get("timestamp"):
                             entry["timestamp"] = msg.get("timestamp")
 
-                        metadata = {}
+                        steer_meta = {}
                         if msg.get("media"):
-                            metadata["media"] = msg["media"]
+                            steer_meta["media"] = msg["media"]
                         if msg.get("attachments"):
-                            metadata["attachments"] = msg["attachments"]
-                        if metadata:
-                            entry["metadata"] = metadata
+                            steer_meta["attachments"] = msg["attachments"]
+                        if steer_meta:
+                            entry["metadata"] = steer_meta
 
                         messages.append(entry)
                     self._steering_queues[session_key] = []
@@ -1026,10 +1113,7 @@ class ShibaBrain:
 
             # Mask a copy for the provider. The wake transcript keeps the real tool output.
             prompt_messages = context_overflow_guard.budget_context(
-                context_overflow_guard.mask_observations(
-                    [dict(item) for item in messages],
-                    keep_recent_turns=3,
-                )
+                [dict(item) for item in messages]
             )
 
             response = await active_provider.chat_with_retry_streaming(
@@ -1054,21 +1138,12 @@ class ShibaBrain:
                         checkpoint_mgr=None if private else checkpoint_mgr,
                         session_key=session_key or "",
                     )
-                    if overflow_action == "compress":
-                        prompt_messages = context_overflow_guard.budget_context(
-                            context_overflow_guard.mask_observations(
-                                [dict(item) for item in messages],
-                                keep_recent_turns=3,
-                            )
-                        )
                 except ContextOverflowError as exc:
-                    logger.error("ContextOverflowGuard hard limit: {}", exc)
-                    keep_checkpoint = True
-                    final_content = (
-                        "I reached the context window hard limit and stopped. "
-                        "An emergency checkpoint was saved."
-                    )
-                    break
+                    # The reply already landed. The next call masks old tool output.
+                    logger.warning("ContextOverflowGuard hard limit after reply: {}", exc)
+                    overflow_action = "compress"
+                if overflow_action == "compress":
+                    logger.info("ContextOverflowGuard: next call uses the masked window")
 
             if cost_circuit_breaker.is_tripped():
                 keep_checkpoint = True
@@ -1136,7 +1211,11 @@ class ShibaBrain:
                         answered_calls.add(tool_call.id)
                         continue
                     if self._tool_blocked_for_non_allowlisted(
-                        tool_call.name, metadata, channel
+                        tool_call.name,
+                        metadata,
+                        channel,
+                        chat_id=chat_id,
+                        profile_id=profile_id,
                     ):
                         messages = self.context.add_tool_result(
                             messages,
@@ -1144,7 +1223,7 @@ class ShibaBrain:
                             tool_call.name,
                             (
                                 f"Error: Tool '{tool_call.name}' is allowlist-only. "
-                                "Non-allowlisted senders may only use web_search/web_fetch."
+                                "Guests may use search, image gen, and calendar free/busy only."
                             ),
                         )
                         answered_calls.add(tool_call.id)
@@ -1253,6 +1332,14 @@ class ShibaBrain:
                                 "list_dir",
                                 "session_search",
                             }
+                            if is_error and not (is_transient and is_safe and tool_attempt < 3):
+                                try:
+                                    from shibaclaw.agent.incidents import note as note_incident
+
+                                    line = result.split("\n", 1)[0][:80]
+                                    note_incident("tool", f"{call.name} {line}")
+                                except Exception:
+                                    logger.debug("incident note failed")
                             if is_error and is_transient and is_safe and tool_attempt < 3:
                                 base_delay = float(tool_attempt)
                                 delay = base_delay / 2 + random.uniform(0, base_delay / 2)
@@ -1330,7 +1417,10 @@ class ShibaBrain:
                                 final_content or "Stopped. This tool was not started.",
                             )
                 messages.extend(tool_pivots)
-                tool_names = [tc.name for tc in response.tool_calls]
+                tool_names = [
+                    f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True, ensure_ascii=False)}"
+                    for tc in response.tool_calls
+                ]
                 sre_monitor.add_tool_sequence(tool_names)
                 sre_monitor.add_progress_metric(float(len(executed_tool_calls)))
                 if stuck_detector.add_tool_sequence(tool_names):
@@ -1354,6 +1444,36 @@ class ShibaBrain:
                 # poison the context and cause permanent 400 loops (#1303).
                 if response.finish_reason == "error":
                     logger.error("LLM returned error: {}", (clean or "")[:200])
+                    err = (clean or "").lower()
+                    if any(
+                        marker in err
+                        for marker in (
+                            "context_length_exceeded",
+                            "max_context_length",
+                            "token_limit_exceeded",
+                            "invalid_request_error",
+                            "model_not_found",
+                            "unknown_model",
+                        )
+                    ):
+                        try:
+                            from shibaclaw.agent.incidents import note as note_incident
+
+                            marker = next(
+                                m
+                                for m in (
+                                    "context_length_exceeded",
+                                    "max_context_length",
+                                    "token_limit_exceeded",
+                                    "invalid_request_error",
+                                    "model_not_found",
+                                    "unknown_model",
+                                )
+                                if m in err
+                            )
+                            note_incident("provider", marker, (clean or "")[:300])
+                        except Exception:
+                            logger.debug("incident note failed")
                     final_content = clean or "Sorry, I encountered an error calling the AI model."
                     break
 
@@ -1911,6 +2031,8 @@ class ShibaBrain:
                 "/restart — Restart the bot",
                 "/update — Check for and install updates",
                 "/help — Show available commands",
+                "/evolve on|off — Daily self-evolution (owner)",
+                "/panic — Stop evolution, no restart",
             ]
             return OutboundMessage(
                 channel=msg.channel,
@@ -2081,8 +2203,17 @@ class ShibaBrain:
             return OutboundMessage(channel=msg.channel, chat_id=msg.chat_id, content=REFUSAL)
         _pre_saved_count = 1
 
+        # Token streaming → Telegram draft / editMessageText progress.
+        # Marker: telegram_token_streaming_bus
+        _is_secretary = bool((msg.metadata or {}).get("secretary_summon"))
+        _stream_buf = ""
+        _last_stream_pub = 0.0
+
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
-            if msg.metadata and msg.metadata.get("secretary_summon"):
+            nonlocal _stream_buf
+            if tool_hint:
+                _stream_buf = ""
+            if _is_secretary:
                 return
             meta = {"_progress": True, "_tool_hint": tool_hint, **(msg.metadata or {})}
             await self.bus.publish_outbound(
@@ -2094,13 +2225,37 @@ class ShibaBrain:
                 )
             )
 
+        async def _bus_token(token: str) -> None:
+            nonlocal _stream_buf, _last_stream_pub
+            if not token or msg.channel != "telegram":
+                return
+            if _is_secretary:
+                return
+            if on_response_token is not None:
+                await on_response_token(token)
+                return
+            _stream_buf += token
+            now = time.monotonic()
+            if now - _last_stream_pub < 0.2:
+                return
+            _last_stream_pub = now
+            meta = {"_progress": True, "_stream": True, **(msg.metadata or {})}
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel=msg.channel,
+                    chat_id=msg.chat_id,
+                    content=_stream_buf,
+                    metadata=meta,
+                )
+            )
+
         _temp = self._resolve_temperature(
             profile_id, session.metadata, self.workspace
         )
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
-            on_response_token=on_response_token,
+            on_response_token=on_response_token or _bus_token,
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,

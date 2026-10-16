@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/brain/manager.py
 """Brain management for conversation history — the memory of the Shiba."""
 
 from __future__ import annotations

@@ -7,6 +7,17 @@
     background: var(--bg-secondary);
 }
 
+.typing-status {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    animation: typingShimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes typingShimmer {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+}
+
 .typing-dots-inline {
     display: flex;
     gap: 4px;

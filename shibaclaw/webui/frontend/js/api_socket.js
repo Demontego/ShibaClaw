@@ -43,16 +43,29 @@ function _scheduleStreamRender(msgId, bubble) {
         delete frames[mid];
         const target = (bubble && bubble.isConnected) ? bubble : document.getElementById("stream-bubble-" + mid);
         if (!target) return;
-        target.innerHTML = renderMarkdown(state._streamBuffers[mid] || "");
-        try {
-            if (state._streamBuffers && state._streamBuffers[mid]) {
-                target.setAttribute('data-raw-content', state._streamBuffers[mid]);
-            } else {
-                target.removeAttribute('data-raw-content');
-            }
-        } catch (e) { }
+        let plain = target.querySelector(".stream-plain");
+        if (!plain) {
+            target.replaceChildren();
+            plain = document.createElement("div");
+            plain.className = "stream-plain";
+            target.appendChild(plain);
+        }
+        plain.textContent = state._streamBuffers[mid] || "";
         scrollToBottom();
     });
+}
+
+function _adoptTypingBubble(mid) {
+    const typing = document.getElementById("typing-bubble");
+    if (!typing) return null;
+    const bubble = typing.querySelector(".message-bubble");
+    if (!bubble) return null;
+    typing.removeAttribute("id");
+    bubble.id = "stream-bubble-" + mid;
+    bubble.classList.remove("typing-bubble");
+    const status = bubble.querySelector(".typing-status");
+    if (status) status.remove();
+    return bubble;
 }
 
 function _clearAllStreamRenders() {
@@ -128,24 +141,17 @@ function initSocket() {
     realtime.on("agent_thinking", (data) => {
         if (data.session_key && data.session_key !== state.sessionId) return;
         clearTimeout(state._typingBubbleTimeout);
-        hideTypingBubble();
-        // We no longer add a destructive GEN block if we have a stream bubble,
-        // we just finalize it so it stays natively on screen.
         _finalizeStreamBubble(data.id);
-
-        // Only fallback to showThinking if there was no stream bubble at all
-        // to avoid duplicating text.
-        showThinking("Sto riflettendo...");
+        hideThinking();
+        if (!document.getElementById("typing-bubble")) showTypingBubble();
     });
 
     realtime.on("agent_tool", (data) => {
         if (data.session_key && data.session_key !== state.sessionId) return;
         clearTimeout(state._typingBubbleTimeout);
-        hideTypingBubble();
-        showThinking(data.content);
-        addProcessStep(data.id, data.content, "EXE");
-        // Finalize any pending stream bubble before tool execution
+        hideThinking();
         _finalizeStreamBubble(data.id);
+        showTypingBubble(workStatus(data.content));
     });
 
     realtime.on("agent_interactive", (data) => {
@@ -173,15 +179,15 @@ function initSocket() {
     realtime.on("agent_response_chunk", (data) => {
         if (data.session_key && !_isSameSessionKey(data.session_key, state.sessionId)) return;
         clearTimeout(state._typingBubbleTimeout);
-        hideTypingBubble();
 
         // Accumulate streamed text per message id
         if (!state._streamBuffers) state._streamBuffers = {};
         const mid = data.id || "stream";
         state._streamBuffers[mid] = (state._streamBuffers[mid] || "") + (data.content || "");
 
-        // Get or create the streaming bubble
+        // Keep the status bubble. The first token replaces the line in place.
         let bubble = document.getElementById("stream-bubble-" + mid);
+        if (!bubble) bubble = _adoptTypingBubble(mid);
         if (!bubble) {
             collapseProcessGroup(mid);
             activateChat();
@@ -190,7 +196,6 @@ function initSocket() {
             bubble.className = "message-bubble";
             bubble.id = "stream-bubble-" + mid;
             group.querySelector(".message-content").appendChild(bubble);
-            try { bubble.setAttribute('data-raw-content', state._streamBuffers[mid] || ''); } catch (e) { }
             addTimestamp(group);
             chatHistory.appendChild(group);
         }
@@ -201,13 +206,14 @@ function initSocket() {
     realtime.on("agent_response", (data) => {
         if (data.session_key && !_isSameSessionKey(data.session_key, state.sessionId)) return;
         clearTimeout(state._typingBubbleTimeout);
-        hideTypingBubble();
         hideThinking();
         collapseProcessGroup(data.id);
 
         // If streaming already created the bubble, finalize it with the complete content
         const mid = data.id || "stream";
-        const streamBubble = document.getElementById("stream-bubble-" + mid);
+        let streamBubble = document.getElementById("stream-bubble-" + mid);
+        if (!streamBubble) streamBubble = _adoptTypingBubble(mid);
+        hideTypingBubble();
         _cancelScheduledStreamRender(mid);
         if (streamBubble) {
             // Clean up stream buffer
@@ -337,21 +343,18 @@ function initSocket() {
 
             const events = data.events || [];
             for (const evt of events) {
-                if (evt.type === "agent_thinking" || evt.type === "thinking") {
-                    showThinking(evt.content);
-                    addProcessStep(evt.id, evt.content, "GEN");
-                } else if (evt.type === "agent_tool" || evt.type === "tool") {
-                    showThinking(evt.content);
-                    addProcessStep(evt.id, evt.content, "EXE");
-                } else if (evt.type === "interactive") {
+                if (evt.type === "interactive") {
                     if (typeof handleInteractivePayload === "function") {
                         handleInteractivePayload(evt.payload || {});
                     }
                 }
             }
-            if (events.length > 0) {
-                showThinking(events[events.length - 1].content);
+            hideThinking();
+            let label = "";
+            for (const evt of events) {
+                if (evt.type === "tool" || evt.type === "agent_tool") label = workStatus(evt.content);
             }
+            showTypingBubble(label);
         }
     });
 

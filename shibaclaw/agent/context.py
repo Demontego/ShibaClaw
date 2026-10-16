@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/context.py
 """Context builder for assembling agent prompts."""
 
 import base64

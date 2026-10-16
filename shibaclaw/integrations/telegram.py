@@ -1,7 +1,9 @@
+# host-anchor: shibaclaw/integrations/telegram.py
 """Telegram channel implementation using python-telegram-bot."""
 
 from __future__ import annotations
 
+import re
 import asyncio
 import itertools
 import logging
@@ -23,7 +25,7 @@ from telegram import (
     Update,
     WebAppInfo,
 )
-from telegram.error import NetworkError, RetryAfter, TimedOut
+from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     BusinessConnectionHandler,
@@ -94,6 +96,16 @@ _SEND_RETRY_BASE_DELAY = 0.5
 def _is_message_not_modified_error(error: Exception) -> bool:
     """Return whether Telegram rejected an edit because the content is unchanged."""
     return "message is not modified" in str(error).lower()
+
+
+def _is_uneditable_message_error(error: Exception) -> bool:
+    """Edit target gone / not editable — fall back to sendMessage (don't retry)."""
+    s = str(error).lower()
+    return (
+        "message to edit not found" in s
+        or "message can't be edited" in s
+        or "message is not found" in s
+    )
 
 
 class TelegramConfig(Base):
@@ -174,6 +186,7 @@ class TelegramChannel(BaseChannel):
         BotCommand("new", "Start a new conversation"),
         BotCommand("stop", "Stop the current task"),
         BotCommand("help", "Show available commands"),
+        BotCommand("profile", "Switch agent profile (owner)"),
         BotCommand("evolve", "Evolution on/off (owner)"),
         BotCommand("panic", "Stop evolution, no restart"),
         BotCommand("restart", "Restart the bot"),
@@ -434,6 +447,8 @@ class TelegramChannel(BaseChannel):
         ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
         if ext in ("jpg", "jpeg", "png", "gif", "webp"):
             return "photo"
+        if ext in ("mp4", "mov", "webm", "mkv"):
+            return "video"
         if ext == "ogg":
             return "voice"
         if ext in ("mp3", "m4a", "wav", "aac"):
@@ -458,6 +473,13 @@ class TelegramChannel(BaseChannel):
             await self._answer_guest_query(str(guest_query_id), msg.content or "")
             return
         original_chat_id = str(msg.chat_id)
+        # Automation targets like "123456:topic:1" → DM forum topic
+        thread_from_chat_id = None
+        if ":topic:" in original_chat_id:
+            base_chat, _, topic_part = original_chat_id.partition(":topic:")
+            original_chat_id = base_chat
+            if topic_part.isdigit():
+                thread_from_chat_id = int(topic_part)
         if original_chat_id == "auto" or not original_chat_id.lstrip("-").isdigit():
             allow_list = getattr(self.config, "allow_from", [])
             valid_ids = []
@@ -510,6 +532,8 @@ class TelegramChannel(BaseChannel):
                 return
         reply_to_message_id = metadata.get("message_id")
         message_thread_id = metadata.get("message_thread_id")
+        if message_thread_id is None and thread_from_chat_id is not None:
+            message_thread_id = thread_from_chat_id
         if message_thread_id is None and reply_to_message_id is not None:
             message_thread_id = self._message_threads.get((msg.chat_id, reply_to_message_id))
         thread_kwargs: dict[str, Any] = {}
@@ -529,6 +553,7 @@ class TelegramChannel(BaseChannel):
                 media_type = self._get_media_type(media_path)
                 sender = {
                     "photo": self._app.bot.send_photo,
+                    "video": self._app.bot.send_video,
                     "voice": self._app.bot.send_voice,
                     "audio": self._app.bot.send_audio,
                 }.get(media_type, self._app.bot.send_document)
@@ -536,7 +561,7 @@ class TelegramChannel(BaseChannel):
                     "photo"
                     if media_type == "photo"
                     else media_type
-                    if media_type in ("voice", "audio")
+                    if media_type in ("voice", "audio", "video")
                     else "document"
                 )
                 if self._is_remote_media_url(media_path):
@@ -683,6 +708,9 @@ class TelegramChannel(BaseChannel):
                     delay,
                 )
                 await asyncio.sleep(delay)
+            except BadRequest:
+                # PTB: BadRequest subclasses NetworkError — never retry client errors
+                raise
             except (TimedOut, NetworkError) as e:
                 if attempt == _SEND_MAX_RETRIES:
                     raise
@@ -708,8 +736,13 @@ class TelegramChannel(BaseChannel):
         chat_id: int,
         message_id: int,
         text: str,
+        thread_kwargs: dict | None = None,
     ) -> bool:
         """Edit an existing progress message. Returns True on success."""
+        edit_kw: dict[str, Any] = {}
+        biz = (thread_kwargs or {}).get("business_connection_id")
+        if biz:
+            edit_kw["business_connection_id"] = biz
         try:
             html = _markdown_to_telegram_html(text)
             await self._call_with_retry(
@@ -718,6 +751,7 @@ class TelegramChannel(BaseChannel):
                 message_id=message_id,
                 text=html,
                 parse_mode="HTML",
+                **edit_kw,
             )
             return True
         except (NetworkError, RetryAfter, TimedOut) as e:
@@ -767,7 +801,7 @@ class TelegramChannel(BaseChannel):
             self._progress_messages[key] = int(seed)
         existing_id = self._progress_messages.get(key)
         if existing_id is not None:
-            success = await self._edit_progress_message(chat_id, existing_id, text)
+            success = await self._edit_progress_message(chat_id, existing_id, text, thread_kwargs)
             if success:
                 return
             self._progress_messages.pop(key, None)
@@ -1227,10 +1261,16 @@ class TelegramChannel(BaseChannel):
             except (NetworkError, RetryAfter, TimedOut) as e:
                 if _is_message_not_modified_error(e):
                     return True
+                if _is_uneditable_message_error(e):
+                    last_err = e
+                    break
                 raise
             except Exception as e:
                 if _is_message_not_modified_error(e):
                     return True
+                if _is_uneditable_message_error(e):
+                    last_err = e
+                    break
                 last_err = e
                 continue
         logger.warning("Telegram editMessageText(rich) failed, falling back: {}", last_err)
@@ -1348,6 +1388,239 @@ class TelegramChannel(BaseChannel):
             return None
         return self._inbound_reply_map.get((int(chat_id), int(inbound_mid)))
 
+    def _workspace_path(self):
+        from shibaclaw.config.paths import get_workspace_path
+
+        return get_workspace_path()
+
+    def _session_key_for_message(self, message) -> str:
+        override = self._derive_topic_session_key(message)
+        if override:
+            return override
+        return f"telegram:{message.chat_id}"
+
+    def _chat_profiles_path(self):
+        return self._workspace_path() / "chat_profiles.json"
+
+    def _load_chat_profiles(self) -> dict:
+        import json
+
+        path = self._chat_profiles_path()
+        if not path.exists():
+            return {"profiles": {}, "open_policy": [], "group_context_buffer_size": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return {"profiles": {}, "open_policy": [], "group_context_buffer_size": {}}
+            data.setdefault("profiles", {})
+            return data
+        except Exception:
+            logger.warning("Failed to read chat_profiles.json")
+            return {"profiles": {}, "open_policy": [], "group_context_buffer_size": {}}
+
+    def _save_chat_profiles(self, data: dict) -> None:
+        import json
+
+        path = self._chat_profiles_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    @staticmethod
+    def _profile_bind_key(session_key: str, chat_id: str) -> str:
+        """Sticky key: prefer topic-scoped ``{chat}:topic:{id}``, else chat_id."""
+        if session_key.startswith("telegram:") and ":topic:" in session_key:
+            # telegram:{chat}:topic:{id} → {chat}:topic:{id}
+            return session_key.split(":", 1)[1]
+        return str(chat_id)
+
+    def _get_bound_profile(self, chat_id: str, session_key: str | None = None) -> str | None:
+        profiles = self._load_chat_profiles().get("profiles") or {}
+        if session_key:
+            topic_key = self._profile_bind_key(session_key, chat_id)
+            if topic_key in profiles:
+                return str(profiles[topic_key])
+        pid = profiles.get(str(chat_id))
+        return str(pid) if pid else None
+
+    def _set_bound_profile(
+        self, chat_id: str, profile_id: str, session_key: str | None = None
+    ) -> None:
+        data = self._load_chat_profiles()
+        key = self._profile_bind_key(session_key, chat_id) if session_key else str(chat_id)
+        data.setdefault("profiles", {})[key] = profile_id
+        self._save_chat_profiles(data)
+
+    def _apply_bound_profile_to_session(self, session_key: str, chat_id: str) -> str | None:
+        """If session has no profile_id, apply chat_profiles.json bind (sticky)."""
+        from shibaclaw.brain.manager import PackManager
+
+        sm = PackManager(self._workspace_path())
+        session = sm.get_or_create(session_key)
+        current = session.metadata.get("profile_id")
+        if current:
+            return str(current)
+        bound = self._get_bound_profile(chat_id, session_key)
+        if not bound:
+            return None
+        old_profile_id = session.metadata.get("profile_id")
+        session.metadata["profile_id"] = bound
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            ProfileManager(self._workspace_path()).sync_session_knowledge_bases(
+                session.metadata, bound, old_profile_id
+            )
+        except Exception:
+            pass
+        sm.save(session)
+        return bound
+
+    def _set_session_profile(self, session_key: str, chat_id: str, profile_id: str) -> str:
+        from shibaclaw.brain.manager import PackManager
+        from shibaclaw.agent.profiles import ProfileManager
+
+        sm = PackManager(self._workspace_path())
+        session = sm.get_or_create(session_key)
+        old_profile_id = session.metadata.get("profile_id")
+        session.metadata["profile_id"] = profile_id
+        try:
+            ProfileManager(self._workspace_path()).sync_session_knowledge_bases(
+                session.metadata, profile_id, old_profile_id
+            )
+        except Exception:
+            pass
+        sm.save(session)
+        self._set_bound_profile(chat_id, profile_id, session_key)
+        return profile_id
+
+    def _resolve_profile_id(self, token: str) -> tuple[str | None, str | None]:
+        """Resolve profile id/label → (id, label)."""
+        from shibaclaw.agent.profiles import ProfileManager
+
+        token_l = (token or "").strip().lower()
+        if not token_l:
+            return None, None
+        pm = ProfileManager(self._workspace_path())
+        profiles = pm.list_profiles()
+        by_id = {p["id"].lower(): p for p in profiles}
+        if token_l in by_id:
+            p = by_id[token_l]
+            return p["id"], p.get("label") or p["id"]
+        for p in profiles:
+            label = str(p.get("label") or "").strip().lower()
+            if label and label == token_l:
+                return p["id"], p.get("label") or p["id"]
+        return None, None
+
+    def _profile_keyboard(self, current_id: str) -> InlineKeyboardMarkup:
+        from shibaclaw.agent.profiles import ProfileManager
+
+        pm = ProfileManager(self._workspace_path())
+        rows: list[list[InlineKeyboardButton]] = []
+        row: list[InlineKeyboardButton] = []
+        for p in pm.list_profiles():
+            pid = p["id"]
+            label = p.get("label") or pid
+            mark = "✓ " if pid == current_id else ""
+            row.append(
+                InlineKeyboardButton(
+                    f"{mark}{label}",
+                    callback_data=f"shiba_profile:{pid}",
+                )
+            )
+            if len(row) == 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+        return InlineKeyboardMarkup(rows)
+
+    async def _on_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Owner-only: list/switch agent profile for this chat session."""
+        if not update.message or not update.effective_user:
+            return
+        message = update.message
+        user = update.effective_user
+        sender_id = self._sender_id(user)
+        if not self._is_allowlisted(sender_id, user.username):
+            if message.chat.type in ("group", "supergroup"):
+                await message.reply_text("Смена профиля только у хозяина. 🐾")
+            return
+
+        session_key = self._session_key_for_message(message)
+        chat_id = str(message.chat_id)
+        self._apply_bound_profile_to_session(session_key, chat_id)
+
+        from shibaclaw.brain.manager import PackManager
+
+        sm = PackManager(self._workspace_path())
+        session = sm.get_or_create(session_key)
+        current = session.metadata.get("profile_id") or "default"
+
+        args = list(context.args or [])
+        if not args:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            pm = ProfileManager(self._workspace_path())
+            lines = ["🎭 Профили агента (owner):", f"Сейчас: `{current}`", ""]
+            for p in pm.list_profiles():
+                mark = "→ " if p["id"] == current else "  "
+                desc = (p.get("description") or "").strip()
+                line = f"{mark}`{p['id']}` — {p.get('label') or p['id']}"
+                if desc:
+                    line += f"\n    {desc}"
+                lines.append(line)
+            lines.append("")
+            lines.append("Выбери кнопку или `/profile <id>` (например `/profile polymarket`).")
+            await message.reply_text(
+                "\n".join(lines),
+                reply_markup=self._profile_keyboard(str(current)),
+                parse_mode="Markdown",
+            )
+            return
+
+        pid, label = self._resolve_profile_id(args[0])
+        if not pid:
+            await message.reply_text(
+                f"Неизвестный профиль `{args[0]}`. Напиши `/profile` для списка.",
+                parse_mode="Markdown",
+            )
+            return
+        self._set_session_profile(session_key, chat_id, pid)
+        await message.reply_text(
+            f"Профиль для этого чата: *{label}* (`{pid}`).",
+            parse_mode="Markdown",
+        )
+
+    async def _on_profile_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Inline keyboard profile pick — owner only."""
+        query = update.callback_query
+        if not query or not query.from_user or not query.data:
+            return
+        user = query.from_user
+        sender_id = self._sender_id(user)
+        if not self._is_allowlisted(sender_id, user.username):
+            await query.answer("Только хозяин.", show_alert=True)
+            return
+        await query.answer()
+        pid = query.data.split(":", 1)[1].strip()
+        resolved, label = self._resolve_profile_id(pid)
+        if not resolved:
+            await query.edit_message_text(f"Неизвестный профиль: {pid}")
+            return
+        message = query.message
+        if message is None:
+            return
+        session_key = self._session_key_for_message(message)
+        chat_id = str(message.chat_id)
+        self._set_session_profile(session_key, chat_id, resolved)
+        await query.edit_message_text(
+            f"Профиль для этого чата: *{label}* (`{resolved}`).",
+            parse_mode="Markdown",
+        )
+
     async def _on_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command."""
         if not update.message or not update.effective_user:
@@ -1413,9 +1686,10 @@ class TelegramChannel(BaseChannel):
     async def _is_secretary_summon(self, message) -> bool:
         """Return true for a trigger word or reply to bot/secretary output."""
         combined = f"{message.text or ''} {message.caption or ''}".lower()
-        for word in self.config.trigger_words:
-            trigger = str(word).strip().lower()
-            if trigger and trigger in combined:
+        for word in self.config.trigger_words or []:
+            w = str(word).strip().lower()
+            # Whole-token match: "шиба" must not fire inside "ошибается".
+            if w and re.search(rf"(?<!\w){re.escape(w)}(?!\w)", combined):
                 return True
         reply = getattr(message, "reply_to_message", None)
         if reply is None:
@@ -1738,7 +2012,9 @@ class TelegramChannel(BaseChannel):
         policy = self.config.group_policy
         if policy in ("trigger", "mention_or_trigger"):
             for word in self.config.trigger_words:
-                if word.lower() in combined_text:
+                w = str(word).strip().lower()
+                # Whole-token match: "шиба" must not fire inside "ошибается".
+                if w and re.search(rf"(?<!\w){re.escape(w)}(?!\w)", combined_text):
                     return True
         if policy in ("mention", "mention_or_trigger"):
             bot_id, bot_username = await self._ensure_bot_identity()

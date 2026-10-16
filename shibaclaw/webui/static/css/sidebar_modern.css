@@ -1,26 +1,25 @@
-/* ── Modern sidebar (Handcrafted ShibaClaw Design System) ─────── */
-/* Clean, tactile, high-contrast human-made aesthetics using Shiba Gold */
+/* ── Modern sidebar (Claude Code–inspired density) ─────────── */
+/* Loaded after bundle.css — keeps Shiba gold, quieter chrome. */
 
 :root {
-    --sidebar-width: 264px;
+    --sidebar-width: 260px;
 }
 
 .sidebar {
-    background: #111113;
-    border-right: 1px solid rgba(255, 255, 255, 0.07);
+    background: #0a0a0a;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* Header: brand & status row */
+/* Header: compact brand row */
 .sidebar-header {
-    padding: 14px 14px 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    gap: 10px;
+    padding: 12px 12px 8px;
+    border-bottom: none;
+    gap: 8px;
 }
 
 .logo {
     gap: 8px;
     min-width: 0;
-    align-items: center;
 }
 
 .logo-icon {
@@ -39,86 +38,65 @@
 
 .header-sub-row {
     margin-top: 2px;
-    gap: 6px;
-    align-items: center;
+    gap: 4px;
 }
 
-.version {
+.version,
+.status-micro {
     font-size: 10px;
-    font-weight: 500;
-    padding: 1px 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
+    padding: 1px 5px;
+    background: transparent;
+    border: none;
     color: var(--text-muted);
-    transition: all var(--transition-fast);
 }
 
 .version:hover {
     color: var(--shiba-gold);
-    background: var(--shiba-gold-dim);
-    border-color: rgba(232, 163, 23, 0.25);
-}
-
-.status-micro {
-    font-size: 10px;
-    padding: 1px 6px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-    color: var(--text-muted);
+    background: transparent;
+    border: none;
 }
 
 .status-micro .status-text {
     font-size: 10px;
-    max-width: 76px;
+    max-width: 72px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .btn-restart {
-    padding: 2px;
-    opacity: 0.6;
-    border-radius: 4px;
-    transition: opacity var(--transition-fast), color var(--transition-fast);
-}
-
-.btn-restart:hover {
-    opacity: 1;
-    color: var(--shiba-gold);
+    padding: 0;
+    opacity: 0.55;
 }
 
 .btn-restart .material-icons-round {
     font-size: 14px;
 }
 
-/* Action: + New Session */
+/* New session: quiet ghost button */
 .sidebar-actions {
-    padding: 8px 12px 6px;
+    padding: 4px 10px 8px;
 }
 
 .btn-action.btn-new-chat {
-    padding: 8px 12px;
-    border: 1px solid rgba(232, 163, 23, 0.22);
-    border-radius: 7px;
-    background: rgba(232, 163, 23, 0.08);
-    color: var(--shiba-gold);
-    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12.5px;
     font-weight: 500;
     justify-content: flex-start;
-    gap: 8px;
-    transition: all var(--transition-fast);
 }
 
 .btn-action.btn-new-chat:hover {
-    background: rgba(232, 163, 23, 0.16);
-    border-color: rgba(232, 163, 23, 0.4);
-    color: var(--shiba-gold-light);
+    background: rgba(255, 255, 255, 0.04);
+    border-color: transparent;
+    color: var(--text-primary);
 }
 
 .btn-action.btn-new-chat:active {
-    background: rgba(232, 163, 23, 0.24);
+    background: rgba(255, 255, 255, 0.07);
 }
 
 .btn-action.btn-new-chat .material-icons-round {
@@ -126,9 +104,9 @@
     color: var(--shiba-gold);
 }
 
-/* Tools: compact icon rail */
+/* Tools → compact icon rail */
 .sidebar-section.tools-section {
-    padding: 4px 12px 8px;
+    padding: 0 10px 8px;
 }
 
 .sidebar-section.tools-section .section-title {
@@ -139,9 +117,9 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 3px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.025);
+    padding: 2px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -149,9 +127,9 @@
     flex: 1;
     min-width: 0;
     margin: 0;
-    padding: 7px 0;
+    padding: 8px 0;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-muted);
     justify-content: center;
@@ -159,11 +137,10 @@
     font-size: 0;
     line-height: 0;
     position: relative;
-    transition: all 120ms ease;
 }
 
 .sidebar-tools .btn-command .material-icons-round {
-    font-size: 17px;
+    font-size: 18px;
     margin: 0;
 }
 
@@ -172,10 +149,8 @@
     color: var(--text-primary);
 }
 
-.sidebar-tools .btn-command.active,
 .sidebar-tools .btn-command:active {
-    background: rgba(232, 163, 23, 0.12);
-    color: var(--shiba-gold);
+    background: rgba(255, 255, 255, 0.09);
 }
 
 .sidebar-tools .automation-badge-mini {
@@ -190,137 +165,100 @@
     border-radius: 999px;
 }
 
-/* History & Sessions focus */
+/* Sessions: primary focus */
 .sidebar-section.history-section {
-    padding: 0 10px 8px;
+    padding: 0 8px 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .history-section-head {
-    background: #111113;
-    padding: 10px 2px 8px;
+    background: #0a0a0a;
+    padding: 10px 4px 8px;
 }
 
 .history-section .section-title {
     font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
+    font-weight: 500;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: 8px;
-    padding-left: 4px;
-}
-
-.session-search-wrap {
-    position: relative;
-    display: flex;
-    align-items: center;
+    padding-left: 6px;
 }
 
 .session-search {
-    padding: 6px 10px 6px 28px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.035);
-    color: var(--text-primary);
+    padding: 6px 8px 6px 28px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.04);
     font-size: 12px;
-    transition: all 120ms ease;
-}
-
-.session-search::placeholder {
-    color: var(--text-muted);
 }
 
 .session-search:focus {
-    border-color: rgba(232, 163, 23, 0.4);
+    border-color: rgba(232, 163, 23, 0.35);
     background: rgba(255, 255, 255, 0.055);
-    box-shadow: 0 0 0 2px rgba(232, 163, 23, 0.1);
-    outline: none;
 }
 
 .session-search-icon {
-    left: 8px;
+    left: 7px;
     font-size: 14px;
-    color: var(--text-muted);
 }
 
 .history-list {
-    gap: 2px;
+    gap: 1px;
     padding-bottom: 6px;
 }
 
-/* Channel group headers */
+/* Channel groups */
 .channel-group-header {
     padding: 6px 8px;
-    margin: 8px 0 2px;
+    margin: 6px 0 1px;
     font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
-    border-radius: 5px;
-    transition: all 120ms ease;
-}
-
-.channel-group-header:hover {
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--text-secondary);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    border-radius: 6px;
 }
 
 .channel-group-header .group-count {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    padding: 0.5px 5px;
+    background: transparent;
+    padding: 0;
     margin-left: 6px;
-    font-size: 10px;
-    border-radius: 10px;
-    color: var(--text-muted);
+    opacity: 0.7;
 }
 
 .channel-group-items {
-    gap: 2px;
-    overflow: visible;
-}
-
-.channel-group-items.collapsed {
-    overflow: hidden;
+    gap: 1px;
 }
 
 /* Session rows */
 .history-item {
-    padding: 7px 10px;
-    margin-bottom: 1px;
-    border-radius: 6px;
+    padding: 7px 8px;
+    margin-bottom: 0;
+    border-radius: 8px;
     border: 1px solid transparent;
-    gap: 8px;
-    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-
-.history-item.has-active-dropdown {
-    position: relative;
-    z-index: 100 !important;
+    gap: 6px;
 }
 
 .history-item:hover {
     background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.02);
+    border-color: transparent;
 }
 
 .history-item.active {
-    background: rgba(232, 163, 23, 0.09);
-    border-color: rgba(232, 163, 23, 0.22);
-    box-shadow: inset 3px 0 0 0 var(--shiba-gold);
+    background: rgba(232, 163, 23, 0.1);
+    border-color: transparent;
+    box-shadow: inset 2px 0 0 var(--shiba-gold);
     color: var(--text-primary);
 }
 
 .history-item.active .session-name {
     color: var(--text-primary);
-    font-weight: 600;
+    font-weight: 550;
 }
 
 .session-name {
     font-size: 12.5px;
     font-weight: 450;
-    color: #d8d8d8;
 }
 
 .session-subline {
@@ -330,7 +268,7 @@
 
 .session-subline .ob-badge,
 .session-channel-tag {
-    display: none;
+    display: none; /* channel already grouped — less noise */
 }
 
 .session-meta {
@@ -343,7 +281,6 @@
     opacity: 0;
     width: 24px;
     height: 24px;
-    transition: opacity 120ms ease;
 }
 
 .history-item:hover .btn-session-menu,
@@ -351,18 +288,18 @@
     opacity: 0.7;
 }
 
-/* Workspace summary */
+/* Workspace summary → quiet footer chips */
 .workspace-summary-section {
-    padding: 8px 12px 6px !important;
+    padding: 6px 12px 4px !important;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    gap: 3px;
+    gap: 2px;
     display: flex;
     flex-direction: column;
 }
 
 .workspace-summary-section .summary-row {
     padding: 2px 0;
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--text-muted);
     gap: 6px;
 }
@@ -373,46 +310,45 @@
 }
 
 .workspace-summary-section .status-dot {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
 }
 
 /* Footer */
 .sidebar-footer {
-    padding: 8px 12px 10px;
+    padding: 6px 10px 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    gap: 6px;
-}
-
-.footer-actions {
     gap: 4px;
 }
 
+.footer-actions {
+    gap: 2px;
+}
+
 .footer-actions .btn-command {
-    padding: 6px 10px;
+    padding: 6px;
     border-radius: 6px;
     color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition: all 120ms ease;
+    background: transparent;
+    border: none;
 }
 
 .footer-actions .btn-command:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
 }
 
 .footer-info {
-    font-size: 10px;
-    letter-spacing: 0.05em;
+    font-size: 9px;
+    letter-spacing: 0.06em;
     color: var(--text-muted);
-    opacity: 0.8;
+    opacity: 0.7;
 }
 
+/* Fallback if tools section not yet marked */
 .sidebar > .sidebar-section:not(.history-section):not(.workspace-summary-section) .btn-command {
     padding: 7px 8px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 12.5px;
     color: var(--text-secondary);
 }
@@ -421,4 +357,3 @@
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-primary);
 }
-

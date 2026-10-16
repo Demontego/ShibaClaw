@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/helpers/helpers.py
 """Helper functions for the ShibaClaw ecosystem."""
 
 import json

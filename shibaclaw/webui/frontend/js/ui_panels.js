@@ -144,9 +144,9 @@ function _appendHistoryAttachment(container, file) {
     if (!file) return;
     if (file.type && file.type.startsWith("image/")) {
         const img = document.createElement("img");
-        img.src = authUrl(file.url);
+        bindAuthedMedia(img, file.url);
         img.onload = () => { if (typeof scrollToBottom === 'function') scrollToBottom(); };
-        img.onclick = () => window.open(authUrl(file.url), "_blank");
+        img.onclick = () => openAuthedMedia(file.url);
         container.appendChild(img);
         if (typeof scrollToBottom === 'function') scrollToBottom();
         return;
@@ -862,7 +862,7 @@ function _parseSessionMessages(messages, loadSeq, sessionId) {
                                 }
                             }
                         } catch { }
-                        turnSteps.push({ badge: "EXE", text: fn + args });
+                        turnSteps.push({ badge: "EXE", text: formatProcessStepLabel(fn + args) });
                     }
                 }
             }

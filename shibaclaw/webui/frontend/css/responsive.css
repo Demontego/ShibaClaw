@@ -28,7 +28,8 @@
     }
 
     .message-group.user,
-    .message-group.agent {
+    .message-group.agent,
+    .message-group.peer {
         max-width: 95%;
     }
 

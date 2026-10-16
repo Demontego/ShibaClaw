@@ -15,25 +15,24 @@ from shibaclaw.webui.agent_manager import agent_manager
 from shibaclaw.webui.utils import _resolve_workspace_path
 
 
+def _fs_authorized(request: Request) -> bool:
+    """Accept only an Authorization bearer token. Query tokens stay out of logs."""
+    from shibaclaw.webui.auth import _auth_enabled, _verify_session_token
+
+    if not _auth_enabled():
+        return True
+    header = request.headers.get("authorization", "")
+    token = header[7:].strip() if header.startswith("Bearer ") else ""
+    return bool(token and _verify_session_token(token))
+
+
 async def api_upload(request: Request):
     """Handle multi-file uploads into the workspace."""
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=400)
 
-    from shibaclaw.webui.auth import _auth_enabled, _verify_session_token
-
-    if _auth_enabled():
-        token_candidate = None
-        q_token = request.query_params.get("token")
-        if q_token:
-            token_candidate = q_token.strip()
-        else:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token_candidate = auth_header[7:].strip()
-
-        if not token_candidate or not _verify_session_token(token_candidate):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not _fs_authorized(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     try:
         form = await request.form()
@@ -84,20 +83,8 @@ async def api_file_get(request: Request):
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=503)
 
-    from shibaclaw.webui.auth import _auth_enabled, _verify_session_token
-
-    if _auth_enabled():
-        token_candidate = None
-        q_token = request.query_params.get("token")
-        if q_token:
-            token_candidate = q_token.strip()
-        else:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token_candidate = auth_header[7:].strip()
-
-        if not token_candidate or not _verify_session_token(token_candidate):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not _fs_authorized(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     resolved = _resolve_workspace_path(path_str, allow_media=True)
     if not resolved:
@@ -110,11 +97,7 @@ async def api_file_get(request: Request):
     if not mime_type:
         mime_type = "application/octet-stream"
 
-    headers = {}
-    if mime_type.startswith("image/"):
-        headers["Cache-Control"] = "public, max-age=3600"
-    else:
-        headers["Cache-Control"] = "no-store"
+    headers = {"Cache-Control": "no-store"}
 
     return FileResponse(resolved, media_type=mime_type, headers=headers)
 
@@ -124,20 +107,8 @@ async def api_file_save(request: Request):
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=503)
 
-    from shibaclaw.webui.auth import _auth_enabled, _verify_session_token
-
-    if _auth_enabled():
-        token_candidate = None
-        q_token = request.query_params.get("token")
-        if q_token:
-            token_candidate = q_token.strip()
-        else:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token_candidate = auth_header[7:].strip()
-
-        if not token_candidate or not _verify_session_token(token_candidate):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not _fs_authorized(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     try:
         body = await request.json()
@@ -171,20 +142,8 @@ async def api_fs_explore(request: Request):
     if not agent_manager.config:
         return JSONResponse({"error": "No config"}, status_code=503)
 
-    from shibaclaw.webui.auth import _auth_enabled, _verify_session_token
-
-    if _auth_enabled():
-        token_candidate = None
-        q_token = request.query_params.get("token")
-        if q_token:
-            token_candidate = q_token.strip()
-        else:
-            auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer "):
-                token_candidate = auth_header[7:].strip()
-
-        if not token_candidate or not _verify_session_token(token_candidate):
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not _fs_authorized(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     target_path_str = request.query_params.get("path")
     target_path = _resolve_workspace_path(target_path_str)

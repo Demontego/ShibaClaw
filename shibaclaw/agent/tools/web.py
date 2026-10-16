@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/tools/web.py
 """Web tools: web_search and web_fetch."""
 
 from __future__ import annotations
@@ -69,6 +70,12 @@ def _format_results(query: str, items: list[dict[str, Any]], n: int) -> str:
         lines.append(f"{i}. {title}\n   {item.get('url', '')}")
         if snippet:
             lines.append(f"   {snippet}")
+    lines.append(
+        "\n[Deep search] Snippets are incomplete. "
+        "Before answering facts/schedules/prices/availability, "
+        "web_fetch the 2-3 most relevant URLs above. "
+        "Do not conclude not-found from snippets alone."
+    )
     return "\n".join(lines)
 
 
@@ -76,7 +83,12 @@ class WebSearchTool(Tool):
     """Search the web using configured provider."""
 
     name = "web_search"
-    description = "Search the web. Returns titles, URLs, and snippets."
+    description = (
+        "Search the web. Returns titles, URLs, and short snippets only. "
+        "For schedules, prices, showtimes, availability, or live facts: "
+        "after searching you MUST web_fetch the top relevant URLs before answering. "
+        "Never claim not-found from snippets alone."
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -253,7 +265,14 @@ class WebFetchTool(Tool):
     """Fetch and extract content from a URL."""
 
     name = "web_fetch"
-    description = "Fetch URL and extract readable content (HTML → markdown/text)."
+    description = (
+        "Fetch URL and extract readable content (HTML/PDF → markdown/text). "
+        "When the user supplies a concrete URL/arXiv id/PDF, fetch THAT exact URL — "
+        "never substitute a famous paper from prior knowledge. "
+        "If blocked/empty, say so (try abs↔pdf twin) — do not invent the article body. "
+        "Required after web_search for factual answers (schedules, prices, showtimes). "
+        "If blocked/captcha/empty after search, try another URL — do not stop."
+    )
     parameters = {
         "type": "object",
         "properties": {

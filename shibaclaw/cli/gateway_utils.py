@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/cli/gateway_utils.py
 """Utility functions for the gateway service."""
 
 from __future__ import annotations
@@ -28,6 +29,11 @@ def resolve_webui_session_key(session_key: str | None, chat_id: str | None) -> s
 def resolve_automation_target(job: Any) -> HeartbeatTarget:
     channel = job.payload.channel or "cli"
     chat_id = job.payload.to or "direct"
+    # Prefer targets[channel] when `to` is empty — needed for DM topics
+    # e.g. targets={"telegram": "123456:topic:1"}
+    targets = getattr(job.payload, "targets", None) or {}
+    if (not job.payload.to or str(job.payload.to) in {"", "direct"}) and channel in targets:
+        chat_id = str(targets[channel])
     session_key = job.payload.session_key or f"{channel}:{chat_id}"
 
     if channel == "webui":
@@ -53,7 +59,7 @@ async def deliver_scheduled_job_result(
     from shibaclaw.bus.events import OutboundMessage
 
     text = (response or "").strip()
-    if text in {"EVOLVE_QUIET", "EVOLVE_SKIP"}:
+    if text in {"EVOLVE_QUIET", "EVOLVE_SKIP", "EVOLVE_DIGEST_QUIET"}:
         logger.info("Automation: silent skip deliver ({})", text)
         return
 
@@ -81,7 +87,12 @@ async def deliver_scheduled_job_result(
             return
 
         await bus_publish(
-            OutboundMessage(channel=target.channel, chat_id=target.chat_id, content=response)
+            OutboundMessage(
+                channel=target.channel,
+                chat_id=target.chat_id,
+                content=response,
+                metadata={"automation_deliver": True, "source": "automation"},
+            )
         )
 
         if has_gateway_ws_clients:

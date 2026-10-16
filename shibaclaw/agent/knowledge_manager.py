@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/knowledge_manager.py
 import json
 import logging
 import os

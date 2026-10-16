@@ -2,12 +2,22 @@ import hashlib
 from pathlib import Path
 import pytest
 from shibaclaw.agent.context_overflow_guard import (
+    message_chars,
     ContextOverflowGuard,
     ContextOverflowError,
     CompactionCircuitBreakerError,
     tombstone_tool_result,
     enforce_schema_invariants,
 )
+
+
+def test_message_chars_counts_tool_call_arguments():
+    msg = {
+        "role": "assistant",
+        "content": "ok",
+        "tool_calls": [{"id": "c", "function": {"name": "exec", "arguments": "x" * 400}}],
+    }
+    assert message_chars(msg) > 400
 
 
 def test_context_overflow_guard_healthy(tmp_path: Path):
@@ -273,11 +283,11 @@ def test_context_window_recovery(tmp_path: Path):
         {"role": "user", "content": "Recent message 3 " * 10},
     ]
     recovered = recovery.recover_context(messages, max_tokens=500)
-    assert recovered[0] == messages[0]
+    assert recovered[0]["role"] == "system"
     assert recovered[-3:] == messages[-3:]
-    assert len(recovered) == 5
-    assert recovered[1]["role"] == "system"
-    assert "[Context Window Recovery]" in recovered[1]["content"]
+    assert "[Context Window Recovery]" not in "".join(
+        m.get("content", "") for m in recovered if isinstance(m.get("content"), str)
+    )
 
 def test_observation_masking_prunes_old_tool_results(tmp_path: Path):
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
