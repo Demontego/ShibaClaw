@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as esbuild from 'esbuild';
 import fs from 'fs';
 import path from 'path';
@@ -53,6 +54,13 @@ fs.writeFileSync('static/bundle-temp.js', combinedJs);
 // We can use esbuild directly on index.css
 
 async function build() {
+    console.log('Building Tailwind...');
+    execFileSync(
+        'node_modules/.bin/tailwindcss',
+        ['-i', 'frontend/css/apple.src.css', '-o', 'frontend/css/apple.out.css', '--minify'],
+        { stdio: 'inherit' },
+    );
+
     console.log('Building CSS...');
     await esbuild.build({
         entryPoints: ['frontend/index.css'],

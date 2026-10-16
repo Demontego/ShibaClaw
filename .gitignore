@@ -36,6 +36,7 @@ docker-compose.build.yml
 
 # Node dependencies
 node_modules/
+shibaclaw/webui/frontend/css/apple.out.css
 dist/
 *.log
 audit_results.json
