@@ -307,8 +307,17 @@ def sync_profiles(workspace: Path) -> list[str]:
             except Exception:
                 existing = {}
 
-        # Ensure every built-in entry exists; update new fields on existing entries
+        # Ensure every built-in entry exists; update new fields on existing entries.
+        # Drop built-ins the template no longer ships. Custom profiles stay.
         changed = False
+        for pid, meta in list(existing.items()):
+            if pid in builtin_manifest or not isinstance(meta, dict) or not meta.get("builtin"):
+                continue
+            existing.pop(pid)
+            changed = True
+            stale = profiles_dest / pid
+            if stale.is_dir():
+                shutil.rmtree(stale)
         for pid, meta in builtin_manifest.items():
             if pid not in existing:
                 existing[pid] = meta

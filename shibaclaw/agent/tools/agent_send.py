@@ -23,14 +23,17 @@ class _AgentSendContext:
     ephemeral: bool = False
 
 
+_HIDDEN_ON_AGENT_SESSION = frozenset({"agent_send", "agent_create"})
+
+
 def hide_agent_send(tool_defs: list[dict], session_key: str | None) -> list[dict]:
-    """Drop agent_send on an agent session so bots cannot wake each other."""
+    """Drop agent tools on an agent session so bots cannot wake or create each other."""
     if not str(session_key or "").startswith("agent:"):
         return tool_defs
     kept: list[dict] = []
     for item in tool_defs:
         name = (item.get("function") or {}).get("name") or item.get("name") or ""
-        if name != "agent_send":
+        if name not in _HIDDEN_ON_AGENT_SESSION:
             kept.append(item)
     return kept
 

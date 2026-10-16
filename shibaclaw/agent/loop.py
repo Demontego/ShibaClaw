@@ -460,6 +460,14 @@ class ShibaBrain:
                 owner_ids=_telegram_allow_from_ids(self.channels_config),
             )
         )
+        from shibaclaw.agent.tools.agent_create import AgentCreateTool
+
+        self.tools.register(
+            AgentCreateTool(
+                workspace=self.workspace,
+                owner_ids=_telegram_allow_from_ids(self.channels_config),
+            )
+        )
         self.tools.register(SpawnTool(manager=self.subagents))
         self.tools.register(SpawnMeaTool(manager=self.subagents))
         if self.automation_service:
@@ -727,16 +735,17 @@ class ShibaBrain:
             if tool := self.tools.get(name):
                 if hasattr(tool, "set_context"):
                     tool.set_context(channel, chat_id, metadata=metadata or {})
-        if tool := self.tools.get("agent_send"):
-            if hasattr(tool, "set_context"):
-                tool.set_context(
-                    channel,
-                    chat_id,
-                    session_key,
-                    metadata=metadata or {},
-                    profile_id=profile_id,
-                    ephemeral=self._checkpoint_forbidden(session_key, metadata),
-                )
+        for name in ("agent_send", "agent_create"):
+            if tool := self.tools.get(name):
+                if hasattr(tool, "set_context"):
+                    tool.set_context(
+                        channel,
+                        chat_id,
+                        session_key,
+                        metadata=metadata or {},
+                        profile_id=profile_id,
+                        ephemeral=self._checkpoint_forbidden(session_key, metadata),
+                    )
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
@@ -1189,12 +1198,15 @@ class ShibaBrain:
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
                     call_key = (tool_call.name, args_str)
                     executed_tool_calls.add(call_key)
-                    if tool_call.name == "agent_send" and str(session_key or "").startswith("agent:"):
+                    if (
+                        tool_call.name in {"agent_send", "agent_create"}
+                        and str(session_key or "").startswith("agent:")
+                    ):
                         messages = self.context.add_tool_result(
                             messages,
                             tool_call.id,
                             tool_call.name,
-                            "Error: agent_send is hidden on an agent session.",
+                            f"Error: {tool_call.name} is hidden on an agent session.",
                         )
                         answered_calls.add(tool_call.id)
                         continue

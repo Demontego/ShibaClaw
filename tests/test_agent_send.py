@@ -91,7 +91,11 @@ async def test_agent_session_cannot_send(tmp_path: Path):
 
 
 def test_hide_agent_send_drops_only_on_agent_sessions():
-    defs = [{"function": {"name": "agent_send"}}, {"function": {"name": "message"}}]
+    defs = [
+        {"function": {"name": "agent_send"}},
+        {"function": {"name": "agent_create"}},
+        {"function": {"name": "message"}},
+    ]
     assert hide_agent_send(defs, "webui:rinat") == defs
     assert hide_agent_send(defs, "agent:polymarket") == [{"function": {"name": "message"}}]
 
