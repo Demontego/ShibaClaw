@@ -264,7 +264,10 @@ async def start_subscription_login(job_id: str, jobs: dict, kind: str):
         instruction = "Open Claude and paste the page value exactly, including the #."
         label = "Claude"
     else:
-        url = gemini_authorize_url(challenge, state)
+        try:
+            url = gemini_authorize_url(challenge, state)
+        except RuntimeError:
+            return JSONResponse({"error": "Not configured by administrator"}, status_code=400)
         instruction = "Open Google and paste the code the page shows."
         label = "Gemini"
 

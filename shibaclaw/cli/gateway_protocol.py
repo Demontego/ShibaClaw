@@ -97,7 +97,7 @@ def serialize_automation_job(job: Any) -> dict[str, Any]:
             "channel": job.payload.channel,
             "to": job.payload.to,
             "targets": job.payload.targets,
-            "sessionKey": job.payload.session_key,
+            "sessionKey": getattr(job.payload, "session_key", None),
             "profileId": getattr(job.payload, "profile_id", None),
             "model": getattr(job.payload, "model", None),
         },

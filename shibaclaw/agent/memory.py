@@ -1,3 +1,4 @@
+# host-anchor: shibaclaw/agent/memory.py
 """Memory system for persistent agent memory."""
 
 from __future__ import annotations
@@ -122,6 +123,47 @@ class ScentKeeper:
         self.history_file = self.memory_dir / "HISTORY.md"
         self._consecutive_failures = 0
         self._file_lock = asyncio.Lock()
+        self._profile_memory_files: dict[str, str] = {"dungeon": "DUNGEON.md", "khodor": "KHODOR.md"}  # dungeon_profile_memory
+
+    def _profile_memory_path(self, profile_id: str | None) -> Path | None:
+        name = self._profile_memory_files.get(profile_id or "")
+        if not name:
+            return None
+        return self.memory_dir / name
+
+    def read_long_term_for_profile(self, profile_id: str | None) -> str:
+        path = self._profile_memory_path(profile_id)
+        if path is None:
+            return self.read_long_term()
+        if not path.exists():
+            return ""
+        try:
+            mtime = path.stat().st_mtime_ns
+        except FileNotFoundError:
+            return ""
+        cache_key = profile_id or ""
+        pm_mtime = getattr(self, "_profile_mem_mtime", {})
+        pm_cache = getattr(self, "_profile_mem_cache", {})
+        if pm_mtime.get(cache_key) == mtime:
+            return pm_cache.get(cache_key, "")
+        content = path.read_text(encoding="utf-8")
+        if not hasattr(self, "_profile_mem_mtime"):
+            self._profile_mem_mtime = {}
+        if not hasattr(self, "_profile_mem_cache"):
+            self._profile_mem_cache = {}
+        self._profile_mem_mtime[cache_key] = mtime
+        self._profile_mem_cache[cache_key] = content
+        return content
+
+    async def write_long_term_for_profile(self, profile_id: str | None, content: str) -> None:
+        path = self._profile_memory_path(profile_id)
+        if path is None:
+            await self.write_long_term(content)
+            return
+        async with self._file_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+
 
     def read_user_profile(self) -> str:
         if not self.user_file.exists():
@@ -279,14 +321,17 @@ class ScentKeeper:
             return 0
         return estimate_prompt_tokens([{"role": "user", "content": content}])
 
-    def get_memory_context(self, max_tokens: int = 0) -> str:
+    def get_memory_context(self, max_tokens: int = 0, profile_id: str | None = None) -> str:
         """Return long-term memory for system prompt injection.
 
         If *max_tokens* > 0 and the content exceeds the budget, sections
         are dropped from the bottom up (keeping headers) and a truncation
         marker is appended.
         """
-        long_term = self.read_long_term()
+        if profile_id == "dungeon":
+            long_term = self.read_long_term_for_profile("dungeon")
+        else:
+            long_term = self.read_long_term()
         if not long_term:
             return ""
 
@@ -373,13 +418,32 @@ class ScentKeeper:
         provider: Thinker,
         model: str,
         session_key: str | None = None,
+        profile_id: str | None = None,
     ) -> bool:
         if not messages:
             return True
 
         current_user = self.read_user_profile()
-        current_memory = self.read_long_term()
-        prompt = f"""Consolidate this conversation. Call save_memory with:
+        if profile_id == "dungeon":
+            current_memory = self.read_long_term_for_profile("dungeon")
+            prompt = f"""Consolidate this dungeon group chat. Call save_memory with:
+- history_entry: timestamped summary with #dungeon #tone and/or #topics tags
+- memory_update: updated DUNGEON.md ONLY — sections:
+  ## Tone (humor, boundaries, what's overused)
+  ## Recurring topics & memes (mark stale jokes to avoid)
+  ## Participants (nicknames, quirks — no secrets)
+  ## Recent beats (short; rotate old out)
+  NO Polymarket/trading/secrets/config. Return current USER.md unchanged in user_update.
+- user_update: return current USER.md unchanged
+
+## Current DUNGEON.md
+{current_memory or "(empty)"}
+
+## Conversation
+{self._format_messages(messages)}"""
+        else:
+            current_memory = self.read_long_term()
+            prompt = f"""Consolidate this conversation. Call save_memory with:
 - history_entry: timestamped tagged summary
 - memory_update: updated MEMORY.md (operational facts only, personal profile → USER.md)
 - user_update: updated USER.md (personal facts/preferences only)
@@ -459,8 +523,11 @@ class ScentKeeper:
             update = _ensure_text(update)
             user_update = _ensure_text(user_update)
             if update != current_memory:
-                await self.write_long_term(update)
-            if user_update.strip() and user_update != current_user:
+                if profile_id == "dungeon":
+                    await self.write_long_term_for_profile("dungeon", update)
+                else:
+                    await self.write_long_term(update)
+            if profile_id != "dungeon" and user_update.strip() and user_update != current_user:
                 await self.write_user_profile(user_update)
 
             self._consecutive_failures = 0
@@ -560,13 +627,27 @@ class ScentKeeper:
         messages: list[dict],
         provider: Thinker,
         model: str,
+        profile_id: str | None = None,
     ) -> bool:
         if not messages:
             return True
 
         current_user = self.read_user_profile()
-        current_memory = self.read_long_term()
-        prompt = f"""Extract new durable facts from the recent interaction. Call update_long_term_memory.
+        if profile_id == "dungeon":
+            current_memory = self.read_long_term_for_profile("dungeon")
+            prompt = f"""Extract dungeon chat tone/topics from recent messages. Call update_long_term_memory.
+- memory_update: updated DUNGEON.md (tone, topics, memes, participants — mark stale jokes)
+- user_update: return current USER.md UNCHANGED (no group-chat profile writes)
+- NO Polymarket/trading/secrets. If nothing new, return DUNGEON.md unchanged.
+
+## Current DUNGEON.md
+{current_memory or "(empty)"}
+
+## Recent Interaction
+{self._format_messages(messages)}"""
+        else:
+            current_memory = self.read_long_term()
+            prompt = f"""Extract new durable facts from the recent interaction. Call update_long_term_memory.
 - Personal profile/preferences → user_update (USER.md)
 - Operational facts (env, entities, project state) → memory_update (MEMORY.md)
 - If nothing new, return current content unchanged.
@@ -619,8 +700,11 @@ class ScentKeeper:
             update = _ensure_text(args["memory_update"]).strip()
             user_update = _ensure_text(args.get("user_update", current_user))
             if update and update != current_memory:
-                await self.write_long_term(update)
-            if user_update.strip() and user_update != current_user:
+                if profile_id == "dungeon":
+                    await self.write_long_term_for_profile("dungeon", update)
+                else:
+                    await self.write_long_term(update)
+            if profile_id != "dungeon" and user_update.strip() and user_update != current_user:
                 await self.write_user_profile(user_update)
             if (update and update != current_memory) or (
                 user_update.strip() and user_update != current_user
@@ -691,12 +775,14 @@ class PackMemory:
         self,
         messages: list[dict[str, object]],
         session_key: str | None = None,
+        profile_id: str | None = None,
     ) -> bool:
         return await self.store.consolidate(
             messages,
             self.provider,
             self.consolidation_model,
             session_key=session_key,
+            profile_id=profile_id,
         )
 
     def pick_consolidation_boundary(
@@ -771,6 +857,7 @@ class PackMemory:
             channel=channel,
             chat_id=chat_id,
             memory_max_prompt_tokens=self.memory_max_prompt_tokens,
+            profile_id=session.metadata.get("profile_id"),
         )
         est, src = estimate_prompt_tokens_chain(
             self.provider,
@@ -878,7 +965,8 @@ class PackMemory:
                     source,
                     len(chunk),
                 )
-                if not await self.consolidate_messages(chunk, session_key=session.key):
+                _pid = session.metadata.get("profile_id")
+                if not await self.consolidate_messages(chunk, session_key=session.key, profile_id=_pid):
                     return
                 session.last_consolidated = end_idx
                 self._prompt_tokens_cache.pop(session.key, None)
@@ -905,8 +993,9 @@ class PackMemory:
             logger.debug(
                 "🐕 Proactive Learning starting for {} ({} new messages)", session.key, len(chunk)
             )
+            _pid = session.metadata.get("profile_id")
             success = await self.store.proactive_consolidate(
-                chunk, self.provider, self.consolidation_model
+                chunk, self.provider, self.consolidation_model, profile_id=_pid
             )
             if success:
                 session.last_learned += len(chunk)

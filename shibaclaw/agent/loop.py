@@ -1615,6 +1615,7 @@ class ShibaBrain:
         on_progress: Callable[[str, bool], Awaitable[None]] | None = None,
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
+        model_override: str | None = None,
     ) -> OutboundMessage | None:
         cmd_head = msg.content.strip().lower().split()
         head = cmd_head[0].split("@", 1)[0] if cmd_head else ""
@@ -1642,7 +1643,7 @@ class ShibaBrain:
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=session.metadata.get("model") or None,
+                model=model_override or session.metadata.get("model") or None,
                 metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
@@ -1901,7 +1902,7 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=session.metadata.get("model") or None,
+            model=model_override or session.metadata.get("model") or None,
             metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
@@ -2002,7 +2003,7 @@ class ShibaBrain:
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=session.metadata.get("model") or None,
+            model=model_override or session.metadata.get("model") or None,
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
@@ -2150,6 +2151,7 @@ class ShibaBrain:
         media: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         profile_id: str | None = None,
+        model: str | None = None,
     ) -> OutboundMessage | None:
         await self.mcp.connect()
         msg = InboundMessage(
@@ -2171,6 +2173,7 @@ class ShibaBrain:
                 on_progress=on_progress,
                 on_response_token=on_response_token,
                 profile_id_override=profile_id,
+                model_override=model,
             )
         finally:
             if task is not None:
