@@ -172,10 +172,7 @@ async function loadAutomationPanel() {
             const stCls = jobStatusClass(job);
             const state = job.state || {};
             const lastRun = state.lastRunAtMs || state.last_run_at_ms;
-            const modelShort = (job.payload || {}).model
-                ? ` · ${String(job.payload.model).split("/").pop()}`
-                : "";
-            const meta = (lastRun ? timeAgo(lastRun) : formatSchedule(job.schedule)) + modelShort;
+            const meta = lastRun ? timeAgo(lastRun) : formatSchedule(job.schedule);
             const isHeartbeat = (job.payload || {}).kind === 'heartbeat';
             const kindIcon = isHeartbeat ? 'autorenew' : 'schedule_send';
             const kindLabel = isHeartbeat ? 'Heartbeat' : 'Scheduled';
@@ -282,42 +279,6 @@ async function loadAutomationPanel() {
 
 // ── form open / close ────────────────────────────────────────────────────────
 
-async function _loadJobModelOptions(selected) {
-    const sel = document.getElementById("ajf-model");
-    if (!sel) return;
-    const current = selected || "";
-    const chatDefault = typeof t === "function" ? t("auto.model_default") : "Chat default";
-    sel.innerHTML = `<option value="">${escapeHtml(chatDefault)}</option>`;
-    let models = [];
-    try {
-        if (typeof ensureAvailableModels === "function") models = await ensureAvailableModels();
-    } catch (_) { /* catalog stays empty; the current job model is still listed */ }
-    const groups = new Map();
-    for (const m of models || []) {
-        const label = m.provider_label || m.provider || "";
-        if (!groups.has(label)) groups.set(label, []);
-        groups.get(label).push(m);
-    }
-    for (const [label, items] of groups) {
-        const og = document.createElement("optgroup");
-        og.label = label;
-        for (const m of items) {
-            const opt = document.createElement("option");
-            opt.value = m.id;
-            opt.textContent = m.name || m.id;
-            og.appendChild(opt);
-        }
-        sel.appendChild(og);
-    }
-    if (current && ![...sel.options].some((o) => o.value === current)) {
-        const opt = document.createElement("option");
-        opt.value = current;
-        opt.textContent = current;
-        sel.appendChild(opt);
-    }
-    sel.value = current;
-}
-
 window.openJobForm = async function (jobId) {
     _autoEditingId = jobId || null;
     const form = document.getElementById('automation-job-form');
@@ -364,9 +325,6 @@ window.openJobForm = async function (jobId) {
             }
         } catch (_) { }
     }
-
-    const editing = jobId ? _autoJobs.find(j => j.id === jobId) : null;
-    await _loadJobModelOptions(editing ? ((editing.payload || {}).model || "") : "");
 
     if (jobId) {
         title.textContent = typeof t === "function" ? t("auto.form_title_edit") : "Edit Job";
@@ -418,8 +376,6 @@ function _autoFillForm(job) {
 
     const profEl = document.getElementById('ajf-profile');
     if (profEl) profEl.value = payload.profileId || payload.profile_id || '';
-    const modelEl = document.getElementById('ajf-model');
-    if (modelEl) modelEl.value = payload.model || '';
 
     document.getElementById('ajf-delete-after').checked = !!(job.deleteAfterRun || job.delete_after_run);
     document.getElementById('ajf-enabled').checked = job.enabled !== false;
@@ -503,7 +459,6 @@ window.saveJobForm = async function () {
         const targetId = (document.getElementById('ajf-target-id').value || '').trim();
         const sessionKey = (document.getElementById('ajf-session-key').value || '').trim();
         const profileId = (document.getElementById('ajf-profile').value || '').trim();
-        const model = (document.getElementById('ajf-model')?.value || '').trim();
         const deleteAfterRun = document.getElementById('ajf-delete-after').checked;
         const enabled = document.getElementById('ajf-enabled').checked;
 
@@ -546,7 +501,6 @@ window.saveJobForm = async function () {
             targets: (deliver && channel && targetId) ? { [channel]: targetId } : {},
             sessionKey: sessionKey || null,
             profileId: profileId || null,
-            model: model || null,
         };
 
         const body = {

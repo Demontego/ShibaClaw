@@ -41,15 +41,15 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>🚀 <b>最新动态 — v1.0.5</b>（点击展开）</summary>
+<summary>🚀 <b>最新动态 — v1.0.6</b>（点击展开）</summary>
 
-**版本 v1.0.5 (2026-10-16):**
+**版本 v1.0.6 (2026-10-16):**
 
-- **专家配置与资料库** — 新增仅限所有者使用的 `agent_send`、配置关系图，以及可编辑的性格和人物文档。智能体会话不能连锁发送消息；私密会话不能使用 `agent_send`。
-- **加强智能体运行保护** — 新增工具调用预检、旧结果遮蔽、保留成果物的上下文压缩、熔断机制、子代理上下文模式、资源保护，以及自我演进合并前的 CI 检查。
-- **订阅登录与模型选择** — 在 WebUI 中新增订阅 OAuth 登录流程和模型选择器。
-- **可靠性修复** — 修复隐私与并发上下文、工具调用协议、Windows 文档头部元数据、审批指纹、配置级模型允许列表、OAuth 处理，以及软件包内附带的前端文件。
-- **Gemini 端点验证** — 要求主机名完全匹配，防止相似域名被误认为 Google 模型目录。
+- **保留 v1.0.3 设计，重新整合运行引擎改进** — 保留 v1.0.3 原有界面设计，同时重新整合 v1.0.4/v1.0.5 中与界面无关的改进和修复：运行可靠性、提供商重试和模型目录、订阅 OAuth、自动化、子代理以及可选的自我演进。保留隐私保护、Gemini 目录的精确主机验证和依赖项安全更新。不包含后续的界面重新设计。
+- **界面操作改进** — 侧栏历史记录和控件可通过滚动访问，设置按钮移入紧凑的底部图标栏。上下文用量指示器成为唯一支持无障碍操作的上下文按钮。桌面和较宽手机使用一行输入工具栏；窄屏手机使用两行，触控目标为44px。移动端模型名称显示为一行，上下文仅显示百分比。模型、推理强度和集合菜单使用统一主题，跟随对应按钮并保持在屏幕范围内。
+- **恢复订阅登录卡片** — 设置中重新提供 Claude 和 Google Gemini 卡片，支持输入授权码和查看连接状态。Gemini 仍需在服务器端配置 `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` 和 `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET`。此版本尚未验证真实的 OAuth 登录。
+- **恢复 Evolution 状态面板** — 在保留原有界面设计的基础上，恢复对只读 Evolution 状态面板的访问。
+- **恢复 Library 功能** — 在保留原有视觉设计的基础上，恢复配置档案关系图和详情，以及可编辑的 You 和 People 文档。 Library使用紧凑的单行工具栏，并在窄屏上提供分区选择器。 侧栏使用紧凑图标，在悬停或聚焦时显示名称，并在触屏上始终显示标签。
 
 完整版本历史请查看 [CHANGELOG.md](./CHANGELOG.md)。
 
@@ -192,6 +192,7 @@ ShibaClaw 使用原生 SDK —— 无 LiteLLM 代理 —— 并从所选模型�
 | OpenRouter | PKCE 浏览器流程，将返回的 API 密钥存入提供商配置 | WebUI 设置 |
 | GitHub Copilot | 设备流程，自动刷新令牌 | `shibaclaw provider login github-copilot` 或 WebUI 设置 |
 | OpenAI Codex | PKCE 浏览器流程 | `shibaclaw provider login openai-codex` 或 WebUI 设置 |
+| Claude | 通过 Claude 订阅使用的 PKCE 浏览器流程，需输入授权码 | WebUI 设置 |
 | Google Gemini CLI | PKCE 浏览器流程，需要 `SHIBACLAW_GEMINI_OAUTH_CLIENT_ID` 和 `SHIBACLAW_GEMINI_OAUTH_CLIENT_SECRET` 环境变量。**注意：** 非官方第三方集成，Google 可能施加账户限制。如有顾虑，请使用单独的账户。 | WebUI 设置 |
 
 对于 OpenRouter，回调默认复用当前 WebUI 的 URL 和端口，因此 `http://localhost:3000` 并非专用的 OAuth 端口。如果你在反向代理后暴露 WebUI，或需要不同的公共回调来源，请在启动服务器前设置 `SHIBACLAW_OPENROUTER_CALLBACK_BASE_URL=https://your-public-webui-host`。

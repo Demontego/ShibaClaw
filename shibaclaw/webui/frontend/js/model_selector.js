@@ -103,29 +103,22 @@ function findAvailableModel(modelId) {
     }) || null;
 }
 
-function _modelGroupKey(model) {
-    return model.provider_label || model.provider || "";
-}
-
-function _modelRowName(model, group) {
-    const name = String(model.name || model.raw_id || model.id || "");
-    const prefix = group + ":";
-    if (group && name.startsWith(prefix)) return name.slice(prefix.length).trim();
-    return name;
-}
-
-function createModelListItem(model, currentModelId, onSelect, rowName) {
+function createModelListItem(model, currentModelId, onSelect) {
     const item = document.createElement("div");
     item.className = "model-item" + (model.id === currentModelId ? " selected" : "");
 
     const nameEl = document.createElement("span");
     nameEl.className = "model-item-name";
-    nameEl.textContent = rowName || model.name || model.raw_id || model.id || "";
+    nameEl.textContent = model.name || model.raw_id || model.id || "";
+
+    const providerEl = document.createElement("span");
+    providerEl.className = "model-item-provider";
+    providerEl.textContent = model.provider_label || model.provider || "";
 
     item.appendChild(nameEl);
+    item.appendChild(providerEl);
     item.title = [model.raw_id || model.id || "", model.provider_label || model.provider || ""].filter(Boolean).join(" • ");
-    item.addEventListener("mousedown", (e) => {
-        e.preventDefault();
+    item.addEventListener("click", (e) => {
         e.stopPropagation();
         onSelect(model);
     });
@@ -134,28 +127,12 @@ function createModelListItem(model, currentModelId, onSelect, rowName) {
 
 function renderModelList(list, models, currentModelId, onSelect, extraItems = []) {
     list.innerHTML = "";
-    if (!extraItems.length && !models.length) {
+    const allItems = [...extraItems, ...models];
+    if (!allItems.length) {
         list.innerHTML = `<div style="padding: 10px; text-align: center; color: var(--text-secondary); font-size: 0.85rem;">${escapeHtml(typeof t === "function" ? t("chat.no_models") : "No models found")}</div>`;
         return;
     }
-    extraItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
-    const groups = new Map();
-    for (const model of models) {
-        const key = _modelGroupKey(model) || (model.provider_label || "");
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(model);
-    }
-    for (const [key, items] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-        if (key) {
-            const head = document.createElement("div");
-            head.className = "model-group-label";
-            head.textContent = key;
-            list.appendChild(head);
-        }
-        for (const model of items) {
-            list.appendChild(createModelListItem(model, currentModelId, onSelect, _modelRowName(model, key)));
-        }
-    }
+    allItems.forEach(model => list.appendChild(createModelListItem(model, currentModelId, onSelect)));
 }
 
 let _activeSessionReasoningEffort = null;
@@ -238,7 +215,6 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
         btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";
         if (menu) menu.style.display = "none";
-        if (typeof syncComposerChips === "function") syncComposerChips();
         return;
     }
 
@@ -261,23 +237,7 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
     if (list) {
         renderReasoningDropdownList(list, effortStr, currentModel);
     }
-    if (typeof syncComposerChips === "function") syncComposerChips();
 }
-
-window.clearComposerEffort = async function () {
-    _activeSessionReasoningEffort = null;
-    updateReasoningSelectorDisplay(null, state.activeModelId);
-    if (!state.sessionId) return;
-    try {
-        await authFetch("/api/sessions/" + encodeURIComponent(state.sessionId), {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reasoning_effort: null }),
-        });
-    } catch (e) {
-        console.error("Failed to clear session reasoning effort", e);
-    }
-};
 
 function renderReasoningDropdownList(container, currentEffort, modelId = null) {
     container.innerHTML = "";
@@ -299,19 +259,16 @@ function renderReasoningDropdownList(container, currentEffort, modelId = null) {
         const isSelected = (opt.value === currentEffort) || (!opt.value && !currentEffort);
         item.className = "model-item" + (isSelected ? " selected" : "");
         item.title = opt.desc;
-        item.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; cursor: pointer; border-radius: 6px; font-size: 12px; font-weight: 500; min-height: 28px; transition: background 0.15s ease;";
         
         const nameEl = document.createElement("span");
         nameEl.className = "model-item-name";
-        nameEl.style.cssText = "font-size: 12px; font-weight: 500; color: var(--text-primary);";
         nameEl.textContent = opt.label;
 
         item.appendChild(nameEl);
 
         if (isSelected) {
             const checkEl = document.createElement("span");
-            checkEl.className = "material-icons-round";
-            checkEl.style.cssText = "font-size: 14px; color: var(--shiba-gold); margin-left: 8px;";
+            checkEl.className = "material-icons-round composer-menu-check";
             checkEl.textContent = "check";
             item.appendChild(checkEl);
         }
@@ -341,6 +298,29 @@ function renderReasoningDropdownList(container, currentEffort, modelId = null) {
     });
 }
 
+function positionComposerMenu(button, menu, preferredWidth = 420) {
+    if (window.matchMedia("(max-width: 768px)").matches) {
+        ["left", "width", "max-height"].forEach(name => menu.style.removeProperty(name));
+        return;
+    }
+    const anchor = button.getBoundingClientRect();
+    const wrapper = menu.parentElement.getBoundingClientRect();
+    const width = Math.min(preferredWidth, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12));
+    menu.style.left = `${left - wrapper.left}px`;
+    menu.style.width = `${width}px`;
+    menu.style.maxHeight = `${Math.max(80, anchor.top - 20)}px`;
+}
+
+function openComposerMenu(button, menu, preferredWidth) {
+    document.querySelectorAll(".input-actions .model-dropdown-menu").forEach(other => {
+        if (other !== menu) other.style.display = "none";
+    });
+    if (typeof closeProfileDropdown === "function") closeProfileDropdown();
+    menu.style.display = "flex";
+    positionComposerMenu(button, menu, preferredWidth);
+}
+
 function setupReasoningSelector() {
     const btn = document.getElementById("btn-reasoning-select");
     const menu = document.getElementById("reasoning-dropdown-menu");
@@ -351,7 +331,7 @@ function setupReasoningSelector() {
         if (btn.classList.contains("disabled")) return;
         const isHidden = menu.style.display === "none";
         if (isHidden) {
-            menu.style.display = "block";
+            openComposerMenu(btn, menu, 220);
             updateReasoningSelectorDisplay(_activeSessionReasoningEffort, state.activeModelId);
         } else {
             menu.style.display = "none";
@@ -382,13 +362,11 @@ async function updateModelSelectorDisplay(modelId) {
     }
 
     state.activeModelId = resolvedModelId || "";
-    display.textContent = resolvedModelId || "Default";
 
     await ensureAvailableModels();
     const match = findAvailableModel(resolvedModelId);
     const fullName = match ? (match.name || match.raw_id || match.id) : (resolvedModelId || "Default");
-    const provider = match ? (match.provider_label || match.provider || "") : "";
-    display.textContent = provider ? `${match.name || fullName} · ${provider}` : fullName;
+    display.textContent = fullName;
 
     if (btn) {
         const providerText = match && (match.provider_label || match.provider) ? ` (${match.provider_label || match.provider})` : "";
@@ -402,20 +380,6 @@ async function updateModelSelectorDisplay(modelId) {
     }
 }
 
-
-function placeSettingsModelMenu(button, menu) {
-    const rect = button.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - 16;
-    const spaceAbove = rect.top - 16;
-    const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
-    const height = Math.max(180, Math.min(420, openUp ? spaceAbove : spaceBelow));
-    menu.style.position = "fixed";
-    menu.style.left = `${Math.max(8, rect.left)}px`;
-    menu.style.width = `${rect.width}px`;
-    menu.style.zIndex = "2000";
-    menu.style.maxHeight = `${height}px`;
-    menu.style.top = openUp ? `${rect.top - 8 - height}px` : `${rect.bottom + 8}px`;
-}
 
 function closeSettingsModelMenus(exceptMenu = null) {
     SETTINGS_MODEL_PICKERS.forEach(cfg => {
@@ -521,11 +485,10 @@ function setupSettingsModelPickers() {
 
             closeSettingsModelMenus(menu);
             menu.style.display = "flex";
-            placeSettingsModelMenu(button, menu);
             await ensureAvailableModels(list);
             search.value = "";
             renderSettingsModelPickerOptions(config);
-            search.focus({ preventScroll: true });
+            search.focus();
         });
 
         menu.addEventListener("click", (e) => e.stopPropagation());
@@ -533,7 +496,6 @@ function setupSettingsModelPickers() {
     });
 
     document.addEventListener("click", () => closeSettingsModelMenus());
-    document.getElementById("settings-body")?.addEventListener("scroll", () => closeSettingsModelMenus(), { passive: true });
     _settingsModelPickersInitialized = true;
 }
 
@@ -544,13 +506,28 @@ function setupModelSelector() {
     const list = document.getElementById("model-list-container");
     if (!btn || !menu) return;
 
+    function repositionOpenMenu() {
+        for (const [buttonId, menuId, width] of [
+            ["btn-model-select", "model-dropdown-menu", 420],
+            ["btn-reasoning-select", "reasoning-dropdown-menu", 220],
+            ["btn-kb-select", "kb-dropdown-menu", 280],
+        ]) {
+            const button = document.getElementById(buttonId);
+            const dropdown = document.getElementById(menuId);
+            if (button && dropdown && dropdown.style.display !== "none") positionComposerMenu(button, dropdown, width);
+        }
+    }
+    window.addEventListener("resize", repositionOpenMenu);
+    window.visualViewport?.addEventListener("resize", repositionOpenMenu);
+
     btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const isHidden = menu.style.display === "none";
         if (isHidden) {
-            menu.style.display = "flex";
+            openComposerMenu(btn, menu, 420);
             await ensureAvailableModels(list);
             renderModels(_availableModels);
+            positionComposerMenu(btn, menu, 420);
             search.value = "";
             search.focus();
         } else {

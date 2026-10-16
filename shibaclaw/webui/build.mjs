@@ -25,6 +25,7 @@ const jsFiles = [
     'frontend/js/telegram_mini.js',
     'frontend/js/plugins_panel.js',
     'frontend/js/automation.js',
+    'frontend/js/evolve.js',
     'frontend/js/notification-center.js',
     'frontend/js/main.js',
     'frontend/js/profiles.js',
@@ -94,12 +95,8 @@ async function build() {
     if (fs.existsSync('frontend/favicon.ico')) {
         fs.copyFileSync('frontend/favicon.ico', 'static/favicon.ico');
     }
-    if (fs.existsSync('frontend/manifest.webmanifest')) {
-        fs.copyFileSync('frontend/manifest.webmanifest', 'static/manifest.webmanifest');
-    }
     fs.mkdirSync('static/js', { recursive: true });
     fs.copyFileSync('frontend/js/chat_history_window.js', 'static/js/chat_history_window.js');
-    fs.copyFileSync('frontend/js/evolve.js', 'static/js/evolve.js');
 
     // Rewrite script/link tags
     // 1. Remove all the bundled scripts
@@ -130,7 +127,6 @@ async function build() {
     html = html.replace(/href="\/shibaclaw_logo\.webp"/g, 'href="/static/shibaclaw_logo.webp"');
     html = html.replace(/src="\/shibaclaw_logo\.webp"/g, 'src="/static/shibaclaw_logo.webp"');
     html = html.replace(/href="\/favicon\.ico"/g, 'href="/static/favicon.ico"');
-    html = html.replace(/href="\/manifest\.webmanifest"/g, 'href="/static/manifest.webmanifest"');
     
     // CSS is fully bundled into bundle.css (no separate static/css tree).
     
@@ -140,13 +136,8 @@ async function build() {
         ''
     );
     html = html.replace(
-        /^[ \t]*<script src="\/static\/js\/evolve\.js(?:\?v=[^"]*)?"><\/script>[ \t]*\r?\n/gm,
-        ''
-    );
-    html = html.replace(
         '</body>',
         `    <script src="/static/bundle.js?v=${buildVer}"></script>\n` +
-        `    <script src="/static/js/evolve.js?v=${buildVer}"></script>\n` +
         `    <script src="/static/js/chat_history_window.js?v=${buildVer}"></script>\n` +
         '</body>'
     );

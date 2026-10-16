@@ -1,96 +1,216 @@
 {
-    "version": "1.0.5",
-    "release_notes": "Version 1.0.5 adds profile delegation, an editable library graph, and agent evolution safeguards. It fixes private delegation persistence, context isolation, tool protocol handling, automation approvals, OAuth flows, and packaged WebUI assets, and tightens Gemini endpoint host validation against lookalike domains.",
+    "version": "1.0.6",
+    "release_notes": "Release v1.0.6 retains the original v1.0.3 interface design and reintegrates the non-UI improvements and fixes from v1.0.4/v1.0.5: runtime reliability, privacy and tool/context guards, provider retries and catalogs, subscription OAuth, automation, subagents, and opt-in self-evolution. Exact Gemini catalog host validation and dependency security updates are retained. Targeted mobile fixes keep sidebar history and footer controls reachable, adapt the composer to visible viewport and keyboard changes, and provide separate touch controls and bounded dropdowns while retaining the original visual style. A compact sidebar footer and a single desktop composer toolbar reduce unused space. Claude and Google Gemini OAuth cards are available in Settings. The later interface redesign is not included. On mobile, model names stay on one line and the context badge shows the usage percentage. The read-only Evolution status panel is restored in the workspace navigation. Library restores profile relationships and profile details, plus editable You and People documents, within the retained visual design. Library navigation now uses a single compact toolbar, with a section selector on narrow layouts. Sidebar navigation uses compact icons with hover/focus name overlays and persistent touch labels.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped the project version to 1.0.5."
+            "note": "Set the application version to 1.0.6 and preserve the PyJWT security floor."
         },
         {
             "path": "uv.lock",
             "overwrite": true,
-            "note": "Synchronized the locked ShibaClaw project version to 1.0.5."
+            "note": "Synchronize the locked ShibaClaw version to 1.0.6 and retain dependency security updates."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v1.0.5 release notes for merged features and regression fixes."
+            "note": "Document the retained v1.0.3 design, targeted mobile fixes, and reintegrated non-UI improvements from v1.0.4/v1.0.5."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated English and localized README release notes with v1.0.5 features and fixes."
+            "note": "Update the English release summary to v1.0.6."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Synchronized the packaged update manifest with v1.0.5."
+            "note": "Synchronize the packaged update manifest with v1.0.6."
         },
         {
             "path": "shibaclaw/desktop/app.manifest",
             "overwrite": true,
-            "note": "Updated the Windows desktop application version to 1.0.5.0."
+            "note": "Update the Windows desktop application version to 1.0.6.0."
         },
         {
             "path": "shibaclaw/webui/package.json",
             "overwrite": true,
-            "note": "Updated the WebUI package version to 1.0.5."
+            "note": "Update the WebUI package version to 1.0.6."
         },
         {
             "path": "shibaclaw/webui/package-lock.json",
             "overwrite": true,
-            "note": "Synchronized the WebUI lockfile package version to 1.0.5."
+            "note": "Synchronize the WebUI lockfile package version to 1.0.6."
         },
         {
             "path": "shibaclaw/agent/loop.py",
             "overwrite": true,
-            "note": "Clear checkpoints on reset, coordinate task stop and preserve complete tool-result batches."
+            "note": "Reintegrate durable tool journaling, cancellation and reset, private-session isolation, tool protocol and context guards from v1.0.4/v1.0.5."
         },
         {
-            "path": "shibaclaw/agent/subagent.py",
+            "path": "shibaclaw/webui/server.py",
             "overwrite": true,
-            "note": "Keep private MEA progress in memory and apply stable tool journal scopes and stop handling."
-        },
-        {
-            "path": "shibaclaw/agent/tools/spawn.py",
-            "overwrite": true,
-            "note": "Propagate private task context to MEA runs."
-        },
-        {
-            "path": "shibaclaw/agent/turn_journal.py",
-            "overwrite": true,
-            "note": "Keep delegated tool operations in their original turn scope."
+            "note": "Reintegrate backend runtime support while retaining the v1.0.3 interface design with targeted mobile fixes."
         },
         {
             "path": "shibaclaw/thinkers/base.py",
             "overwrite": true,
-            "note": "Use full-history text-only outage caching and recover cached replies after SSE fallback fails."
-        },
-        {
-            "path": "shibaclaw/automation/service.py",
-            "overwrite": true,
-            "note": "Preserve pending updates and run state while serializing gateway and CLI store writes."
-        },
-        {
-            "path": "shibaclaw/webui/frontend/js/main.js",
-            "overwrite": true,
-            "note": "Use one 900px media query for sidebar behavior and resize handling."
-        },
-        {
-            "path": "shibaclaw/webui/static/bundle.js",
-            "overwrite": true,
-            "note": "Rebuilt WebUI assets with the sidebar resize fix."
-        },
-        {
-            "path": "shibaclaw/webui/static/index.html",
-            "overwrite": true,
-            "note": "Updated generated asset references for the rebuilt WebUI."
+            "note": "Restore provider retries, explicit model fallbacks, and safe outage caching."
         },
         {
             "path": "shibaclaw/thinkers/openai_provider.py",
             "overwrite": true,
-            "note": "Require an exact parsed host match for the Gemini model catalog endpoint."
+            "note": "Restore authenticated model catalogs and exact Gemini catalog host validation."
+        },
+        {
+            "path": "shibaclaw/agent/subagent.py",
+            "overwrite": true,
+            "note": "Restore MEA delegation, isolated and forked contexts, privacy protections, and resource guards."
+        },
+        {
+            "path": "shibaclaw/agent/tools/agent_send.py",
+            "overwrite": true,
+            "note": "Restore owner-only persistent specialist sessions with concurrent-context and private-session isolation."
+        },
+        {
+            "path": "shibaclaw/automation/service.py",
+            "overwrite": true,
+            "note": "Restore concurrent automation-store updates and external disable/delete refresh."
+        },
+        {
+            "path": "shibaclaw/cli/subscription_oauth.py",
+            "overwrite": true,
+            "note": "Restore subscription OAuth and targeted Claude credential removal; backend routes keep blocking token exchanges off the event loop."
+        },
+        {
+            "path": "shibaclaw/evolve/ci_gate.py",
+            "overwrite": true,
+            "note": "Restore opt-in self-evolution validation requiring local Ruff/pytest and passing PR CI before merge."
+        },
+        {
+            "path": "plugins/shibaclaw-channel-whatsapp/shibaclaw_channel_whatsapp/bridge/package.json",
+            "overwrite": true,
+            "note": "Restore the music-metadata ^11.16.1 override alongside the existing sharp and protobufjs security overrides."
+        },
+        {
+            "path": "shibaclaw/webui/routers/settings.py",
+            "overwrite": true,
+            "note": "Refresh model catalogs after settings or OAuth account changes and prevent in-flight requests from restoring stale cache entries."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/main.js",
+            "overwrite": true,
+            "note": "Keep mobile navigation focus and accessibility state aligned and fit the shell to visible viewport and keyboard changes."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/chat.js",
+            "overwrite": true,
+            "note": "Cap multiline composer growth to the visible viewport and keep input scrollable."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/css/workspace.css",
+            "overwrite": true,
+            "note": "Keep sidebar content reachable, compact Settings and composer controls, truncate mobile model names, show context percentage, and share dropdown styles. Compact Library navigation into one responsive toolbar. Compact the six navigation actions into an accessible icon grid, retaining touch labels."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/index.html",
+            "overwrite": true,
+            "note": "Restore Evolution and Library page access alongside independent sidebar scrolling, compact Settings, and one accessible context-usage button."
+        },
+        {
+            "path": "shibaclaw/webui/static/index.html",
+            "overwrite": true,
+            "note": "Package the retained interface design with targeted mobile navigation and composer fixes."
+        },
+        {
+            "path": "shibaclaw/webui/static/bundle.js",
+            "overwrite": true,
+            "note": "Rebuild packaged JavaScript with the mobile viewport, navigation, and composer fixes."
+        },
+        {
+            "path": "shibaclaw/webui/static/bundle.css",
+            "overwrite": true,
+            "note": "Rebuild packaged styles with mobile scrolling, touch control, and dropdown fixes."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/settings_panel.js",
+            "overwrite": true,
+            "note": "Restore the Claude and Google Gemini subscription OAuth login cards in Settings."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/model_selector.js",
+            "overwrite": true,
+            "note": "Align model, effort, and collection popups with compact trigger buttons; keep them bounded on resize and show one composer menu at a time."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/knowledge.js",
+            "overwrite": true,
+            "note": "Use consistent Collections menu styling, selection indicators, and bounded popup positioning."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/utils.js",
+            "overwrite": true,
+            "note": "Update the compact mobile context percentage alongside the full usage details."
+        },
+        {
+            "path": "README.de.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.es.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.fr.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.it.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.ja.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.pt-BR.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "README.zh-CN.md",
+            "overwrite": true,
+            "note": "Update the localized release summary to v1.0.6."
+        },
+        {
+            "path": "shibaclaw/webui/routers/oauth.py",
+            "overwrite": true,
+            "note": "Invalidate model catalogs after OAuth connection changes."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/evolve.js",
+            "overwrite": true,
+            "note": "Restore the read-only Evolution status panel and its refresh behavior."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/workspace.js",
+            "overwrite": true,
+            "note": "Restore Evolution navigation and Library profile relationships, profile details, and editable You and People documents with stale-request protection. Synchronize the compact Library section selector with its existing panels. Show translated navigation names on hover/focus and keep the current-section caption synchronized."
+        },
+        {
+            "path": "shibaclaw/webui/frontend/js/i18n_catalogs.js",
+            "overwrite": true,
+            "note": "Translate Evolution page headings and restored Library tabs and document controls across the eight interface languages."
+        },
+        {
+            "path": "shibaclaw/webui/build.mjs",
+            "overwrite": true,
+            "note": "Bundle the restored Evolution panel with the current interface assets."
         }
     ]
 }

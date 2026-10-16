@@ -17,58 +17,10 @@ const _CHANNEL_LABEL_FB = {
     cron: "One-time", other: "Other"
 };
 function _channelLabel(ch) {
-    const id = ch === "_default" ? "other" : ch;
-    const key = `sessions.channel.${id}`;
-    const translated = typeof t === "function" ? t(key) : "";
-    if (translated && translated !== key) return translated;
-    return _CHANNEL_LABEL_FB[id]
-        || id.charAt(0).toUpperCase() + id.slice(1).replace(/-/g, " ");
-}
-
-let _profileLabels = { default: "ShibaClaw" };
-const _profileCollapsed = JSON.parse(localStorage.getItem("sessionProfileCollapsed") || "{}");
-
-function _saveProfileCollapsed() {
-    localStorage.setItem("sessionProfileCollapsed", JSON.stringify(_profileCollapsed));
-}
-
-function _profileGroupId(sess) {
-    const pid = sess && sess.profile_id ? String(sess.profile_id).trim() : "";
-    return pid || "default";
-}
-
-const _DOG_HUE = {
-    default: 0,
-    polymarket: 108,
-    dungeon: 248,
-    gym: 332,
-    boardnight: 196,
-};
-
-function _dogHue(id) {
-    if (Object.prototype.hasOwnProperty.call(_DOG_HUE, id)) return _DOG_HUE[id];
-    let hue = 0;
-    for (const ch of String(id)) hue = (hue * 33 + ch.charCodeAt(0)) % 360;
-    return hue;
-}
-
-function _dogAvatar(id) {
-    const hue = _dogHue(id);
-    const filter = hue ? ` style="filter:hue-rotate(${hue}deg)"` : "";
-    return `<span class="agent-dog"><img src="/static/shibaclaw_logo.webp" alt=""${filter}></span>`;
-}
-
-function _profileGroupInfo(id) {
-    const label = _profileLabels[id] || (id === "default" ? "ShibaClaw" : id);
-    return { label, avatar: _dogAvatar(id) };
-}
-
-function _sortedProfileKeys(groups) {
-    return Object.keys(groups).sort((a, b) => {
-        if (a === "default") return -1;
-        if (b === "default") return 1;
-        return _profileGroupInfo(a).label.localeCompare(_profileGroupInfo(b).label, "ru");
-    });
+    const key = ch === "_default" ? "sessions.channel.other" : `sessions.channel.${ch}`;
+    return (typeof t === "function" ? t(key) : _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch])
+        || _CHANNEL_LABEL_FB[ch === "_default" ? "other" : ch]
+        || ch.charAt(0).toUpperCase() + ch.slice(1);
 }
 const CHANNEL_ORDER = ["telegram", "webui", "automation", "heartbeat", "cron", "cli", "api", "discord", "slack"];
 
@@ -272,15 +224,13 @@ function _buildSessionEl(sess) {
     const name = sess.nickname || sess.key;
     const displayName = _cleanSessionTitle(name, sess.key);
     const channel = _extractChannel(sess.key);
-    const channelInfo = _channelInfo(channel);
+    const channelLabel = _channelInfo(channel).label;
     const safeKey = encodeURIComponent(sess.key);
     const safeName = escapeHtml(displayName);
-    const safeChannelLabel = escapeHtml(channelInfo.label);
-    el.dataset.channel = channel;
+    const safeChannelLabel = escapeHtml(channelLabel);
 
-    const channelTag = channelInfo.label
-        ? `<span class="session-source source-${escapeHtml(channel)}"><span class="material-icons-round">${escapeHtml(channelInfo.icon)}</span>${safeChannelLabel}</span>`
-        : "";
+    // Skip empty channels but otherwise render badged tag
+    const channelTag = channelLabel ? `<span class="ob-badge badge-channel-${escapeHtml(channel)} session-channel-tag">${safeChannelLabel}</span>` : "";
 
     el.innerHTML = `
         <div class="session-info">
@@ -438,20 +388,20 @@ function _renderSessionsList() {
 
     const groups = {};
     for (const sess of sessions) {
-        const id = _profileGroupId(sess);
-        (groups[id] || (groups[id] = [])).push(sess);
+        const ch = _extractChannel(sess.key);
+        (groups[ch] || (groups[ch] = [])).push(sess);
     }
 
-    for (const id of _sortedProfileKeys(groups)) {
-        const info = _profileGroupInfo(id);
-        const items = groups[id];
-        const collapsed = !!_profileCollapsed[id];
+    for (const ch of _sortedChannelKeys(groups)) {
+        const info = _channelInfo(ch);
+        const items = groups[ch];
+        const collapsed = !!_channelCollapsed[ch];
 
         const header = document.createElement("div");
-        header.className = "channel-group-header agent-group-header" + (id === "default" ? " is-main" : "") + (collapsed ? " collapsed" : "");
+        header.className = "channel-group-header" + (collapsed ? " collapsed" : "");
         header.innerHTML = `
-            ${info.avatar}
-            <span class="agent-group-name">${escapeHtml(info.label)}</span>
+            <span class="material-icons-round">${escapeHtml(info.icon)}</span>
+            <span>${escapeHtml(info.label)}</span>
             <span class="group-count">${items.length}</span>
             <span class="material-icons-round group-chevron">expand_more</span>
         `;
@@ -461,11 +411,7 @@ function _renderSessionsList() {
         items.sort((a, b) => _sessionUpdatedMs(b) - _sessionUpdatedMs(a));
         items.forEach((s) => itemsEl.appendChild(_buildSessionEl(s)));
 
-        header.addEventListener("click", () => {
-            _profileCollapsed[id] = !_profileCollapsed[id];
-            _saveProfileCollapsed();
-            _renderSessionsList();
-        });
+        header.addEventListener("click", () => _toggleChannelGroup(ch, header));
         list.appendChild(header);
         list.appendChild(itemsEl);
 
@@ -481,17 +427,8 @@ function _renderSessionsList() {
 async function loadHistory() {
     const list = $("history-list");
     try {
-        const [res, pres] = await Promise.all([
-            authFetch("/api/sessions"),
-            authFetch("/api/profiles"),
-        ]);
+        const res = await authFetch("/api/sessions");
         const data = await res.json();
-        if (pres.ok) {
-            const pdata = await pres.json();
-            for (const profile of pdata.profiles || []) {
-                if (profile && profile.id) _profileLabels[profile.id] = profile.label || profile.id;
-            }
-        }
         _sessionsCache = data.sessions || [];
         _renderSessionsList();
     } catch (e) {

@@ -6,7 +6,7 @@ test('workspace routes reuse the original panels and expose exactly one active p
     const { context: app, document, nodes } = browserFixture();
     const routes = [
         ['fs-modal', 'library'], ['knowledge-modal', 'library'], ['memory-modal', 'library'],
-        ['automation-modal', 'automations'], ['connected-apps-modal', 'apps'],
+        ['automation-modal', 'automations'], ['connected-apps-modal', 'apps'], ['evolve-modal', 'evolution'],
     ];
     let retainedClicks = 0;
     const original = nodes['fs-modal'];
@@ -25,6 +25,7 @@ test('workspace routes reuse the original panels and expose exactly one active p
         assert.equal(selected[0].dataset.workspacePage, page);
         assert.equal(nodes['workspace-library-tabs'].hidden, page !== 'library');
         assert.equal(nodes['workspace-app-actions'].hidden, page !== 'apps');
+        assert.equal(nodes['workspace-evolve-actions'].hidden, page !== 'evolution');
         assert.equal(nodes['workspace-agents'].hidden, true);
         assert.equal(nodes['workspace-page-heading'].textContent, app.t(`workspace.${page}`));
     }
@@ -140,19 +141,18 @@ test('Escape preserves context while a foreground dialog is active', async () =>
 test('appearance follows system changes and persists an explicit selection across reloads', () => {
     const { document, nodes, storage, systemTheme } = browserFixture({ dark: true });
     assert.equal(document.documentElement.dataset.theme, 'dark');
-    assert.equal(nodes['btn-theme-icon'].textContent, 'routine');
+    assert.equal(nodes['workspace-theme'].value, 'system');
     systemTheme.matches = false;
     systemTheme.dispatchEvent({ type: 'change' });
     assert.equal(document.documentElement.dataset.theme, 'light');
-    nodes['btn-theme'].dispatchEvent({ type: 'click' });
-    assert.equal(storage.get('shibaclaw_theme'), 'light');
-    nodes['btn-theme'].dispatchEvent({ type: 'click' });
+    nodes['workspace-theme'].value = 'dark';
+    nodes['workspace-theme'].dispatchEvent({ type: 'change' });
     assert.equal(storage.get('shibaclaw_theme'), 'dark');
     systemTheme.dispatchEvent({ type: 'change' });
     assert.equal(document.documentElement.dataset.theme, 'dark');
     const restored = browserFixture({ stored: Object.fromEntries(storage), dark: false });
     assert.equal(restored.document.documentElement.dataset.theme, 'dark');
-    assert.equal(restored.nodes['btn-theme-icon'].textContent, 'dark_mode');
+    assert.equal(restored.nodes['workspace-theme'].value, 'dark');
 });
 
 test('sidebar collapse is reversible and survives reloads', () => {

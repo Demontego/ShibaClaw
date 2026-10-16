@@ -51,26 +51,20 @@ class Element extends EventTarget {
         this.attributes.set(name, String(value));
         if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = String(value);
     }
-    getAttribute(name) {
-        if (name.startsWith('data-')) return this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] ?? null;
-        return this.attributes.get(name) ?? null;
-    }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
     removeAttribute(name) { this.attributes.delete(name); }
-    toggleAttribute(name, force) {
-        const enabled = force ?? !this.attributes.has(name);
-        if (enabled) this.setAttribute(name, '');
-        else this.removeAttribute(name);
-        return enabled;
-    }
-    remove() {
-        if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
-        this.parentNode = null;
-    }
     appendChild(child) {
         if (child.parentNode) child.parentNode.children.splice(child.parentNode.children.indexOf(child), 1);
         child.parentNode = this;
         this.children.push(child);
         return child;
+    }
+    remove() { if (this.parentNode) { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; } }
+    toggleAttribute(name, force) {
+        const on = force ?? !this.attributes.has(name);
+        if (on) this.setAttribute(name, ''); else this.removeAttribute(name);
+        if (name === 'hidden') this.hidden = on;
+        return on;
     }
     append(...children) { children.forEach(child => this.appendChild(child)); }
     prepend(child) { this.appendChild(child); this.children.unshift(this.children.pop()); }
@@ -87,12 +81,14 @@ class Element extends EventTarget {
     }
     set innerHTML(value) { this.replaceChildren(); this._html = String(value); }
     focus() { this.focused = true; }
+    click() { this.dispatchEvent({ type: "click" }); }
     matches(selector) {
         if (selector === 'body') return this.tagName === 'BODY';
         if (selector.startsWith('#')) return this.id === selector.slice(1);
         if (selector.startsWith('[')) {
-            const [name, value] = selector.slice(1, -1).split('=');
-            return value === undefined ? this.attributes.has(name) : this.getAttribute(name) === value;
+            const [key, value] = selector.slice(1, -1).split('=');
+            const actual = this.getAttribute(key) ?? (key.startsWith('data-') ? this.dataset[key.slice(5)] ?? null : null);
+            return value === undefined ? actual !== null : actual === value.replaceAll('"', '').replaceAll("'", '');
         }
         if (selector.startsWith('.')) return selector.slice(1).split('.').every(name => this.classList.contains(name));
         throw new Error(`Unsupported fixture selector: ${selector}`);
@@ -127,29 +123,26 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
     document.documentElement = document.appendChild(new Element('html'));
     document.body = document.documentElement.appendChild(new Element('body'));
     document.createElement = tag => new Element(tag);
-    document.createElementNS = (_ns, tag) => new Element(tag);
+    document.createElementNS = (_, tag) => new Element(tag);
     document.getElementById = id => document.querySelector(`#${id}`);
     const html = readFrontend('index.html');
-    const ids = ['chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-app-actions',
-        'workspace-evolve-actions', 'workspace-library-book', 'workspace-agent-graph',
-        'agent-graph-nodes', 'agent-graph-svg', 'agent-graph-detail', 'library-sheet',
-        'library-you', 'library-people', 'library-people-search', 'library-you-title', 'library-people-title',
-        'library-tab-graph', 'library-tab-you', 'library-tab-people',
+    const ids = ['workspace-nav-current', 'workspace-nav-tooltip', 'chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-library-select', 'workspace-app-actions', 'workspace-evolve-actions',
+        'library-tab-graph', 'library-tab-you', 'library-tab-people', 'workspace-agent-graph', 'agent-graph-nodes', 'agent-graph-svg', 'agent-graph-detail', 'workspace-library-book', 'library-sheet', 'library-you-title', 'library-you', 'library-people-title', 'library-people-search', 'library-people',
         'workspace-view-title', 'workspace-page-heading', 'workspace-page-description', 'workspace-stage',
-        'workspace-context-toggle', 'btn-theme', 'btn-theme-icon', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',
+        'workspace-context-toggle', 'workspace-theme', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',
         'profile-selector', 'context-content', 'token-badge', 'token-badge-text', 'token-badge-fill',
-        'fs-modal', 'knowledge-modal', 'memory-modal', 'automation-modal', 'connected-apps-modal', 'evolve-modal', 'context-modal'];
+        'fs-modal', 'knowledge-modal', 'memory-modal', 'automation-modal', 'connected-apps-modal', 'context-modal', 'evolve-modal', 'evolve-content'];
     const nodes = Object.fromEntries(ids.map(id => {
         if (!html.includes(`id="${id}"`)) throw new Error(`Fixture id is absent from real HTML: ${id}`);
         return [id, document.body.appendChild(new Element('div', { id }))];
     }));
     for (const id of ids.filter(id => id.endsWith('-modal'))) nodes[id].appendChild(new Element('div', { class: 'modal' }));
-    nodes['workspace-library-book'].appendChild(new Element('aside', { class: 'library-rail' }));
-    nodes['workspace-agent-graph'].appendChild(new Element('div', { class: 'agent-graph-stage' }));
     for (const match of html.matchAll(/<button\b[^>]*\bdata-workspace-(?:page|modal)="[^"]+"[^>]*>/g)) {
         const attrs = Object.fromEntries([...match[0].matchAll(/([\w-]+)="([^"]*)"/g)].map(attr => [attr[1], attr[2]]));
         document.body.appendChild(new Element('button', attrs));
     }
+    nodes['workspace-library-book'].appendChild(new Element('aside', { class: 'library-rail' }));
+    nodes['workspace-agent-graph'].appendChild(new Element('div', { class: 'agent-graph-stage' }));
     document.body.appendChild(new Element('div', { class: 'input-actions' }));
     nodes['chat-area'].style.display = 'flex';
     nodes['workspace-view'].style.display = 'none';
@@ -163,24 +156,13 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
         document,
         localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)) },
         navigator: { language: 'en', languages: ['en'] },
-        matchMedia: (query = "") => {
-            if (String(query).includes("prefers-color-scheme")) return systemTheme;
-            return {
-                matches: false,
-                media: query,
-                addEventListener() {},
-                removeEventListener() {},
-                addListener() {},
-                removeListener() {},
-                dispatchEvent() { return true; },
-            };
-        },
+        matchMedia: () => systemTheme,
         CustomEvent: class { constructor(type, options = {}) { this.type = type; Object.assign(this, options); } },
         state: { contextModalOpen: false, profileId: 'default', sessionId: null },
         _profilesCache: [],
         $: id => document.getElementById(id),
         authFetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })),
-        addEventListener() {},
+        addEventListener: () => {},
         realtime: { emit: (...args) => emissions.push(args) },
         loadFs: async () => {},
         closeSettingsView: () => {},
