@@ -32,10 +32,12 @@ def operation_fingerprint(
             "to": payload.to,
             "session_key": payload.session_key,
             "profile_id": payload.profile_id,
-            "model": payload.model,
             "targets": payload.targets,
         },
     }
+    # Keep pre-model approval hashes valid when the job uses the default model.
+    if payload.model:
+        blob["payload"]["model"] = payload.model
     raw = json.dumps(blob, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 

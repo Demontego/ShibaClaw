@@ -1,4 +1,4 @@
-"""Tests for Artifact-Preserving Context Compaction & File Read Deduplication."""
+"""Tests for artifact-preserving context compaction and file read metadata."""
 
 import pytest
 from pathlib import Path
@@ -72,7 +72,7 @@ def test_context_overflow_guard_artifact_preservation(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_file_read_deduplication_and_cache(tmp_path: Path):
+async def test_file_read_content_and_cache_invalidation(tmp_path: Path):
     test_file = tmp_path / "sample.txt"
     test_file.write_text("line 1\nline 2\nline 3\n", encoding="utf-8")
 
@@ -89,10 +89,10 @@ async def test_file_read_deduplication_and_cache(tmp_path: Path):
     assert "3| line 3" in res1
     assert str(test_file.resolve()) in reg.read_files
 
-    # Second read: deduplicated stub returned
+    # Cached metadata cannot prove an earlier read remains visible in context.
     res2 = await read_tool.execute(path=str(test_file))
-    assert "[File Read Deduplicated:" in res2
-    assert "Content is unchanged from prior read" in res2
+    assert res2 == res1
+    assert str(test_file.resolve()) in cache._cache
 
     # Third read with force_reload=True: returns full content
     res3 = await read_tool.execute(path=str(test_file), force_reload=True)
@@ -103,6 +103,7 @@ async def test_file_read_deduplication_and_cache(tmp_path: Path):
     edit_res = await edit_tool.execute(path=str(test_file), old_text="line 2", new_text="line 2 edited")
     assert "Successfully edited" in edit_res
     assert str(test_file.resolve()) in reg.modified_files
+    assert str(test_file.resolve()) not in cache._cache
 
     # Read after edit: returns full updated content (not deduplicated)
     res4 = await read_tool.execute(path=str(test_file))
@@ -112,6 +113,7 @@ async def test_file_read_deduplication_and_cache(tmp_path: Path):
     # Write file: invalidates cache again
     write_res = await write_tool.execute(path=str(test_file), content="brand new content\n")
     assert "Successfully wrote" in write_res
+    assert str(test_file.resolve()) not in cache._cache
 
     res5 = await read_tool.execute(path=str(test_file))
     assert "brand new content" in res5

@@ -180,9 +180,12 @@ async def api_oauth_disconnect(request: Request):
         except Exception:
             pass
     elif provider == "anthropic":
-        import subprocess
+        from shibaclaw.cli.subscription_oauth import remove_claude_oauth
 
-        subprocess.run(["claude", "auth", "logout"], check=False, capture_output=True)
+        try:
+            await run_in_threadpool(remove_claude_oauth)
+        except (OSError, ValueError):
+            return JSONResponse({"error": "Unable to remove Claude login"}, status_code=500)
     else:
         from shibaclaw.security.oauth_store import OAuthTokenStore
         store = OAuthTokenStore()

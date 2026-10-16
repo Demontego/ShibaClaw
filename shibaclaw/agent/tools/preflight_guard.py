@@ -14,10 +14,6 @@ PATH_PARAM_KEYS = frozenset(
         "working_dir",
         "dir_path",
         "target_path",
-        "destination",
-        "dst",
-        "src",
-        "file",
         "filename",
         "directory",
         "dir",
@@ -27,6 +23,13 @@ PATH_PARAM_KEYS = frozenset(
         "log_path",
     }
 )
+
+PAYLOAD_PARAM_KEYS = frozenset({"content", "contents", "patch", "query", "text", "body", "code", "command", "script"})
+
+
+def _is_payload_key(key: str) -> bool:
+    key = key.lower()
+    return key in PAYLOAD_PARAM_KEYS or key.endswith(("_content", "_contents", "_patch", "_query", "_text"))
 
 
 class ToolCallPreFlightGuard:
@@ -49,12 +52,15 @@ class ToolCallPreFlightGuard:
     def is_path_key(key: str, prop_schema: Dict[str, Any] | None = None) -> bool:
         """Determines if a parameter key or property schema represents a file/dir path."""
         k_lower = key.lower()
-        if k_lower in PATH_PARAM_KEYS or any(k_lower.endswith(f"_{p}") for p in ("path", "dir", "file")):
+        if _is_payload_key(k_lower):
+            return False
+        if k_lower in PATH_PARAM_KEYS or k_lower.endswith(("_path", "_dir")):
             return True
         if prop_schema and isinstance(prop_schema, dict):
-            desc = str(prop_schema.get("description", "")).lower()
-            if "path" in desc or "file" in desc or "directory" in desc:
+            if prop_schema.get("format") in {"path", "file-path", "directory-path"}:
                 return True
+            desc = str(prop_schema.get("description", "")).strip().lower()
+            return bool(re.match(r"^(?:the\s+)?(?:(?:absolute|relative|local|filesystem)\s+)?(?:(?:file|directory|folder)\s+)?path\b", desc))
         return False
 
     @staticmethod
@@ -97,7 +103,9 @@ class ToolCallPreFlightGuard:
 
         for k, v in params.items():
             prop_schema = props.get(k, {}) if isinstance(props, dict) else {}
-            if self.is_path_key(k, prop_schema):
+            if _is_payload_key(k):
+                normalized[k] = v
+            elif self.is_path_key(k, prop_schema):
                 if isinstance(v, str):
                     normalized[k] = self.normalize_path_arg(v)
                 elif isinstance(v, list):

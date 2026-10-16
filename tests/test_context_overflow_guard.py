@@ -198,6 +198,68 @@ def test_budget_keeps_tool_call_with_result(tmp_path: Path):
         assert ("tool", "call-1") in roles
 
 
+def test_budget_preserves_chronology_of_pinned_tool_groups(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path)
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "obsolete " * 1000},
+        {"role": "assistant", "content": "call a", "tool_calls": [{"id": "a"}]},
+        {"role": "tool", "tool_call_id": "a", "content": "## Open\nKeep this backlog"},
+        {"role": "assistant", "content": "call b", "tool_calls": [{"id": "b"}]},
+        {"role": "tool", "tool_call_id": "b", "content": "recent result"},
+        {"role": "assistant", "content": "done"},
+        {"role": "user", "content": "continue"},
+    ]
+
+    budgeted = guard.budget_context(messages, max_tokens=100)
+
+    assert budgeted == [messages[0], *messages[2:]]
+    assert messages[1]["content"] == "obsolete " * 1000
+
+
+def test_budget_tail_boundary_preserves_complete_parallel_tool_group(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path)
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "obsolete " * 1000},
+        {"role": "assistant", "content": "call both", "tool_calls": [{"id": "a"}, {"id": "b"}]},
+        {"role": "tool", "tool_call_id": "a", "content": "result a"},
+        {"role": "tool", "tool_call_id": "b", "content": "result b"},
+        {"role": "assistant", "content": "done"},
+        {"role": "user", "content": "continue"},
+    ]
+
+    budgeted = guard.budget_context(messages, max_tokens=20)
+
+    assert budgeted == [messages[0], *messages[2:]]
+
+
+def test_budget_prunes_expensive_tool_group_without_orphaning_results(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path)
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "assistant", "content": "old reasoning " * 1000, "tool_calls": [{"id": "a"}]},
+        {"role": "tool", "tool_call_id": "a", "content": "result a"},
+        {"role": "user", "content": "recent"},
+        {"role": "assistant", "content": "done"},
+        {"role": "user", "content": "continue"},
+    ]
+
+    budgeted = guard.budget_context(messages, max_tokens=20)
+
+    assert budgeted == [messages[0], *messages[-3:]]
+
+
+def test_budget_short_history_does_not_duplicate_system_prompt(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path)
+    messages = [
+        {"role": "system", "content": "system " * 100},
+        {"role": "user", "content": "continue"},
+    ]
+
+    assert guard.budget_context(messages, max_tokens=10) == messages
+
+
 def test_context_window_recovery(tmp_path: Path):
     from shibaclaw.agent.context_overflow_guard import ContextWindowRecovery
     guard = ContextOverflowGuard(tmp_path, context_window_tokens=1000)

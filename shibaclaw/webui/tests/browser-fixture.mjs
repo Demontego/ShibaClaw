@@ -51,8 +51,21 @@ class Element extends EventTarget {
         this.attributes.set(name, String(value));
         if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] = String(value);
     }
-    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    getAttribute(name) {
+        if (name.startsWith('data-')) return this.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] ?? null;
+        return this.attributes.get(name) ?? null;
+    }
     removeAttribute(name) { this.attributes.delete(name); }
+    toggleAttribute(name, force) {
+        const enabled = force ?? !this.attributes.has(name);
+        if (enabled) this.setAttribute(name, '');
+        else this.removeAttribute(name);
+        return enabled;
+    }
+    remove() {
+        if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
+        this.parentNode = null;
+    }
     appendChild(child) {
         if (child.parentNode) child.parentNode.children.splice(child.parentNode.children.indexOf(child), 1);
         child.parentNode = this;
@@ -77,7 +90,10 @@ class Element extends EventTarget {
     matches(selector) {
         if (selector === 'body') return this.tagName === 'BODY';
         if (selector.startsWith('#')) return this.id === selector.slice(1);
-        if (selector.startsWith('[')) return this.attributes.has(selector.slice(1, -1));
+        if (selector.startsWith('[')) {
+            const [name, value] = selector.slice(1, -1).split('=');
+            return value === undefined ? this.attributes.has(name) : this.getAttribute(name) === value;
+        }
         if (selector.startsWith('.')) return selector.slice(1).split('.').every(name => this.classList.contains(name));
         throw new Error(`Unsupported fixture selector: ${selector}`);
     }
@@ -111,12 +127,16 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
     document.documentElement = document.appendChild(new Element('html'));
     document.body = document.documentElement.appendChild(new Element('body'));
     document.createElement = tag => new Element(tag);
+    document.createElementNS = (_ns, tag) => new Element(tag);
     document.getElementById = id => document.querySelector(`#${id}`);
     const html = readFrontend('index.html');
     const ids = ['chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-app-actions',
-        'workspace-evolve-actions',
+        'workspace-evolve-actions', 'workspace-library-book', 'workspace-agent-graph',
+        'agent-graph-nodes', 'agent-graph-svg', 'agent-graph-detail', 'library-sheet',
+        'library-you', 'library-people', 'library-people-search', 'library-you-title', 'library-people-title',
+        'library-tab-graph', 'library-tab-you', 'library-tab-people',
         'workspace-view-title', 'workspace-page-heading', 'workspace-page-description', 'workspace-stage',
-        'workspace-context-toggle', 'workspace-theme', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',
+        'workspace-context-toggle', 'btn-theme', 'btn-theme-icon', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',
         'profile-selector', 'context-content', 'token-badge', 'token-badge-text', 'token-badge-fill',
         'fs-modal', 'knowledge-modal', 'memory-modal', 'automation-modal', 'connected-apps-modal', 'evolve-modal', 'context-modal'];
     const nodes = Object.fromEntries(ids.map(id => {
@@ -124,6 +144,8 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
         return [id, document.body.appendChild(new Element('div', { id }))];
     }));
     for (const id of ids.filter(id => id.endsWith('-modal'))) nodes[id].appendChild(new Element('div', { class: 'modal' }));
+    nodes['workspace-library-book'].appendChild(new Element('aside', { class: 'library-rail' }));
+    nodes['workspace-agent-graph'].appendChild(new Element('div', { class: 'agent-graph-stage' }));
     for (const match of html.matchAll(/<button\b[^>]*\bdata-workspace-(?:page|modal)="[^"]+"[^>]*>/g)) {
         const attrs = Object.fromEntries([...match[0].matchAll(/([\w-]+)="([^"]*)"/g)].map(attr => [attr[1], attr[2]]));
         document.body.appendChild(new Element('button', attrs));
@@ -157,7 +179,8 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
         state: { contextModalOpen: false, profileId: 'default', sessionId: null },
         _profilesCache: [],
         $: id => document.getElementById(id),
-        authFetch: url => new Promise((resolve, reject) => requests.push({ url, resolve, reject })),
+        authFetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })),
+        addEventListener() {},
         realtime: { emit: (...args) => emissions.push(args) },
         loadFs: async () => {},
         closeSettingsView: () => {},

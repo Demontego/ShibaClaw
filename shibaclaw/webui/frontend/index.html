@@ -1208,6 +1208,11 @@
                 <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span
                         class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
             </div>
+            <div id="workspace-evolve-actions" class="workspace-page-actions workspace-app-actions" hidden>
+                <button type="button" class="btn-secondary" onclick="loadEvolve()" data-i18n-aria="common.refresh"
+                    aria-label="Refresh"><span class="material-icons-round"
+                        aria-hidden="true">refresh</span></button>
+            </div>
             <nav id="workspace-library-tabs" class="workspace-tabs" aria-label="Library"
                 data-i18n-aria="workspace.library" hidden>
                 <button type="button" id="library-tab-graph" onclick="openWorkspaceLibrary()">Связи</button>
@@ -1220,9 +1225,11 @@
             </nav>
             <div id="workspace-stage" class="workspace-stage">
                 <div id="workspace-agent-graph" class="agent-graph" hidden>
-                    <div class="agent-graph-stage">
-                        <svg id="agent-graph-svg" aria-hidden="true"></svg>
-                        <div id="agent-graph-nodes"></div>
+                    <div class="agent-graph-canvas">
+                        <div class="agent-graph-stage">
+                            <svg id="agent-graph-svg" aria-hidden="true"></svg>
+                            <div id="agent-graph-nodes"></div>
+                        </div>
                     </div>
                     <div id="agent-graph-detail" class="agent-graph-detail"></div>
                 </div>

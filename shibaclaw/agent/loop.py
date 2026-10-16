@@ -650,6 +650,7 @@ class ShibaBrain:
                     session_key,
                     metadata=metadata or {},
                     profile_id=profile_id,
+                    ephemeral=self._checkpoint_forbidden(session_key, metadata),
                 )
 
     @staticmethod
@@ -847,6 +848,15 @@ class ShibaBrain:
             profile_id=profile_id,
         )
         active_model = model or self.model
+        try:
+            from shibaclaw.agent.profiles import ProfileManager
+
+            profiles = ProfileManager(self.workspace)
+            if profiles.get_allowed_models(profile_id) == [] or not profiles.model_allowed(profile_id, active_model):
+                return f"Model `{active_model}` is not allowed for this profile.", tools_used, messages
+        except Exception as exc:
+            logger.warning("effective model allowlist check failed closed: {}", exc)
+            return "Could not validate profile model allowlist.", tools_used, messages
         active_provider = self._resolve_provider_for_model(active_model)
 
         # Update context again just in case the provider needed to be resolved
@@ -1174,6 +1184,19 @@ class ShibaBrain:
                     tool_call.arguments = preflight_res.arguments
                     async def _run_tool(call: Any = tool_call) -> str:
                         result = ""
+                        if call.name in {"spawn", "spawn_mea"}:
+                            # Snapshot the current history, including completed work
+                            # from this turn, in the invoking task's context.
+                            tool = self.tools.get(call.name)
+                            if tool is not None:
+                                context_args = {
+                                    "model": active_model,
+                                    "provider": active_provider,
+                                    "parent_messages": messages,
+                                }
+                                if call.name == "spawn_mea":
+                                    context_args["ephemeral"] = private
+                                tool.set_context(channel, chat_id, session_key, **context_args)
                         for tool_attempt in range(1, 4):
                             try:
                                 tool_future = asyncio.ensure_future(
@@ -1726,12 +1749,13 @@ class ShibaBrain:
                 return screened
             session = self.sessions.get_or_create(key)
             profile_id = session.metadata.get("profile_id") or None
+            effective_model = model_override or self._resolve_model(profile_id, session.metadata, self.workspace)
             self._set_tool_context(
                 channel,
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
+                model=effective_model,
                 metadata=msg.metadata,
                 profile_id=profile_id,
             )
@@ -1762,6 +1786,7 @@ class ShibaBrain:
                 chat_id=chat_id,
                 profile_id=profile_id,
                 session_key=key,
+                model=effective_model,
                 metadata=msg.metadata,
                 temperature=_temp,
             )

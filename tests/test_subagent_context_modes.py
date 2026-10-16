@@ -91,7 +91,6 @@ async def test_spawn_tool_mode_context_passing(subagent_manager):
         parent_messages=parent_messages,
     )
 
-    assert spawn_tool._parent_messages == parent_messages
     assert "mode" in spawn_tool.parameters["properties"]
 
     # Mock manager.spawn
@@ -126,7 +125,6 @@ async def test_spawn_mea_tool_mode_context_passing(subagent_manager):
         parent_messages=parent_messages,
     )
 
-    assert mea_tool._parent_messages == parent_messages
     assert "mode" in mea_tool.parameters["properties"]
 
     subagent_manager.execute_mea_loop = AsyncMock(
@@ -153,3 +151,65 @@ async def test_spawn_mea_tool_mode_context_passing(subagent_manager):
         ephemeral=False,
         parent_messages=parent_messages,
     )
+
+
+@pytest.mark.parametrize("tool_class", [SpawnTool, SpawnMeaTool])
+async def test_delegation_history_is_snapshot_and_isolated_between_tasks(tool_class):
+    manager = MagicMock()
+    calls, background = {}, []
+
+    async def capture(**kwargs):
+        calls[kwargs["task"]] = kwargs
+        return "started"
+
+    manager.spawn = capture
+    manager.execute_mea_loop = capture
+    manager.track.side_effect = lambda key, task: background.append(task)
+    tool = tool_class(manager)
+    waiting, other_finished = asyncio.Event(), asyncio.Event()
+    first_provider, second_provider = object(), object()
+    first_history = [{"role": "user", "content": [{"type": "text", "text": "first history"}]}]
+
+    async def first():
+        tool.set_context("webui", "first", model="first-model", provider=first_provider, parent_messages=first_history)
+        first_history[0]["content"][0]["text"] = "later mutation"
+        waiting.set()
+        await other_finished.wait()
+        await tool.execute("first task", mode="fork")
+
+    async def second():
+        await waiting.wait()
+        tool.set_context("telegram", "second", model="second-model", provider=second_provider, parent_messages=[{"role": "user", "content": "second history"}])
+        await tool.execute("second task", mode="fork")
+        other_finished.set()
+
+    await asyncio.gather(first(), second())
+    await asyncio.gather(*background)
+    assert calls["first task"]["origin_chat_id"] == "first"
+    assert calls["first task"]["provider"] is first_provider
+    assert calls["first task"]["model"] == "first-model"
+    assert calls["first task"]["parent_messages"] == [{"role": "user", "content": [{"type": "text", "text": "first history"}]}]
+    assert calls["second task"]["parent_messages"] == [{"role": "user", "content": "second history"}]
+
+
+@pytest.mark.parametrize("completed", [0, 1, 2])
+def test_fork_inherits_only_complete_tool_groups(subagent_manager, completed):
+    history = [
+        {"role": "system", "content": "parent"},
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "old"}]},
+        {"role": "tool", "tool_call_id": "old", "content": "old result"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "read"}, {"id": "spawn"}]},
+    ]
+    history.extend([
+        {"role": "tool", "tool_call_id": "read", "content": "read result"},
+        {"role": "tool", "tool_call_id": "spawn", "content": "spawn result"},
+    ][:completed])
+    messages = subagent_manager._prepare_subagent_messages("child", "continue", "fork", history)
+    declared = {call["id"] for msg in messages for call in msg.get("tool_calls", [])}
+    results = {msg["tool_call_id"] for msg in messages if msg.get("role") == "tool"}
+    assert declared == results == ({"old", "read", "spawn"} if completed == 2 else {"old"})
+    assert messages[-1]["role"] == "user"
+    # The parent's nested tool data must not be shared with the child.
+    messages[2]["tool_calls"][0]["id"] = "changed"
+    assert history[2]["tool_calls"][0]["id"] == "old"

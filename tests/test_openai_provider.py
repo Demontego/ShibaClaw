@@ -1,7 +1,38 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
+import pytest
+from openai import AsyncOpenAI
+
 from shibaclaw.thinkers.openai_provider import OpenAIThinker, _merge_reasoning_details
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
+async def test_local_model_catalog_preserves_configured_auth_and_headers(host):
+    requests = []
+
+    async def handle(request):
+        requests.append(request)
+        return httpx.Response(200, json={"data": [{"id": "local-model"}], "object": "list"})
+
+    thinker = object.__new__(OpenAIThinker)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http_client:
+        async with AsyncOpenAI(
+            api_key="local-secret",
+            base_url=f"http://{host}:3000/v1",
+            default_headers={"X-Proxy-Auth": "configured-header"},
+            http_client=http_client,
+        ) as client:
+            thinker._client = client
+            models = await thinker.get_available_models()
+
+    assert models == [{"id": "local-model", "name": "local-model"}]
+    assert len(requests) == 1
+    assert requests[0].url.path == "/v1/models"
+    assert requests[0].headers["authorization"] == "Bearer local-secret"
+    assert requests[0].headers["X-Proxy-Auth"] == "configured-header"
 
 
 def test_parse_response_preserves_provider_specific_tool_call_fields():

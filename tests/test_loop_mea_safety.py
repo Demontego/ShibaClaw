@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +15,7 @@ from shibaclaw.agent.tools.registry import SkillVault
 from shibaclaw.agent.tools.spawn import SpawnMeaTool
 from shibaclaw.agent.turn_journal import REFUSAL, TurnJournal
 from shibaclaw.bus.queue import MessageBus
+from shibaclaw.bus.events import InboundMessage
 from shibaclaw.config.schema import ExecToolConfig, WebSearchConfig
 from shibaclaw.thinkers.base import LLMResponse, ToolCallRequest
 
@@ -532,3 +534,87 @@ async def test_direct_registry_mea_context_is_isolated_between_caller_tasks():
     assert calls["public task"]["ephemeral"] is False
     assert calls["public task"]["provider"] is public_provider
     assert {session_key for session_key, _ in background} == {"webui:private", "telegram:public"}
+
+
+@pytest.mark.parametrize("source", ["override", "profile", "default", "deny_all"])
+async def test_effective_model_allowlist_is_checked_before_resolving_provider(tmp_path, source):
+    brain, provider = _brain(tmp_path, [LLMResponse(content="must not run")])
+    profile = {"allowed_models": [] if source == "deny_all" else ["permitted-model"]}
+    if source == "profile":
+        profile["model"] = "blocked-model"
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir(exist_ok=True)
+    (profiles_dir / "manifest.json").write_text(json.dumps({"restricted": profile}), encoding="utf-8")
+    brain.sessions.get_or_create(KEY).metadata["profile_id"] = "restricted"
+
+    result = await brain.process_direct(
+        "work", KEY, channel="webui", chat_id="fixture",
+        model="blocked-model" if source == "override" else None,
+    )
+
+    assert "not allowed for this profile" in result.content
+    brain._resolve_provider_for_model.assert_not_called()
+    provider.chat_with_retry_streaming.assert_not_awaited()
+
+
+async def test_allowed_model_override_reaches_provider(tmp_path):
+    brain, provider = _brain(tmp_path, [LLMResponse(content="done")])
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir(exist_ok=True)
+    (profiles_dir / "manifest.json").write_text(json.dumps({"restricted": {"allowed_models": ["permitted-model"]}}), encoding="utf-8")
+    brain.sessions.get_or_create(KEY).metadata["profile_id"] = "restricted"
+
+    result = await brain.process_direct("work", KEY, channel="webui", chat_id="fixture", model="permitted-model")
+
+    assert result.content == "done"
+    assert provider.chat_with_retry_streaming.await_args.kwargs["model"] == "permitted-model"
+
+
+async def test_system_turn_override_uses_effective_model_allowlist(tmp_path):
+    brain, provider = _brain(tmp_path, [LLMResponse(content="must not run")])
+    profiles_dir = tmp_path / "profiles"
+    profiles_dir.mkdir(exist_ok=True)
+    (profiles_dir / "manifest.json").write_text(json.dumps({"restricted": {"allowed_models": ["test-model"]}}), encoding="utf-8")
+    brain.sessions.get_or_create(KEY).metadata["profile_id"] = "restricted"
+
+    result = await brain._process_message(
+        InboundMessage(channel="system", sender_id="subagent", chat_id=KEY, content="work done"),
+        model_override="blocked-model",
+    )
+
+    assert "not allowed for this profile" in result.content
+    provider.chat_with_retry_streaming.assert_not_awaited()
+
+
+@pytest.mark.parametrize("tool_name", ["spawn", "spawn_mea"])
+async def test_fork_delegation_uses_current_completed_history_and_drops_inflight_group(tmp_path, tool_name):
+    brain, provider = _brain(tmp_path, [
+        _tool("read-first", "research"),
+        LLMResponse(content=None, tool_calls=[ToolCallRequest(id="delegate", name=tool_name, arguments={"task": "child task", "mode": "fork"})], finish_reason="tool_calls"),
+        LLMResponse(content="parent done"),
+    ])
+    seen = []
+    done = asyncio.Event()
+
+    async def web_result(**kwargs):
+        return "research result"
+
+    brain.tools.get("web_search").execute = web_result
+
+    async def child(**kwargs):
+        seen.extend(brain.subagents._prepare_subagent_messages("child", kwargs["task"], kwargs["mode"], kwargs["parent_messages"]))
+        done.set()
+        return "started"
+
+    if tool_name == "spawn":
+        brain.subagents.spawn = child
+    else:
+        brain.subagents.execute_mea_loop = child
+
+    await _direct(brain, "research then delegate")
+    await asyncio.wait_for(done.wait(), 2)
+
+    declared = {call["id"] for message in seen for call in message.get("tool_calls", [])}
+    results = {message["tool_call_id"] for message in seen if message.get("role") == "tool"}
+    assert declared == results == {"read-first"}
+    assert any("research result" in str(message.get("content")) for message in seen)

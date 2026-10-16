@@ -1,5 +1,8 @@
+import asyncio
 import json
 from pathlib import Path
+
+import pytest
 
 from shibaclaw.agent.tools.agent_send import AgentSendTool, hide_agent_send
 from shibaclaw.brain.manager import PackManager
@@ -91,3 +94,78 @@ def test_hide_agent_send_drops_only_on_agent_sessions():
     defs = [{"function": {"name": "agent_send"}}, {"function": {"name": "message"}}]
     assert hide_agent_send(defs, "webui:rinat") == defs
     assert hide_agent_send(defs, "agent:polymarket") == [{"function": {"name": "message"}}]
+
+
+async def test_concurrent_callers_keep_their_own_acl_and_reply_destination(tmp_path):
+    bus = _Bus()
+    tool, _ = _tool(tmp_path, bus)
+    waiting, other_finished = asyncio.Event(), asyncio.Event()
+
+    async def owner():
+        tool.set_context("webui", "owner-chat", "webui:owner-chat", profile_id="owner-profile")
+        waiting.set()
+        await other_finished.wait()
+        return await tool.execute("polymarket", "owner task")
+
+    async def guest():
+        await waiting.wait()
+        tool.set_context("telegram", "guest-chat", "telegram:guest-chat", metadata={"is_guest": True})
+        result = await tool.execute("polymarket", "guest task")
+        other_finished.set()
+        return result
+
+    owner_result, guest_result = await asyncio.gather(owner(), guest())
+    assert owner_result.startswith("Woke")
+    assert "private to the owner" in guest_result
+    assert [(msg.channel, msg.chat_id, msg.sender_id) for msg in bus.inbound] == [
+        ("webui", "owner-chat", "owner-profile")
+    ]
+
+
+async def test_two_owners_keep_their_own_reply_destination(tmp_path):
+    bus = _Bus()
+    tool, _ = _tool(tmp_path, bus)
+    waiting, other_finished = asyncio.Event(), asyncio.Event()
+
+    async def first():
+        tool.set_context("webui", "first", "webui:first", profile_id="first-profile")
+        waiting.set()
+        await other_finished.wait()
+        await tool.execute("polymarket", "first task")
+
+    async def second():
+        await waiting.wait()
+        tool.set_context("cli", "second", "cli:second", profile_id="second-profile")
+        await tool.execute("polymarket", "second task")
+        other_finished.set()
+
+    await asyncio.gather(first(), second())
+    assert {(msg.channel, msg.chat_id, msg.sender_id) for msg in bus.inbound} == {
+        ("webui", "first", "first-profile"), ("cli", "second", "second-profile")
+    }
+
+
+@pytest.mark.parametrize("privacy", ["incognito", "ephemeral"])
+@pytest.mark.parametrize("source", ["metadata", "session", "context"])
+async def test_private_delegation_does_not_touch_existing_agent_session(tmp_path, privacy, source):
+    bus = _Bus()
+    tool, sessions = _tool(tmp_path, bus)
+    target = sessions.get_or_create("agent:polymarket")
+    target.messages.append({"role": "user", "content": "existing public history"})
+    sessions.save(target)
+    target_path = sessions.sessions_dir / "agent_polymarket.jsonl"
+    before = target_path.read_bytes()
+    if source == "session":
+        sessions.get_or_create("webui:private").metadata[privacy] = True
+    tool.set_context(
+        "webui", "private", "webui:private",
+        metadata={privacy: True} if source == "metadata" else None,
+        ephemeral=source == "context",
+    )
+
+    result = await tool.execute("polymarket", "sensitive task")
+
+    assert "unavailable in incognito or ephemeral sessions" in result
+    assert bus.inbound == []
+    assert target_path.read_bytes() == before
+    assert target.messages == [{"role": "user", "content": "existing public history"}]

@@ -8,7 +8,11 @@ from starlette.requests import Request
 from shibaclaw.config.schema import Config
 from shibaclaw.webui.agent_manager import agent_manager
 from shibaclaw.webui.oauth_github import start_codex_oauth, start_openrouter_oauth
-from shibaclaw.webui.routers.oauth import api_oauth_login, api_oauth_openrouter_callback
+from shibaclaw.webui.routers.oauth import (
+    api_oauth_disconnect,
+    api_oauth_login,
+    api_oauth_openrouter_callback,
+)
 
 
 def _json_request(payload: dict) -> Request:
@@ -48,6 +52,51 @@ def _get_request(path: str, query_string: str = "", path_params: dict | None = N
 
 
 class TestOAuthRouter:
+    @pytest.mark.asyncio
+    async def test_claude_disconnect_removes_only_oauth_without_cli(self, monkeypatch, tmp_path):
+        import subprocess
+        import shibaclaw.cli.subscription_oauth as subscription
+
+        path = tmp_path / ".credentials.json"
+        unrelated = {"apiKey": "other-credential", "settings": {"theme": "dark"}}
+        path.write_text(json.dumps({**unrelated, "claudeAiOauth": {
+            "accessToken": "test-access", "refreshToken": "test-refresh",
+        }}), encoding="utf-8")
+        monkeypatch.setattr(subscription, "claude_credentials_path", lambda: path)
+
+        def missing_cli(*args, **kwargs):
+            raise FileNotFoundError("Claude CLI is not installed")
+
+        monkeypatch.setattr(subprocess, "run", missing_cli)
+        response = await api_oauth_disconnect(_json_request({"provider": "anthropic"}))
+        assert response.status_code == 200
+        assert json.loads(path.read_text(encoding="utf-8")) == unrelated
+        assert not subscription.claude_credentials_present()
+        assert (await api_oauth_disconnect(_json_request({"provider": "anthropic"}))).status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_claude_disconnect_preserves_invalid_file_and_reports_failure(self, monkeypatch, tmp_path):
+        import shibaclaw.cli.subscription_oauth as subscription
+
+        path = tmp_path / ".credentials.json"
+        path.write_text("invalid json", encoding="utf-8")
+        monkeypatch.setattr(subscription, "claude_credentials_path", lambda: path)
+        response = await api_oauth_disconnect(_json_request({"provider": "anthropic"}))
+        assert response.status_code == 500
+        assert path.read_text(encoding="utf-8") == "invalid json"
+
+    @pytest.mark.asyncio
+    async def test_claude_disconnect_reports_storage_failure(self, monkeypatch):
+        import shibaclaw.cli.subscription_oauth as subscription
+
+        def fail_to_remove():
+            raise PermissionError("private path should not be exposed")
+
+        monkeypatch.setattr(subscription, "remove_claude_oauth", fail_to_remove)
+        response = await api_oauth_disconnect(_json_request({"provider": "anthropic"}))
+        assert response.status_code == 500
+        assert "private path" not in response.body.decode()
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("provider", "helper_name"),
@@ -302,6 +351,16 @@ class TestCustomMCPOAuth:
         from shibaclaw.security.oauth_store import OAuthTokenStore
         from shibaclaw.security.oauth_flow import OAuthFlow
         from shibaclaw.config.schema import MCPOAuthConfig
+        import shibaclaw.security.credential_manager as credential_manager
+        from cryptography.fernet import Fernet
+
+        # OAuthTokenStore's legacy store_dir argument is ignored; inject the
+        # actual vault so this test never reads or writes the user's credentials.
+        monkeypatch.setattr(credential_manager, "_load_or_create_key", lambda _: Fernet.generate_key())
+        isolated_manager = credential_manager.CredentialManager(store_dir=tmp_path)
+        monkeypatch.setattr(
+            credential_manager, "get_credential_manager", lambda: isolated_manager
+        )
 
         store = OAuthTokenStore(store_dir=tmp_path)
         flow = OAuthFlow(store=store)

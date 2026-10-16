@@ -127,6 +127,24 @@ def _write_claude_oauth(oauth: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def remove_claude_oauth() -> None:
+    """Remove the subscription login without deleting other Claude credentials."""
+    path = claude_credentials_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    if not isinstance(data, dict):
+        raise ValueError("Claude credentials must be a JSON object")
+    if "claudeAiOauth" not in data:
+        return
+    del data["claudeAiOauth"]
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
 def _claude_oauth_from_token(payload: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
     expires_in = int(payload.get("expires_in") or 28800)
     refresh = payload.get("refresh_token") or (previous or {}).get("refreshToken") or ""
@@ -286,12 +304,15 @@ async def start_subscription_login(job_id: str, jobs: dict, kind: str):
             await asyncio.wait_for(code_event.wait(), timeout=900)
             pasted = code_holder["value"].strip()
             if kind == "anthropic":
-                exchange_claude_code(split_claude_paste(pasted, state), state, verifier)
+                await asyncio.to_thread(
+                    exchange_claude_code, split_claude_paste(pasted, state), state, verifier
+                )
             else:
                 from shibaclaw.security.oauth_store import OAuthTokenStore
 
-                OAuthTokenStore().save_token(
-                    "google_gemini_cli", exchange_gemini_code(pasted, verifier)
+                token = await asyncio.to_thread(exchange_gemini_code, pasted, verifier)
+                await asyncio.to_thread(
+                    OAuthTokenStore().save_token, "google_gemini_cli", token
                 )
             jobs[job_id]["status"] = "done"
             jobs[job_id]["logs"].append(f"{label} connected")

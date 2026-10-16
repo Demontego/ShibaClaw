@@ -451,24 +451,47 @@ class ContextOverflowGuard:
             sys_content = f"{PROMPT_CACHE_PREFIX_MARKER}\n{artifact_block}\n\n{sys_content}"
             system_prompt["content"] = sys_content
 
-        tail = messages[-3:]
-        pinned = [msg for msg in messages[1:-3] if _pin_message(msg)]
-        recent_messages = pinned + tail
-        middle_messages = [msg for msg in messages[1:-3] if not _pin_message(msg)]
-
-        budgeted_middle = []
-        current_tokens = (len(sys_content) + sum(len(msg.get("content") or "") for msg in recent_messages if isinstance(msg.get("content"), str))) // 4
-
-        for msg in reversed(middle_messages):
-            msg_content = msg.get("content") or ""
-            msg_tokens = len(msg_content) // 4 if isinstance(msg_content, str) else 0
-            if current_tokens + msg_tokens <= target_budget:
-                budgeted_middle.insert(0, msg)
-                current_tokens += msg_tokens
+        # Keep each assistant call and its contiguous results together. A pinned
+        # result or a tail boundary must retain the entire group in its original
+        # position, otherwise another assistant call can split the tool exchange.
+        groups: list[tuple[int, list[dict]]] = []
+        for index, msg in enumerate(messages[1:], start=1):
+            if (
+                msg.get("role") == "tool"
+                and groups
+                and groups[-1][1][0].get("role") == "assistant"
+                and groups[-1][1][0].get("tool_calls")
+            ):
+                groups[-1][1].append(msg)
             else:
-                logger.info("ContextOverflowGuard: Pruning message to fit budget: %s...", str(msg_content)[:50])
+                groups.append((index, [msg]))
 
-        final_messages = enforce_schema_invariants([system_prompt] + budgeted_middle + recent_messages)
+        def group_chars(group: list[dict]) -> int:
+            return sum(len(msg["content"]) for msg in group if isinstance(msg.get("content"), str))
+
+        selected = {
+            index: group
+            for index, group in groups
+            if index + len(group) > len(messages) - 3 or any(_pin_message(msg) for msg in group)
+        }
+        current_chars = len(sys_content) + sum(group_chars(group) for group in selected.values())
+
+        for index, group in reversed(groups):
+            if index in selected:
+                continue
+            candidate = group
+            if (current_chars + group_chars(candidate)) // 4 > target_budget:
+                candidate = [tombstone_tool_result(msg) if msg.get("role") == "tool" else msg for msg in group]
+            candidate_chars = group_chars(candidate)
+            if (current_chars + candidate_chars) // 4 <= target_budget:
+                selected[index] = candidate
+                current_chars += candidate_chars
+            else:
+                logger.info("ContextOverflowGuard: Pruning message group at index %d to fit budget", index)
+
+        final_messages = enforce_schema_invariants(
+            [system_prompt] + [msg for index, _ in groups for msg in selected.get(index, [])]
+        )
 
         tokens_after = sum(
             len(msg.get("content") or "") for msg in final_messages if isinstance(msg.get("content"), str)

@@ -1,6 +1,7 @@
 """Spawn tool for creating background subagents."""
 
 import asyncio
+from copy import deepcopy
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -11,17 +12,25 @@ if TYPE_CHECKING:
     from shibaclaw.agent.subagent import SubagentManager
 
 
+@dataclass(frozen=True)
+class _SpawnContext:
+    channel: str = "cli"
+    chat_id: str = "direct"
+    session_key: str = "cli:direct"
+    model: str | None = None
+    provider: Any | None = None
+    ephemeral: bool = False
+    parent_messages: tuple[dict[str, Any], ...] | None = None
+
+
 class SpawnTool(Tool):
     """Tool to spawn a subagent for background task execution."""
 
     def __init__(self, manager: "SubagentManager"):
         self._manager = manager
-        self._origin_channel = "cli"
-        self._origin_chat_id = "direct"
-        self._session_key = "cli:direct"
-        self._active_model: str | None = None
-        self._active_provider: Any | None = None
-        self._parent_messages: list[dict[str, Any]] | None = None
+        self._context: ContextVar[_SpawnContext] = ContextVar(
+            "spawn_context", default=_SpawnContext()
+        )
 
     def set_context(
         self,
@@ -33,12 +42,14 @@ class SpawnTool(Tool):
         parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
-        self._origin_channel = channel
-        self._origin_chat_id = chat_id
-        self._session_key = session_key or f"{channel}:{chat_id}"
-        self._active_model = model
-        self._active_provider = provider
-        self._parent_messages = parent_messages
+        self._context.set(_SpawnContext(
+            channel=channel,
+            chat_id=chat_id,
+            session_key=session_key or f"{channel}:{chat_id}",
+            model=model,
+            provider=provider,
+            parent_messages=tuple(deepcopy(parent_messages)) if parent_messages is not None else None,
+        ))
 
     @property
     def name(self) -> str:
@@ -88,27 +99,18 @@ class SpawnTool(Tool):
         **kwargs: Any,
     ) -> str:
         """Spawn a subagent to execute the given task."""
+        context = self._context.get()
         return await self._manager.spawn(
             task=task,
             label=label,
             mode=mode,
-            origin_channel=self._origin_channel,
-            origin_chat_id=self._origin_chat_id,
-            session_key=self._session_key,
-            model=self._active_model,
-            provider=self._active_provider,
-            parent_messages=self._parent_messages,
+            origin_channel=context.channel,
+            origin_chat_id=context.chat_id,
+            session_key=context.session_key,
+            model=context.model,
+            provider=context.provider,
+            parent_messages=deepcopy(list(context.parent_messages)) if context.parent_messages is not None else None,
         )
-
-
-@dataclass(frozen=True)
-class _MeaContext:
-    channel: str = "cli"
-    chat_id: str = "direct"
-    session_key: str = "cli:direct"
-    model: str | None = None
-    provider: Any | None = None
-    ephemeral: bool = False
 
 
 class SpawnMeaTool(Tool):
@@ -117,10 +119,9 @@ class SpawnMeaTool(Tool):
     def __init__(self, manager: "SubagentManager"):
         self._manager = manager
         # Shared tools need task-local context across concurrent provider awaits.
-        self._context: ContextVar[_MeaContext] = ContextVar(
-            "spawn_mea_context", default=_MeaContext()
+        self._context: ContextVar[_SpawnContext] = ContextVar(
+            "spawn_mea_context", default=_SpawnContext()
         )
-        self._parent_messages: list[dict[str, Any]] | None = None
 
     def set_context(
         self,
@@ -133,14 +134,14 @@ class SpawnMeaTool(Tool):
         parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Set the origin context and active LLM configuration for subagent execution."""
-        self._parent_messages = parent_messages
-        self._context.set(_MeaContext(
+        self._context.set(_SpawnContext(
             channel=channel,
             chat_id=chat_id,
             session_key=session_key or f"{channel}:{chat_id}",
             model=model,
             provider=provider,
             ephemeral=ephemeral,
+            parent_messages=tuple(deepcopy(parent_messages)) if parent_messages is not None else None,
         ))
 
     @property
@@ -198,7 +199,7 @@ class SpawnMeaTool(Tool):
                 provider=context.provider,
                 ephemeral=context.ephemeral,
                 mode=mode,
-                parent_messages=self._parent_messages,
+                parent_messages=deepcopy(list(context.parent_messages)) if context.parent_messages is not None else None,
             )
         )
         self._manager.track(context.session_key, bg_task)

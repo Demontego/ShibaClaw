@@ -140,18 +140,19 @@ test('Escape preserves context while a foreground dialog is active', async () =>
 test('appearance follows system changes and persists an explicit selection across reloads', () => {
     const { document, nodes, storage, systemTheme } = browserFixture({ dark: true });
     assert.equal(document.documentElement.dataset.theme, 'dark');
-    assert.equal(nodes['workspace-theme'].value, 'system');
+    assert.equal(nodes['btn-theme-icon'].textContent, 'routine');
     systemTheme.matches = false;
     systemTheme.dispatchEvent({ type: 'change' });
     assert.equal(document.documentElement.dataset.theme, 'light');
-    nodes['workspace-theme'].value = 'dark';
-    nodes['workspace-theme'].dispatchEvent({ type: 'change' });
+    nodes['btn-theme'].dispatchEvent({ type: 'click' });
+    assert.equal(storage.get('shibaclaw_theme'), 'light');
+    nodes['btn-theme'].dispatchEvent({ type: 'click' });
     assert.equal(storage.get('shibaclaw_theme'), 'dark');
     systemTheme.dispatchEvent({ type: 'change' });
     assert.equal(document.documentElement.dataset.theme, 'dark');
     const restored = browserFixture({ stored: Object.fromEntries(storage), dark: false });
     assert.equal(restored.document.documentElement.dataset.theme, 'dark');
-    assert.equal(restored.nodes['workspace-theme'].value, 'dark');
+    assert.equal(restored.nodes['btn-theme-icon'].textContent, 'dark_mode');
 });
 
 test('sidebar collapse is reversible and survives reloads', () => {

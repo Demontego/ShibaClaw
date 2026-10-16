@@ -133,6 +133,54 @@ def test_is_path_key():
     assert guard.is_path_key("count") is False
 
 
+@pytest.mark.parametrize(
+    ("key", "description"),
+    [
+        ("content", "Content of the file"),
+        ("file_content", "Path and file content to write"),
+        ("patch", "Patch for a file path"),
+        ("query", "Directory or file search query"),
+        ("payload", "Content of the file"),
+        ("profile", "Configuration data"),
+        ("src", "Source text"),
+    ],
+)
+def test_both_preflight_guards_preserve_payload_strings(key, description):
+    payload = "  'line one\\nline two//\n'  "
+    schema = {"type": "string", "description": description}
+    params = {key: payload}
+
+    assert ToolCallPreFlightGuard().normalize_params(params, {"properties": {key: schema}}) == params
+    assert ToolPreflightGuard.normalize_arguments(params, {key: schema}) == params
+
+
+def test_preflight_preserves_structured_content_payload():
+    payload = {"path": "  'literal\\source//text'  ", "query": "  source//  "}
+    params = {"content": payload}
+    schema = {
+        "properties": {
+            "content": {"type": "object", "properties": {"path": {"type": "string"}}},
+        },
+    }
+
+    assert ToolCallPreFlightGuard().normalize_params(params, schema) == params
+
+
+@pytest.mark.parametrize("annotation", [{"description": "Path to local repository"}, {"format": "file-path"}])
+def test_preflight_normalizes_unambiguous_path_annotations(annotation):
+    schema = {"properties": {"location": {"type": "string", **annotation}}}
+
+    assert ToolCallPreFlightGuard().normalize_params({"location": "  repo//file.txt  "}, schema) == {
+        "location": "repo/file.txt"
+    }
+
+
+def test_payload_key_overrides_path_annotations():
+    guard = ToolCallPreFlightGuard()
+    assert guard.is_path_key("content", {"format": "path", "description": "Path to file"}) is False
+    assert guard.is_path_key("file_content", {"description": "Path to file"}) is False
+
+
 def test_validate_and_normalize_valid():
     guard = ToolCallPreFlightGuard()
     tool = SchemaDummyTool()
@@ -229,3 +277,35 @@ async def test_mcp_wrapped_tool_preflight_guard():
     res_valid = await vault.execute("mcp_db_server_query_db", {"query": "SELECT 1;", "limit": "5"})
     assert "Query results ok" in res_valid
     session.call_tool.assert_called_once_with("query_db", arguments={"query": "SELECT 1;", "limit": 5})
+
+
+@pytest.mark.asyncio
+async def test_mcp_preflight_preserves_content_patch_and_query_exactly():
+    from mcp import types
+
+    session = AsyncMock()
+    session.call_tool.return_value = MagicMock(content=[types.TextContent(type="text", text="ok")])
+    tool_def = MagicMock()
+    tool_def.name = "write"
+    tool_def.description = "Write source content"
+    tool_def.inputSchema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "File path"},
+            "content": {"type": "string", "description": "Content of the file"},
+            "file_content": {"type": "string", "description": "Source file content"},
+            "patch": {"type": "string", "description": "Patch for the file path"},
+            "query": {"type": "string", "description": "Directory/file query"},
+        },
+        "required": ["path", "content"],
+    }
+    tool = MCPWrappedTool("source", tool_def, session)
+    vault = SkillVault()
+    vault.register(tool)
+    payload = "  'source\\literal//\n'  "
+    args = {"path": "  source//main.txt  ", "content": payload, "file_content": payload, "patch": payload, "query": payload}
+    result = ToolPreflightGuard.process(tool.name, args, tool_instance=tool)
+    assert result.success
+
+    assert await vault.execute(tool.name, result.arguments) == "ok"
+    session.call_tool.assert_awaited_once_with("write", arguments={**args, "path": "source/main.txt"})

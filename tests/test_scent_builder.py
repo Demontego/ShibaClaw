@@ -49,3 +49,17 @@ def test_scent_builder_image_cache_eviction(tmp_path):
     assert str((tmp_path / "test_3.png").resolve()) in builder._image_cache
     assert str((tmp_path / "test_34.png").resolve()) in builder._image_cache
 
+
+def test_static_prompt_loads_active_profile_memory(tmp_path):
+    builder = ScentBuilder(tmp_path)
+    builder.memory.memory_file.write_text("Private trading plans", encoding="utf-8")
+    (tmp_path / "memory" / "DUNGEON.md").write_text("Dungeon campaign notes", encoding="utf-8")
+
+    dungeon = builder.build_static_prompt(profile_id="dungeon")
+    default = builder.build_static_prompt(profile_id="default")
+
+    assert "Dungeon campaign notes" in dungeon
+    assert "Private trading plans" not in dungeon
+    assert "Private trading plans" in default
+    assert "Dungeon campaign notes" not in default
+

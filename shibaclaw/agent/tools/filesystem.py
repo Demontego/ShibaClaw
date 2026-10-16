@@ -38,7 +38,7 @@ def _is_under(path: Path, directory: Path) -> bool:
 
 
 class FileReadCache:
-    """Cache for tracking read file content hashes to avoid redundant re-reads."""
+    """Tracks read file metadata; entries do not imply visibility in model context."""
 
     def __init__(self) -> None:
         self._cache: dict[str, dict[str, Any]] = {}
@@ -155,7 +155,7 @@ class ReadFileTool(_FsTool):
                 },
                 "force_reload": {
                     "type": "boolean",
-                    "description": "Bypass deduplication cache and re-read file content (default false)",
+                    "description": "Accepted for compatibility; reads always return current file content",
                 },
             },
             "required": ["path"],
@@ -209,17 +209,8 @@ class ReadFileTool(_FsTool):
 
             total = len(all_lines)
 
-            # Deduplication check
-            if not force_reload:
-                cached = self.read_cache.get(str(fp), content_hash)
-                if cached:
-                    if self.artifact_register and hasattr(self.artifact_register, "record_read_file"):
-                        self.artifact_register.record_read_file(str(fp))
-                    return (
-                        f"[File Read Deduplicated: {path} (hash={content_hash[:8]}, {total} lines, {size} bytes). "
-                        f"Content is unchanged from prior read in context. Use force_reload=true to re-read full content.]"
-                    )
-
+            # A prior hash does not prove this range is visible in the current
+            # session (it may belong to another session or have been compacted).
             self.read_cache.set(str(fp), content_hash, total, size)
             if self.artifact_register and hasattr(self.artifact_register, "record_read_file"):
                 self.artifact_register.record_read_file(str(fp))

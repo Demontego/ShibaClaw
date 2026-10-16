@@ -208,16 +208,6 @@ class OpenAIThinker(Thinker):
         if base_url:
             base = str(base_url).rstrip("/")
             host = base.split("/")[2] if "://" in base else ""
-            # shortcut: local Headroom lists models in one GET. The SDK call with the
-            # upstream key is sent to Gemini and comes back 400 after a long wait.
-            if host.startswith("127.0.0.1") or host.startswith("localhost"):
-                import httpx
-
-                async with httpx.AsyncClient(timeout=4.0) as client_http:
-                    res = await client_http.get(base + "/models")
-                    res.raise_for_status()
-                    data = res.json().get("data") or []
-                    return data if isinstance(data, list) else []
             if "generativelanguage.googleapis.com" in host:
                 return await self._gemini_catalog()
         res = await asyncio.wait_for(client.models.list(), timeout=4.0)

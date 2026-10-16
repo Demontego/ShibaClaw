@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -116,11 +117,28 @@ class SubagentManager:
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
 
         if mode == "fork" and parent_messages:
-            for m in parent_messages:
+            history = deepcopy(parent_messages)
+            index = 0
+            while index < len(history):
+                m = history[index]
                 role = m.get("role")
-                if role == "system":
+                index += 1
+                if role in {"system", "tool"}:
                     continue
-                messages.append(dict(m))
+                if role == "assistant" and m.get("tool_calls"):
+                    # A delegation runs before its own result (and possibly sibling
+                    # results) exists. Only inherit complete tool-call groups.
+                    expected = {call["id"] for call in m["tool_calls"]}
+                    results = []
+                    while index < len(history) and history[index].get("role") == "tool":
+                        results.append(history[index])
+                        index += 1
+                    actual = [result.get("tool_call_id") for result in results]
+                    if len(actual) != len(expected) or set(actual) != expected:
+                        continue
+                    messages.extend([m, *results])
+                else:
+                    messages.append(m)
             messages.append({"role": "user", "content": f"[Subagent Task Directive (fork mode)]\n{task}"})
         else:
             messages.append({"role": "user", "content": task})

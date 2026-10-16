@@ -322,7 +322,7 @@
     }
 
     function librarySections(text) {
-        const body = String(text || "").replace(/^---[\s\S]*?---\s*/, "").trim();
+        const body = String(text || "").replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "").trim();
         const sections = [];
         for (const part of body.split(/\n(?=## )/)) {
             const block = part.trim();
@@ -417,7 +417,8 @@
     }
 
     function visibleProfile(source) {
-        const front = String(source || "").match(/^---\n[\s\S]*?\n---\n*/);
+        source = String(source || "");
+        const front = source.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/);
         const head = front ? front[0] : "";
         const rest = source.slice(head.length);
         const sections = librarySections(rest);
@@ -671,13 +672,17 @@
         if (core) {
             graphConcepts(core).forEach((item, itemIndex, list) => {
                 spots.set(item.id, {
-                    x: cx + (itemIndex - (list.length - 1) / 2) * 96,
-                    y: Math.min(height - 28, cy + height * 0.34),
+                    x: Math.max(64, Math.min(width - 64, cx + width * 0.16 + (itemIndex - (list.length - 1) / 2) * 96)),
+                    y: Math.min(height - 32, cy + height * 0.14),
                     concept: item,
                     owner: core.id,
                 });
             });
         }
+        spots.forEach(spot => {
+            spot.x = Math.max(64, Math.min(width - 64, spot.x));
+            spot.y = Math.max(32, Math.min(height - 32, spot.y));
+        });
         svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
         svg.replaceChildren();
         const drawLine = (from, to, kind) => {

@@ -67,7 +67,9 @@ class ScentBuilder:
         if bootstrap:
             parts.append(bootstrap)
 
-        memory = self.memory.get_memory_context(max_tokens=memory_max_prompt_tokens)
+        memory = self.memory.get_memory_context(
+            max_tokens=memory_max_prompt_tokens, profile_id=profile_id
+        )
         if memory:
             parts.append(f"# Memory\n\n{memory}")
 

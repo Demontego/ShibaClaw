@@ -5,23 +5,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from shibaclaw.agent.tools.preflight_guard import ToolCallPreFlightGuard
+
 if TYPE_CHECKING:
     from shibaclaw.agent.tools.base import Tool
-
-# Common path parameter keys across tool definitions
-PATH_PARAM_KEYS = {
-    "path",
-    "filepath",
-    "file_path",
-    "working_dir",
-    "dir_path",
-    "filename",
-    "destination",
-    "target",
-    "source",
-    "src",
-    "dest",
-}
 
 # Alias mapping for tool parameters to auto-repair missing required parameters
 PARAM_ALIASES: Dict[str, Dict[str, List[str]]] = {
@@ -167,11 +154,14 @@ class ToolPreflightGuard:
         return repaired_args, repairs
 
     @classmethod
-    def normalize_arguments(cls, args: Dict[str, Any]) -> Dict[str, Any]:
+    def normalize_arguments(
+        cls, args: Dict[str, Any], schema_properties: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Normalize argument values including path parameters."""
         normalized = dict(args)
         for key, val in list(normalized.items()):
-            if key in PATH_PARAM_KEYS or "path" in key.lower() or "file" in key.lower() or "dir" in key.lower():
+            prop_schema = (schema_properties or {}).get(key, {})
+            if ToolCallPreFlightGuard.is_path_key(key, prop_schema):
                 if isinstance(val, str):
                     normalized[key] = cls.normalize_path(val)
         return normalized
@@ -202,7 +192,7 @@ class ToolPreflightGuard:
             )
 
         # 1. Normalize paths and basic fields
-        normalized_args = cls.normalize_arguments(args)
+        normalized_args = cls.normalize_arguments(args, schema_properties)
 
         # 2. Auto-repair missing required parameters and type coercions
         repaired_args, repairs = cls.auto_repair_arguments(
@@ -210,7 +200,7 @@ class ToolPreflightGuard:
         )
 
         # Re-normalize paths in case alias mapping changed keys
-        repaired_args = cls.normalize_arguments(repaired_args)
+        repaired_args = cls.normalize_arguments(repaired_args, schema_properties)
 
         # 3. Validate required fields
         missing = [
