@@ -27,6 +27,7 @@ from shibaclaw.agent.context import ScentBuilder
 from shibaclaw.agent.memory import PackMemory, ScentKeeper
 from shibaclaw.agent.skills import BUILTIN_SKILLS_DIR
 from shibaclaw.agent.subagent import SubagentManager
+from shibaclaw.agent.tools.preflight import ToolPreflightGuard
 from shibaclaw.agent.turn_journal import REFUSAL, JournalError, TurnJournal
 from shibaclaw.agent.tools.automation import AutomationTool
 from shibaclaw.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
@@ -964,7 +965,13 @@ class ShibaBrain:
             if temperature is not None:
                 call_kwargs["temperature"] = temperature
 
-            prompt_messages = context_overflow_guard.budget_context(messages)
+            # Mask a copy for the provider. The wake transcript keeps the real tool output.
+            prompt_messages = context_overflow_guard.budget_context(
+                context_overflow_guard.mask_observations(
+                    [dict(item) for item in messages],
+                    keep_recent_turns=3,
+                )
+            )
 
             response = await active_provider.chat_with_retry_streaming(
                 messages=prompt_messages,
@@ -989,7 +996,12 @@ class ShibaBrain:
                         session_key=session_key or "",
                     )
                     if overflow_action == "compress":
-                        prompt_messages = context_overflow_guard.budget_context(messages)
+                        prompt_messages = context_overflow_guard.budget_context(
+                            context_overflow_guard.mask_observations(
+                                [dict(item) for item in messages],
+                                keep_recent_turns=3,
+                            )
+                        )
                 except ContextOverflowError as exc:
                     logger.error("ContextOverflowGuard hard limit: {}", exc)
                     keep_checkpoint = True
@@ -1084,6 +1096,23 @@ class ShibaBrain:
                         )
                         answered_calls.add(tool_call.id)
                         continue
+                    preflight_res = ToolPreflightGuard.process(
+                        tool_name=tool_call.name,
+                        args=tool_call.arguments or {},
+                        tool_instance=self.tools.get(tool_call.name),
+                    )
+                    if not preflight_res.success:
+                        logger.warning(
+                            "PreflightGuard blocked execution for tool '{}': {}",
+                            tool_call.name,
+                            preflight_res.error,
+                        )
+                        messages = self.context.add_tool_result(
+                            messages, tool_call.id, tool_call.name, preflight_res.error
+                        )
+                        answered_calls.add(tool_call.id)
+                        continue
+                    tool_call.arguments = preflight_res.arguments
                     async def _run_tool(call: Any = tool_call) -> str:
                         result = ""
                         for tool_attempt in range(1, 4):
