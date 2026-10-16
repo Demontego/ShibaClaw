@@ -205,11 +205,8 @@ class OpenAIThinker(Thinker):
     async def _catalog_rows(self) -> list[Any]:
         client = self._client
         base_url = getattr(client, "base_url", None)
-        if base_url:
-            base = str(base_url).rstrip("/")
-            host = base.split("/")[2] if "://" in base else ""
-            if "generativelanguage.googleapis.com" in host:
-                return await self._gemini_catalog()
+        if base_url and getattr(base_url, "host", None) == "generativelanguage.googleapis.com":
+            return await self._gemini_catalog()
         res = await asyncio.wait_for(client.models.list(), timeout=4.0)
         return list(res.data)
 
