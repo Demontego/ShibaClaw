@@ -18,6 +18,15 @@ from rich.panel import Panel
 from shibaclaw import __logo__, __version__
 from shibaclaw.helpers.logging import setup_shiba_logging
 
+from .gateway_utils import (
+    HeartbeatTarget as HeartbeatTarget,
+    deliver_scheduled_job_result as deliver_scheduled_job_result,
+    notify_webui_session as notify_webui_session,
+    resolve_automation_target as resolve_automation_target,
+    resolve_heartbeat_targets as resolve_heartbeat_targets,
+    resolve_webui_session_key as resolve_webui_session_key,
+    select_heartbeat_target as select_heartbeat_target,
+)
 from .utils import get_console
 
 
@@ -50,16 +59,6 @@ def suffixed_job_id(path: str, suffix: str) -> str | None:
         return None
     return job_id
 
-
-from .gateway_utils import (
-    HeartbeatTarget as HeartbeatTarget,
-    resolve_webui_session_key as resolve_webui_session_key,
-    resolve_automation_target as resolve_automation_target,
-    deliver_scheduled_job_result as deliver_scheduled_job_result,
-    select_heartbeat_target as select_heartbeat_target,
-    resolve_heartbeat_targets as resolve_heartbeat_targets,
-    notify_webui_session as notify_webui_session,
-)
 
 async def _cancel_all_tasks_gracefully() -> None:
     """Cancel every running asyncio task except the current one and wait for them to finish.

@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from shibaclaw.webui.routers.auth import (
     _TELEGRAM_AUTH_MAX_ATTEMPTS,
     _telegram_auth_attempts,
+    _telegram_auth_note_failure,
     _telegram_auth_rate_limited,
 )
 from shibaclaw.webui.telegram_webapp_auth import user_id_allowed, validate_init_data
@@ -64,6 +65,7 @@ def test_telegram_auth_rate_limiter_releases_expired_attempts():
     try:
         for _ in range(_TELEGRAM_AUTH_MAX_ATTEMPTS):
             assert not _telegram_auth_rate_limited(client_ip, now=100.0)
+            _telegram_auth_note_failure(client_ip, now=100.0)
         assert _telegram_auth_rate_limited(client_ip, now=100.0)
         assert not _telegram_auth_rate_limited(client_ip, now=161.0)
     finally:
