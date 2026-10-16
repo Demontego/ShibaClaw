@@ -1,5 +1,26 @@
 ## [Unreleased]
 
+## [1.0.5] - 2026-10-16
+
+### Added
+- **Owner-only specialist sessions** — `agent_send` opens a persistent conversation with a selected profile and routes its reply to the owner. Agent sessions cannot chain sends, and incognito or ephemeral sessions cannot use this tool.
+- **Profile library** — Adds a profile graph and editable soul and people documents in the WebUI.
+- **Tool and context guards** — Adds preflight argument checks for native and MCP tools, observation masking for older tool results, artifact-preserving compaction, and compaction and semantic tool circuit breakers.
+- **Subagent context modes and resource guards** — Adds isolated and forked context modes, structured task synthesis, and resource monitoring for agent runs.
+- **Subscription OAuth and model pickers** — Adds subscription login flows and model selection controls to the WebUI.
+
+### Changed
+- **Evolution merge gate** — Requires Ruff, pytest, and PR CI checks to pass before evolution branches can merge.
+
+### Fixed
+- **Gemini endpoint host validation** — Replaces substring matching with an exact parsed hostname check, preventing lookalike hosts from being treated as Google's model catalog endpoint.
+- **Privacy and concurrent context** — Isolates `agent_send` and subagent context between concurrent tasks, blocks persistent agent sends from private sessions, and scopes prompt memory to the active profile.
+- **Tool protocol and file reads** — Preserves complete, ordered tool-call/result groups during compaction and forked delegation. File reads return current content even when an earlier read was cached or compacted; preflight path normalization preserves non-path arguments.
+- **Windows document editing** — Preserves frontmatter when editing library documents with Windows line endings.
+- **Approval compatibility and model restrictions** — Preserves existing automation approval fingerprints when the default model is used, and validates the effective model against profile allowlists.
+- **OAuth and model catalogs** — Moves blocking token exchanges off the event loop, removes only Claude subscription credentials on disconnect, and restores authenticated model listing for local OpenAI-compatible endpoints.
+- **Packaged WebUI** — Rebuilds bundled frontend assets and corrects library document loading, graph interactions, and workspace layout behavior.
+
 ## [1.0.4] - 2026-10-10
 
 ### Added

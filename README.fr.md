@@ -41,13 +41,15 @@
 > Les notes de version se trouvent dans [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Nouveautés — v1.0.4</b> (cliquez pour déplier)</summary>
+<summary>🚀 <b>Nouveautés — v1.0.5</b> (cliquez pour déplier)</summary>
 
-**Dernière version v1.0.4 (2026-10-10) :**
+**Version v1.0.5 (2026-10-16) :**
 
-- **Exécution de tâches par sous-agents** — Ajoute des passes MEA (gérer-exécuter-auditer) et des outils de supervision et de retour arrière pour les tâches en plusieurs étapes.
-- **Flux agent plus flexibles** — Ajoute un fallback LLM facultatif, un journal des appels d'outils, des commandes d'auto-évolution opt-in et un espace de travail centré sur le chat, sur ordinateur et mobile.
-- **Corrections de fiabilité** — Corrige le suivi MEA privé, l'annulation des tâches, la remise à zéro des conversations, le cache en cas de panne, les mises à jour simultanées des automatisations et l'accessibilité de la barre latérale au redimensionnement.
+- **Profils spécialisés et bibliothèque** — Ajoute `agent_send` réservé au propriétaire, un graphe des profils et des documents de personnalité et de personnes modifiables. Les sessions d'agents ne peuvent pas enchaîner les messages ; les sessions privées ne peuvent pas utiliser `agent_send`.
+- **Exécutions de l'agent mieux protégées** — Ajoute des vérifications préalables des outils, le masquage des anciens résultats, une compression préservant les artefacts, des coupe-circuits, des modes de contexte pour les sous-agents, des contrôles de ressources et un contrôle CI avant les fusions d'auto-évolution.
+- **Connexion par abonnement et choix du modèle** — Ajoute des parcours OAuth pour les abonnements et des sélecteurs de modèles dans la WebUI.
+- **Corrections de fiabilité** — Corrige la confidentialité et les contextes concurrents, le protocole des outils, les métadonnées initiales sous Windows, les empreintes d'approbation, les listes de modèles autorisés par profil, OAuth et les fichiers d'interface inclus dans le paquet.
+- **Validation du point de terminaison Gemini** — Exige une correspondance exacte du nom d'hôte afin que les domaines similaires ne soient pas traités comme le catalogue de modèles de Google.
 
 Consultez le [Changelog](./CHANGELOG.md) pour l'historique complet des versions.
 

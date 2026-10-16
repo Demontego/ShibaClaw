@@ -38,13 +38,15 @@
 ---
 
 <details open>
-<summary>🚀 <b>Novità — v1.0.4</b> (fai clic per espandere)</summary>
+<summary>🚀 <b>Novità — v1.0.5</b> (fai clic per espandere)</summary>
 
-**Ultima release v1.0.4 (2026-10-10):**
+**Versione v1.0.5 (2026-10-16):**
 
-- **Esecuzione di task con subagenti** — Introduce passaggi MEA (manage-execute-audit) e strumenti di supervisione e rollback per le attività articolate.
-- **Flussi dell’agente più flessibili** — Aggiunge fallback LLM opzionale, journal delle chiamate ai tool, comandi di auto-evoluzione opt-in e una workspace chat-first per desktop e mobile.
-- **Correzioni di affidabilità** — Corregge progress MEA privato, cancellazione dei task, reset delle conversazioni, cache durante gli outage, aggiornamenti concorrenti delle automazioni e accessibilità della sidebar al ridimensionamento.
+- **Profili specialisti e libreria** — Aggiunge `agent_send` riservato al proprietario, un grafo dei profili e documenti di personalità e persone modificabili. Le sessioni degli agenti non possono concatenare messaggi; le sessioni private non possono usare `agent_send`.
+- **Esecuzione dell'agente più protetta** — Aggiunge controlli preliminari dei tool, mascheramento dei risultati meno recenti, compattazione che preserva gli artefatti, circuit breaker, modalità di contesto per i subagenti, controlli delle risorse e un requisito CI per i merge di auto-evoluzione.
+- **Accesso con abbonamento e scelta del modello** — Aggiunge flussi OAuth per gli abbonamenti e selettori dei modelli nella WebUI.
+- **Correzioni di affidabilità** — Corregge privacy e contesti concorrenti, protocollo dei tool, frontmatter su Windows, impronte delle approvazioni, modelli consentiti per profilo, gestione OAuth e file frontend inclusi nel pacchetto.
+- **Verifica endpoint Gemini** — Richiede una corrispondenza esatta del nome host, bloccando domini simili dall'essere trattati come il catalogo modelli di Google.
 
 Consulta [CHANGELOG.md](./CHANGELOG.md) per la cronologia completa delle versioni.
 

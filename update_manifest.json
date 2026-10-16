@@ -1,46 +1,46 @@
 {
-    "version": "1.0.4",
-    "release_notes": "Release v1.0.4 adds MEA task runs, optional LLM fallback, a tool-call journal, opt-in self-evolution and a responsive chat-first workspace. It fixes private task persistence, coordinated stop and reset, outage caching, concurrent automation updates and sidebar resize accessibility.",
+    "version": "1.0.5",
+    "release_notes": "Version 1.0.5 adds profile delegation, an editable library graph, and agent evolution safeguards. It fixes private delegation persistence, context isolation, tool protocol handling, automation approvals, OAuth flows, and packaged WebUI assets, and tightens Gemini endpoint host validation against lookalike domains.",
     "changes": [
         {
             "path": "pyproject.toml",
             "overwrite": true,
-            "note": "Bumped the project version to 1.0.4."
+            "note": "Bumped the project version to 1.0.5."
         },
         {
             "path": "uv.lock",
             "overwrite": true,
-            "note": "Synchronized the locked ShibaClaw project version to 1.0.4."
+            "note": "Synchronized the locked ShibaClaw project version to 1.0.5."
         },
         {
             "path": "CHANGELOG.md",
             "overwrite": true,
-            "note": "Added v1.0.4 release notes for merged features and regression fixes."
+            "note": "Added v1.0.5 release notes for merged features and regression fixes."
         },
         {
             "path": "README.md",
             "overwrite": true,
-            "note": "Updated English and localized README release notes with v1.0.4 features and fixes."
+            "note": "Updated English and localized README release notes with v1.0.5 features and fixes."
         },
         {
             "path": "shibaclaw/updater/update_manifest.json",
             "overwrite": true,
-            "note": "Synchronized the packaged update manifest with v1.0.4."
+            "note": "Synchronized the packaged update manifest with v1.0.5."
         },
         {
             "path": "shibaclaw/desktop/app.manifest",
             "overwrite": true,
-            "note": "Updated the Windows desktop application version to 1.0.4.0."
+            "note": "Updated the Windows desktop application version to 1.0.5.0."
         },
         {
             "path": "shibaclaw/webui/package.json",
             "overwrite": true,
-            "note": "Updated the WebUI package version to 1.0.4."
+            "note": "Updated the WebUI package version to 1.0.5."
         },
         {
             "path": "shibaclaw/webui/package-lock.json",
             "overwrite": true,
-            "note": "Synchronized the WebUI lockfile package version to 1.0.4."
+            "note": "Synchronized the WebUI lockfile package version to 1.0.5."
         },
         {
             "path": "shibaclaw/agent/loop.py",
@@ -86,6 +86,11 @@
             "path": "shibaclaw/webui/static/index.html",
             "overwrite": true,
             "note": "Updated generated asset references for the rebuilt WebUI."
+        },
+        {
+            "path": "shibaclaw/thinkers/openai_provider.py",
+            "overwrite": true,
+            "note": "Require an exact parsed host match for the Gemini model catalog endpoint."
         }
     ]
 }

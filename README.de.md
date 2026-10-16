@@ -41,13 +41,15 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Neuigkeiten — v1.0.4</b> (zum Ausklappen klicken)</summary>
+<summary>🚀 <b>Neuigkeiten — v1.0.5</b> (zum Ausklappen klicken)</summary>
 
-**Neueste Version v1.0.4 (2026-10-10):**
+**Version v1.0.5 (2026-10-16):**
 
-- **Subagenten für Aufgaben** — Führt MEA-Durchläufe (Manage-Execute-Audit) sowie Aufsichts- und Rollback-Hilfen für mehrstufige Aufgaben ein.
-- **Flexiblere Agentenabläufe** — Ergänzt optionales LLM-Fallback, ein Tool-Aufruf-Journal, Opt-in-Steuerung für Selbstentwicklung und einen Chat-first-Workspace für Desktop und Mobilgeräte.
-- **Zuverlässigkeitskorrekturen** — Korrigiert private MEA-Fortschritte, Aufgabenabbruch, Gesprächsreset, Cache bei Ausfällen, gleichzeitige Automatisierungsänderungen und die Barrierefreiheit der Seitenleiste beim Ändern der Fenstergröße.
+- **Spezialistenprofile und Bibliothek** — Ergänzt das dem Besitzer vorbehaltene `agent_send`, einen Profilgraphen sowie bearbeitbare Soul- und Personendokumente. Agentensitzungen können keine Nachrichtenketten starten; private Sitzungen können `agent_send` nicht nutzen.
+- **Sicherere Agentenläufe** — Ergänzt Vorabprüfungen für Tool-Aufrufe, Maskierung älterer Tool-Ausgaben, artefakterhaltende Kontextkomprimierung, Schutzschalter, Kontextmodi für Subagenten, Ressourcenwächter und eine CI-Prüfschranke für Selbstentwicklungs-Merges.
+- **Abonnement-Anmeldung und Modellauswahl** — Ergänzt OAuth-Anmeldeabläufe für Abonnements und Modellauswahlfelder in der WebUI.
+- **Zuverlässigkeitskorrekturen** — Korrigiert Datenschutz und nebenläufige Kontexte, das Tool-Aufruf-Protokoll, Windows-Frontmatter, Genehmigungs-Fingerprints, Modellfreigaben für Profile, OAuth-Verarbeitung und mitgelieferte Frontend-Dateien.
+- **Gemini-Endpunktprüfung** — Verlangt eine exakte Übereinstimmung des Hostnamens, damit ähnlich benannte Domains nicht als Googles Modellkatalog gelten.
 
 Vollständige Versionshistorie im [Changelog](./CHANGELOG.md).
 

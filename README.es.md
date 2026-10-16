@@ -41,13 +41,15 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novedades — v1.0.4</b> (haz clic para expandir)</summary>
+<summary>🚀 <b>Novedades — v1.0.5</b> (haz clic para expandir)</summary>
 
-**Última versión v1.0.4 (2026-10-10):**
+**Versión v1.0.5 (2026-10-16):**
 
-- **Ejecución de tareas con subagentes** — Incorpora ejecuciones MEA (gestionar-ejecutar-auditar) y herramientas de supervisión y reversión para tareas de varios pasos.
-- **Flujos de agente más flexibles** — Añade fallback LLM opcional, un registro de llamadas a herramientas, controles optativos de autoevolución y un workspace centrado en el chat para escritorio y móvil.
-- **Correcciones de fiabilidad** — Corrige el progreso MEA privado, la cancelación de tareas, el reinicio de conversaciones, la caché durante fallos, las actualizaciones simultáneas de automatizaciones y la accesibilidad de la barra lateral al redimensionar.
+- **Perfiles especialistas y biblioteca** — Añade `agent_send` exclusivo del propietario, un grafo de perfiles y documentos de personalidad y personas editables. Las sesiones de agentes no pueden encadenar mensajes; las sesiones privadas no pueden usar `agent_send`.
+- **Ejecuciones del agente más seguras** — Añade comprobaciones previas de herramientas, enmascaramiento de resultados antiguos, compactación que conserva artefactos, cortacircuitos, modos de contexto para subagentes, controles de recursos y una condición de CI para las fusiones de autoevolución.
+- **Inicio de sesión con suscripción y selección de modelos** — Añade flujos OAuth de suscripción y selectores de modelos a la WebUI.
+- **Correcciones de fiabilidad** — Corrige la privacidad y los contextos concurrentes, el protocolo de herramientas, los metadatos iniciales en Windows, las huellas de aprobación, las listas de modelos permitidos por perfil, OAuth y los archivos de interfaz incluidos en el paquete.
+- **Validación del endpoint de Gemini** — Exige una coincidencia exacta del nombre de host para impedir que dominios similares se traten como el catálogo de modelos de Google.
 
 Consulta el [Changelog](./CHANGELOG.md) para el historial completo de versiones.
 

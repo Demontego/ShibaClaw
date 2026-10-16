@@ -9,6 +9,38 @@ from shibaclaw.thinkers.openai_provider import OpenAIThinker, _merge_reasoning_d
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("base_url", "uses_gemini_catalog"),
+    [
+        ("https://generativelanguage.googleapis.com/v1beta/openai/", True),
+        ("https://generativelanguage.googleapis.com.evil.example/v1/", False),
+    ],
+)
+async def test_model_catalog_requires_exact_gemini_hostname(base_url, uses_gemini_catalog):
+    calls = {"openai": 0, "gemini": 0}
+
+    class FakeModels:
+        async def list(self):
+            calls["openai"] += 1
+            return SimpleNamespace(data=[{"id": "openai-compatible"}])
+
+    thinker = object.__new__(OpenAIThinker)
+    thinker._client = SimpleNamespace(base_url=httpx.URL(base_url), models=FakeModels())
+
+    async def gemini_catalog():
+        calls["gemini"] += 1
+        return [{"id": "gemini-catalog"}]
+
+    thinker._gemini_catalog = gemini_catalog
+
+    models = await thinker._catalog_rows()
+
+    assert calls["gemini"] == int(uses_gemini_catalog)
+    assert calls["openai"] == int(not uses_gemini_catalog)
+    assert models == [{"id": "gemini-catalog" if uses_gemini_catalog else "openai-compatible"}]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1"])
 async def test_local_model_catalog_preserves_configured_auth_and_headers(host):
     requests = []

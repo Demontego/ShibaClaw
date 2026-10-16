@@ -41,13 +41,15 @@
 > As notas de versão estão em [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novidades — v1.0.4</b> (clique para expandir)</summary>
+<summary>🚀 <b>Novidades — v1.0.5</b> (clique para expandir)</summary>
 
-**Última versão v1.0.4 (2026-10-10):**
+**Versão v1.0.5 (2026-10-16):**
 
-- **Execução de tarefas com subagentes** — Adiciona execuções MEA (gerenciar-executar-auditar) e ferramentas de supervisão e reversão para tarefas com várias etapas.
-- **Fluxos do agente mais flexíveis** — Adiciona fallback de LLM opcional, registro de chamadas de ferramentas, controles opt-in de autoevolução e uma workspace centrada no chat para desktop e dispositivos móveis.
-- **Correções de confiabilidade** — Corrige o progresso MEA privado, o cancelamento de tarefas, o reinício de conversas, o cache durante falhas, as atualizações simultâneas de automações e a acessibilidade da barra lateral ao redimensionar.
+- **Perfis especialistas e biblioteca** — Adiciona `agent_send` exclusivo do proprietário, um grafo de perfis e documentos de personalidade e pessoas editáveis. Sessões de agentes não podem encadear mensagens; sessões privadas não podem usar `agent_send`.
+- **Execuções do agente mais protegidas** — Adiciona verificações prévias das ferramentas, mascaramento de resultados antigos, compactação que preserva artefatos, disjuntores, modos de contexto para subagentes, controles de recursos e uma exigência de CI para os merges de autoevolução.
+- **Login por assinatura e seleção de modelos** — Adiciona fluxos OAuth de assinatura e seletores de modelos à WebUI.
+- **Correções de confiabilidade** — Corrige privacidade e contextos concorrentes, protocolo das ferramentas, metadados iniciais no Windows, impressões digitais de aprovação, listas de modelos permitidos por perfil, tratamento de OAuth e arquivos de interface incluídos no pacote.
+- **Validação do endpoint Gemini** — Exige correspondência exata do nome do host para impedir que domínios semelhantes sejam tratados como o catálogo de modelos do Google.
 
 Veja o [Changelog](./CHANGELOG.md) para o histórico completo de lançamentos.
 

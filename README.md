@@ -38,13 +38,15 @@
 ---
 
 <details open>
-<summary>🚀 <b>What's new — v1.0.4</b> (click to expand)</summary>
+<summary>🚀 <b>What's new — v1.0.5</b> (click to expand)</summary>
 
-**Latest release v1.0.4 (2026-10-10):**
+**Version v1.0.5 (2026-10-16):**
 
-- **Subagent task execution** — Adds manage-execute-audit (MEA) runs, with supervision and rollback helpers for multi-step work.
-- **More flexible agent workflows** — Adds optional LLM fallback, a tool-call journal, opt-in self-evolution controls, and a chat-first workspace for desktop and mobile.
-- **Reliability fixes** — Corrects private MEA progress, task cancellation, conversation reset, outage caching, concurrent automation updates and sidebar accessibility during resizing.
+- **Specialist profiles and library** — Adds owner-only `agent_send`, a profile graph, and editable soul and people documents. Agent sessions cannot chain messages; private sessions cannot use `agent_send`.
+- **Safer agent runs** — Adds tool-call preflight checks, observation masking, artifact-preserving compaction, circuit breakers, subagent context modes, resource guards, and a CI gate for evolution merges.
+- **Subscription login and model selection** — Adds subscription OAuth flows and model pickers to the WebUI.
+- **Reliability fixes** — Corrects privacy and concurrent context handling, tool-call protocol, Windows frontmatter, approval fingerprints, profile model allowlists, OAuth handling, and packaged frontend assets.
+- **Gemini endpoint validation** — Requires an exact hostname match, blocking lookalike domains from being treated as Google's model catalog.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 
