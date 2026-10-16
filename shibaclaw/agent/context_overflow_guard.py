@@ -55,8 +55,12 @@ def tombstone_tool_result(msg: dict) -> dict:
 
     orig_len = len(raw_str)
     content_hash = hashlib.sha256(raw_str.encode("utf-8")).hexdigest()[:8]
+    name = msg.get("name") or msg.get("tool_name") or "tool"
 
-    stub = f"[Tombstone: tool_result pruned ({orig_len} chars -> hash={content_hash}). Schema invariant preserved.]"
+    stub = (
+        f"[Tool result masked: output from '{name}' pruned]\n"
+        f"[Tombstone: tool_result pruned ({orig_len} chars -> hash={content_hash}). Schema invariant preserved.]"
+    )
 
     tombstoned_msg = dict(msg)
     tombstoned_msg["content"] = stub
@@ -339,6 +343,10 @@ class ContextOverflowGuard:
             return ("warning", "summarize")
         return ("normal", "none")
 
+    def format_compacted_summary(self, summary: str) -> str:
+        """Keep the artifact register next to a compaction summary."""
+        return f"{self.artifact_register.render_markdown()}\n\n{summary}"
+
     def mask_observations(self, messages: list[dict], keep_recent_turns: int = 3) -> list[dict]:
         """
         Observation Masking & Auditable Tool Tombstoning.
@@ -396,7 +404,7 @@ class ContextOverflowGuard:
 
             new_messages.append(msg)
 
-        return enforce_schema_invariants(new_messages)
+        return new_messages
 
     def budget_context(self, messages: list, max_tokens: Optional[int] = None) -> list:
         """

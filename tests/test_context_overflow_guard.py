@@ -217,3 +217,101 @@ def test_context_window_recovery(tmp_path: Path):
     assert recovered[1]["role"] == "system"
     assert "[Context Window Recovery]" in recovered[1]["content"]
 
+def test_observation_masking_prunes_old_tool_results(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    # 4 assistant turns with tool results
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool 1"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "name": "exec", "tool_call_id": "call_1", "content": "Tool 1 raw result output " * 50},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "tool", "name": "read_file", "tool_call_id": "call_2", "content": "Tool 2 raw result output " * 50},
+        {"role": "assistant", "content": "Finished turn 2"},
+        {"role": "user", "content": "Run tool 3"},
+        {"role": "assistant", "content": "Executing tool 3", "tool_calls": [{"id": "call_3"}]},
+        {"role": "tool", "name": "web_search", "tool_call_id": "call_3", "content": "Tool 3 raw result output " * 50},
+        {"role": "assistant", "content": "Finished turn 3"},
+        {"role": "user", "content": "Run tool 4"},
+        {"role": "assistant", "content": "Executing tool 4", "tool_calls": [{"id": "call_4"}]},
+        {"role": "tool", "name": "web_fetch", "tool_call_id": "call_4", "content": "Tool 4 raw result output " * 50},
+        {"role": "assistant", "content": "Finished turn 4"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=2)
+
+    # Tool 1 and Tool 2 outputs (older than last 2 assistant turns) should be masked
+    assert "[Tool result masked: output from 'exec' pruned" in masked[3]["content"]
+    assert "[Tool result masked: output from 'read_file' pruned" in masked[7]["content"]
+
+    # Tool 3 and Tool 4 outputs (within last 2 assistant turns) should be preserved
+    assert "Tool 3 raw result output" in masked[11]["content"]
+    assert "Tool 4 raw result output" in masked[15]["content"]
+
+    # Assistant thoughts/messages are preserved
+    assert masked[2]["content"] == "Executing tool 1"
+    assert masked[4]["content"] == "Finished turn 1"
+
+
+def test_observation_masking_handles_complex_content(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "name": "custom_tool", "tool_call_id": "call_1", "content": [{"type": "text", "text": "Structured output"}]},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "tool", "name": "exec", "tool_call_id": "call_2", "content": "Recent output"},
+        {"role": "assistant", "content": "Finished turn 2"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=1)
+    assert "[Tool result masked: output from 'custom_tool' pruned" in masked[3]["content"]
+    assert masked[7]["content"] == "Recent output"
+
+
+def test_observation_masking_user_role_case_insensitive(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "user", "name": "exec", "content": "[tool result] stdout output from older tool run"},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "user", "name": "exec", "content": "[Tool Result] stdout output from recent tool run"},
+        {"role": "assistant", "content": "Finished turn 2"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=1)
+    assert "[Tool result masked: output from 'exec' pruned" in masked[3]["content"]
+    assert "[Tool Result] stdout output from recent tool run" in masked[7]["content"]
+
+
+def test_observation_masking_structured_user_content_and_fallback(tmp_path: Path):
+    guard = ContextOverflowGuard(tmp_path, context_window_tokens=2000)
+
+    messages = [
+        {"role": "system", "content": "System prompt"},
+        {"role": "user", "content": "Run tool"},
+        {"role": "assistant", "content": "Executing tool 1", "tool_calls": [{"id": "call_1"}]},
+        {"role": "user", "tool_name": "fetch_data", "content": [{"type": "text", "text": "[tool result] stdout from old tool"}]},
+        {"role": "assistant", "content": "Finished turn 1"},
+        {"role": "user", "content": "Run tool 2"},
+        {"role": "assistant", "content": "Executing tool 2", "tool_calls": [{"id": "call_2"}]},
+        {"role": "tool", "name": "exec", "tool_call_id": "call_2", "content": "Recent output"},
+        {"role": "assistant", "content": "Finished turn 2"},
+    ]
+
+    masked = guard.mask_observations(messages, keep_recent_turns=1)
+    assert "[Tool result masked: output from 'fetch_data' pruned" in masked[3]["content"]
+    assert masked[7]["content"] == "Recent output"
+

@@ -591,6 +591,7 @@ class ShibaBrain:
         model: str | None = None,
         provider: Any | None = None,
         metadata: dict | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
     ) -> None:
         """Update tool context for the current message and session."""
         for name in ("message", "spawn", "spawn_mea", "automation", "think"):
@@ -599,7 +600,11 @@ class ShibaBrain:
                     if name == "message":
                         tool.set_context(channel, chat_id, message_id)
                     elif name in {"spawn", "spawn_mea"}:
-                        kwargs = {"model": model, "provider": provider}
+                        kwargs = {
+                            "model": model,
+                            "provider": provider,
+                            "parent_messages": parent_messages,
+                        }
                         if name == "spawn_mea":
                             kwargs["ephemeral"] = self._checkpoint_forbidden(session_key, metadata)
                         tool.set_context(
@@ -814,6 +819,7 @@ class ShibaBrain:
             model=active_model,
             provider=active_provider,
             metadata=metadata,
+            parent_messages=messages,
         )
 
         if not active_provider:
