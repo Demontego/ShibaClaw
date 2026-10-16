@@ -173,8 +173,19 @@ def create_app(
         response.headers["Expires"] = "0"
         return response
 
+    async def desktop_index(_request):
+        desktop = STATIC_DIR / "desktop" / "index.html"
+        if not desktop.exists():
+            return await index(_request)
+        response = FileResponse(desktop)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
     routes = [
-        Route("/", index),
+        Route("/", desktop_index),
+        Route("/classic", index),
         Route("/api/auth/verify", api_auth_verify, methods=["POST"]),
         Route("/api/auth/status", api_auth_status, methods=["GET"]),
         Route("/api/auth/setup", api_auth_setup, methods=["POST"]),
