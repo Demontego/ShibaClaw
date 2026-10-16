@@ -98,7 +98,7 @@
 
             <nav class="workspace-nav" data-i18n-aria="workspace.title" aria-label="Your workspace">
                 <button type="button" class="workspace-nav-item" data-workspace-page="chat" onclick="showWorkspaceChat()" aria-current="page">
-                    <span class="material-icons-round" aria-hidden="true">chat_bubble_outline</span><span class="workspace-nav-label" data-i18n="workspace.conversations">Conversations</span>
+                    <span class="material-icons-round" aria-hidden="true">chat_bubble</span><span class="workspace-nav-label" data-i18n="workspace.conversations">Conversations</span>
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="agents" onclick="openWorkspaceAgents()">
                     <span class="material-icons-round" aria-hidden="true">smart_toy</span><span class="workspace-nav-label" data-i18n="workspace.agents">Agents</span>
@@ -1175,6 +1175,12 @@
                                     </select>
                                 </div>
                                 <div class="field-row">
+                                    <label for="ajf-model" data-i18n="auto.model">Model</label>
+                                    <select id="ajf-model" class="form-input">
+                                        <option value="" data-i18n="auto.model_default">Chat default</option>
+                                    </select>
+                                </div>
+                                <div class="field-row">
                                     <label for="ajf-delete-after" data-i18n="auto.delete_after">Delete after run</label>
                                     <label class="toggle">
                                         <input type="checkbox" id="ajf-delete-after">
@@ -1613,7 +1619,7 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1790775928747"></script>
+    <script src="/static/bundle.js?v=1792096100000"></script>
     <script src="/static/js/evolve.js?v=1790775928747"></script>
     <script src="/static/js/chat_history_window.js?v=1790775928747"></script>
 </body>

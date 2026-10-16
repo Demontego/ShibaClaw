@@ -319,6 +319,8 @@ async function loadOAuthPanel() {
         { name: "github_copilot", label: "GitHub Copilot", icon: "code", desc: "Authenticate via GitHub device flow. Uses native OAuth orchestration." },
         { name: "openai_codex", label: "OpenAI Codex", icon: "psychology", desc: "Authenticate via OAuth CLI kit. Requires oauth-cli-kit package." },
         { name: "xai", label: "xAI / Grok", icon: "public", desc: "xAI Subscription Sync OAuth flow." },
+        { name: "anthropic", label: "Claude", icon: "forum", desc: "Claude Pro or Max. Opens claude.ai and asks for the code from the page." },
+        { name: "google_gemini_cli", label: "Google Gemini", icon: "auto_awesome", desc: "Google Gemini subscription. Opens Google and asks for the code from the page." },
     ];
     list.innerHTML = "";
     for (const p of providers) {

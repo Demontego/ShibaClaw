@@ -19,6 +19,9 @@ def test_automation_service_add_get_remove_job(tmp_path):
     assert job.schedule.kind == "every"
     assert job.payload.message == "Test message"
 
+    reloaded = AutomationService(store_path=store_path, workspace=tmp_path)
+    assert reloaded.list_jobs()[0].payload.message == "Test message"
+
     jobs = service.list_jobs()
     assert len(jobs) == 1
     assert jobs[0].id == job.id
@@ -30,6 +33,22 @@ def test_automation_service_add_get_remove_job(tmp_path):
     assert service.remove_job(job.id) is True
     assert service.get_job(job.id) is None
     assert len(service.list_jobs()) == 0
+
+
+def test_job_model_survives_reload(tmp_path):
+    store_path = tmp_path / "automation.json"
+    service = AutomationService(store_path=store_path, workspace=tmp_path)
+    service.add_job(
+        name="Codex job",
+        schedule=AutomationSchedule(kind="every", every_ms=60000),
+        payload=AutomationPayload(
+            kind="scheduled",
+            message="x",
+            model="openai-codex/gpt-6-sol",
+        ),
+    )
+    reloaded = AutomationService(store_path=store_path, workspace=tmp_path)
+    assert reloaded.list_jobs()[0].payload.model == "openai-codex/gpt-6-sol"
 
 
 def test_automation_service_update_job(tmp_path):

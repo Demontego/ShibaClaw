@@ -1,5 +1,6 @@
 """OpenAI-compatible provider implementation using the official openai SDK."""
 
+import asyncio
 import os
 import secrets
 import string
@@ -201,15 +202,96 @@ class OpenAIThinker(Thinker):
                     kwargs.update(overrides)
                     return
 
+    async def _catalog_rows(self) -> list[Any]:
+        base = str(self._client.base_url).rstrip("/")
+        host = base.split("/")[2] if "://" in base else ""
+        # shortcut: local Headroom lists models in one GET. The SDK call with the
+        # upstream key is sent to Gemini and comes back 400 after a long wait.
+        if host.startswith("127.0.0.1") or host.startswith("localhost"):
+            import httpx
+
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(base + "/models")
+                res.raise_for_status()
+                data = res.json().get("data") or []
+                return data if isinstance(data, list) else []
+        if "generativelanguage.googleapis.com" in host:
+            return await self._gemini_catalog()
+        res = await asyncio.wait_for(self._client.models.list(), timeout=4.0)
+        return list(res.data)
+
+    async def _gemini_catalog(self) -> list[dict[str, Any]]:
+        # The OpenAI-compatible /models route on this host returns 400.
+        key = str(getattr(self._client, "api_key", "") or "")
+        if key.startswith("AIza"):
+            return await self._gemini_public_catalog(key)
+        return await self._gemini_cli_catalog(key)
+
+    async def _gemini_public_catalog(self, key: str) -> list[dict[str, Any]]:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": key},
+            )
+            res.raise_for_status()
+        rows: list[dict[str, Any]] = []
+        for item in res.json().get("models") or []:
+            methods = item.get("supportedGenerationMethods") or []
+            if methods and "generateContent" not in methods:
+                continue
+            mid = str(item.get("name") or "").split("/")[-1]
+            if mid:
+                rows.append({"id": mid, "name": item.get("displayName") or mid})
+        return rows
+
+    async def _gemini_cli_catalog(self, key: str) -> list[dict[str, Any]]:
+        import httpx
+
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            loaded = await client.post(
+                "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+                headers=headers,
+                json={
+                    "metadata": {
+                        "ideType": "IDE_UNSPECIFIED",
+                        "platform": "PLATFORM_UNSPECIFIED",
+                        "pluginType": "GEMINI",
+                    }
+                },
+            )
+            loaded.raise_for_status()
+            project = str(loaded.json().get("cloudaicompanionProject") or "")
+            res = await client.post(
+                "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
+                headers=headers,
+                json={"project": project} if project else {},
+            )
+            res.raise_for_status()
+        models = res.json().get("models") or {}
+        rows: list[dict[str, Any]] = []
+        if isinstance(models, dict):
+            for mid, info in models.items():
+                label = (info or {}).get("displayName") or str(mid)
+                rows.append({"id": str(mid), "name": label})
+        return rows
+
     async def get_available_models(self) -> list[dict[str, Any]]:
         try:
-            res = await self._client.models.list()
+            rows = await self._catalog_rows()
             models = []
-            for m in res.data:
-                entry: dict[str, Any] = {"id": m.id, "name": getattr(m, "name", m.id)}
-                supported = getattr(m, "supported_parameters", None) or getattr(
-                    m, "supported_params", None
-                )
+            for m in rows:
+                if isinstance(m, dict):
+                    mid = str(m.get("id") or "")
+                    entry: dict[str, Any] = {"id": mid, "name": m.get("name") or mid}
+                    supported = m.get("supported_parameters") or m.get("supported_params")
+                else:
+                    entry = {"id": m.id, "name": getattr(m, "name", m.id)}
+                    supported = getattr(m, "supported_parameters", None) or getattr(
+                        m, "supported_params", None
+                    )
                 if supported and isinstance(supported, list):
                     entry["supported_parameters"] = supported
                 for field in (
@@ -218,7 +300,7 @@ class OpenAIThinker(Thinker):
                     "supported_reasoning_levels",
                     "reasoning_levels",
                 ):
-                    levels = getattr(m, field, None)
+                    levels = m.get(field) if isinstance(m, dict) else getattr(m, field, None)
                     if levels is not None:
                         entry[field] = levels
                 models.append(entry)

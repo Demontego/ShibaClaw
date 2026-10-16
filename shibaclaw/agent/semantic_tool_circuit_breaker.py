@@ -57,13 +57,34 @@ class SemanticToolCircuitBreaker:
         return False
 
     def get_tripped_message(self, tool_name: str) -> str:
-        """Returns the in-band BreakerTripped message."""
+        """Returns the in-band BreakerTripped strategy pivot message."""
         return (
+            "[CircuitBreaker: Tool execution stalled. Alternative strategy required.]\n"
             f"Error: BreakerTripped. Tool '{tool_name}' has been called 3 times "
             "with the exact same arguments and returned the exact same result. "
-            "This indicates a semantic loop. Please change your strategy, "
-            "use a different tool, or reassess your goal."
+            "This indicates a semantic execution stall and loop. "
+            f"Do NOT call '{tool_name}' again with these parameters. "
+            "You MUST pivot your strategy immediately: use an alternative tool, "
+            "decompose the task, or fall back to a different execution approach."
         )
+
+    def is_tripped(self, tool_name: str, arguments: Any, result: str) -> bool:
+        """Checks whether the circuit breaker is currently tripped for a given call signature."""
+        args_hash = self._compute_hash(arguments)
+        result_hash = self._compute_hash(result)
+        key = (tool_name, args_hash, result_hash)
+        return self.call_history.get(key, 0) >= 3
+
+    def get_call_count(self, tool_name: str, arguments: Any, result: str) -> int:
+        """Returns the current call count for a given call signature."""
+        args_hash = self._compute_hash(arguments)
+        result_hash = self._compute_hash(result)
+        key = (tool_name, args_hash, result_hash)
+        return self.call_history.get(key, 0)
+
+    def reset(self) -> None:
+        """Resets the circuit breaker call history."""
+        self.call_history.clear()
 
     def log_breaker_tripped(self, tool_name: str, arguments: Any, result: str) -> None:
         """Logs the semantic tool circuit breaker tripped incident to memory/learnings.md."""

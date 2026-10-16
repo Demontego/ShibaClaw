@@ -181,6 +181,7 @@ async def gateway_command(
         session_key: str = "automation:heartbeat",
         profile_id: str | None = None,
         targets: dict[str, str] | None = None,
+        model: str | None = None,
     ) -> str:
         async def _noop_progress(*_args, **_kwargs) -> None:
             return None
@@ -209,6 +210,7 @@ async def gateway_command(
             exec_target.chat_id,
             on_progress=_noop_progress,
             profile_id=profile_id,
+            model=model,
         )
         return outbound.content if outbound else ""
 
@@ -226,6 +228,7 @@ async def gateway_command(
             chat_id=job.id,
             on_progress=_noop_progress,
             metadata={"hidden": True},
+            model=job.payload.model,
         )
         response = out.content if out else ""
         if not response:
@@ -743,6 +746,7 @@ async def gateway_command(
                     to=p.get("to"),
                     session_key=p.get("sessionKey", p.get("session_key")),
                     profile_id=p.get("profileId", p.get("profile_id")),
+                    model=p.get("model") or None,
                     targets=p.get("targets") or {},
                 )
                 job = automation.add_job(name, schedule, payload_obj, delete_after_run)
@@ -967,6 +971,7 @@ async def gateway_command(
                                 to=p.get("to"),
                                 session_key=p.get("sessionKey", p.get("session_key")),
                                 profile_id=p.get("profileId", p.get("profile_id")),
+                                model=p.get("model") or None,
                                 targets=p.get("targets") or {},
                             )
                             job = automation.add_job(name, schedule, payload_obj, delete_after_run)

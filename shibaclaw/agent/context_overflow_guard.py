@@ -19,7 +19,7 @@ class CompactionCircuitBreakerError(ContextOverflowError):
 
 PROMPT_CACHE_PREFIX_MARKER = "<!-- PROMPT_CACHE_PREFIX_MARKER -->"
 # A wake must still see the backlog and the evolve script reply after older tools are stubbed.
-_PIN_MARKERS = ("## Open", "refuse:", "need web_search", "gate open")
+_PIN_MARKERS = ("## Open", "refuse:", "need web_search", "gate open", "[CircuitBreaker: Tool execution stalled")
 
 
 def _pin_message(msg: dict) -> bool:

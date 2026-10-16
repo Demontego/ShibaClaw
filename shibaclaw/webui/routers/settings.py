@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import time
 
 from loguru import logger
 from starlette.requests import Request
@@ -152,9 +153,14 @@ async def _fetch_all_configured_provider_models(
     if not provider_names:
         return [], []
 
+    def _fetch_sync(provider_name: str) -> list[dict[str, Any]]:
+        # shortcut: a blocking models.list stalls this loop and the 3s timeout
+        # then drops the fast catalogs. Each provider runs in its own thread.
+        return asyncio.run(_fetch_provider_models(cfg, provider_name))
+
     results = await asyncio.gather(
         *(
-            asyncio.wait_for(_fetch_provider_models(cfg, provider_name), timeout=6.0)
+            asyncio.wait_for(asyncio.to_thread(_fetch_sync, provider_name), timeout=12.0)
             for provider_name in provider_names
         ),
         return_exceptions=True,
@@ -369,9 +375,20 @@ async def api_settings_post(request: Request):
 
     return JSONResponse({"status": "updated", "restarted": False})
 
+_models_cache: tuple[float, list, list] | None = None
+
+
 async def api_models_get(request: Request):
     """Get available models for one provider or aggregate all configured providers."""
+    global _models_cache
     provider_name = request.query_params.get("provider")
+    if (
+        not provider_name
+        and _models_cache
+        and _models_cache[1]
+        and time.monotonic() - _models_cache[0] < 120
+    ):
+        return JSONResponse({"models": _models_cache[1], "errors": _models_cache[2]})
     if not agent_manager.config:
         agent_manager.load_latest_config()
 
@@ -391,4 +408,6 @@ async def api_models_get(request: Request):
         return JSONResponse({"models": models, "errors": []})
 
     models, errors = await _fetch_all_configured_provider_models(cfg)
+    if models:
+        _models_cache = (time.monotonic(), models, errors)
     return JSONResponse({"models": models, "errors": errors})

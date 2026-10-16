@@ -1717,6 +1717,7 @@ class ShibaBrain:
         on_progress: Callable[[str, bool], Awaitable[None]] | None = None,
         on_response_token: Callable[[str], Awaitable[None]] | None = None,
         profile_id_override: str | None = None,
+        model_override: str | None = None,
     ) -> OutboundMessage | None:
         evolve_reply = await self._evolve_reply(msg)
         if evolve_reply is not None:
@@ -1742,7 +1743,7 @@ class ShibaBrain:
                 chat_id,
                 msg.metadata.get("message_id"),
                 session_key=key,
-                model=self._resolve_model(profile_id, session.metadata, self.workspace),
+                model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
                 metadata=msg.metadata,
             )
             history = session.get_history(max_messages=0)
@@ -1981,7 +1982,7 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=self._resolve_model(profile_id, session.metadata, self.workspace),
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
         )
         if message_tool := self.tools.get("message"):
@@ -2113,7 +2114,7 @@ class ShibaBrain:
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=self._resolve_model(profile_id, session.metadata, self.workspace),
+            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
@@ -2260,6 +2261,7 @@ class ShibaBrain:
         media: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         profile_id: str | None = None,
+        model: str | None = None,
     ) -> OutboundMessage | None:
         await self.mcp.connect()
         msg = InboundMessage(
@@ -2276,4 +2278,5 @@ class ShibaBrain:
             on_progress=on_progress,
             on_response_token=on_response_token,
             profile_id_override=profile_id,
+            model_override=model,
         )

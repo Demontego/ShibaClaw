@@ -44,7 +44,6 @@ function _scheduleStreamRender(msgId, bubble) {
         const target = (bubble && bubble.isConnected) ? bubble : document.getElementById("stream-bubble-" + mid);
         if (!target) return;
         target.innerHTML = renderMarkdown(state._streamBuffers[mid] || "");
-        enhanceCodeBlocks(target);
         try {
             if (state._streamBuffers && state._streamBuffers[mid]) {
                 target.setAttribute('data-raw-content', state._streamBuffers[mid]);
