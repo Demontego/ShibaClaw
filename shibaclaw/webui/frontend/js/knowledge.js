@@ -296,6 +296,7 @@ function renderKBSelectorDropdown() {
         if (display) {
             display.innerText = typeof t === "function" ? t("chat.kbs_disabled") : "KBs (Disabled)";
         }
+        if (typeof syncComposerChips === "function") syncComposerChips();
         return;
     }
     
@@ -313,7 +314,23 @@ function renderKBSelectorDropdown() {
     if (display) {
         display.innerText = typeof t === "function" ? t("chat.kbs_count", { n: activeSessionKBs.length }) : `KBs (${activeSessionKBs.length})`;
     }
+    if (typeof syncComposerChips === "function") syncComposerChips();
 }
+
+window.clearComposerKBs = async function () {
+    activeSessionKBs = [];
+    renderKBSelectorDropdown();
+    if (!state.sessionId) return;
+    try {
+        await authFetch(`/api/sessions/${encodeURIComponent(state.sessionId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ knowledge_bases: [] })
+        });
+    } catch (e) {
+        console.error("Failed to clear session KBs", e);
+    }
+};
 
 async function toggleSessionKB(id, event) {
     if (event) {

@@ -789,14 +789,15 @@ input[type="number"].form-input {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    z-index: 30;
+    z-index: 2000;
 }
 
-.settings-model-search {
+.settings-model-menu .settings-model-search {
     border: none;
     border-bottom: 1px solid var(--border-color);
     border-radius: 0;
-    background: var(--bg-secondary);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     box-shadow: none;
 }
 
@@ -806,8 +807,11 @@ input[type="number"].form-input {
 }
 
 .settings-model-list {
-    max-height: 280px;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
     overflow-y: auto;
+    overscroll-behavior: contain;
     background: var(--bg-elevated);
 }
 

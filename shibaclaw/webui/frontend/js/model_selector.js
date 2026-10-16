@@ -238,6 +238,7 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
         btn.style.opacity = "0.5";
         btn.style.cursor = "not-allowed";
         if (menu) menu.style.display = "none";
+        if (typeof syncComposerChips === "function") syncComposerChips();
         return;
     }
 
@@ -260,7 +261,23 @@ function updateReasoningSelectorDisplay(reasoningEffort = undefined, modelId = n
     if (list) {
         renderReasoningDropdownList(list, effortStr, currentModel);
     }
+    if (typeof syncComposerChips === "function") syncComposerChips();
 }
+
+window.clearComposerEffort = async function () {
+    _activeSessionReasoningEffort = null;
+    updateReasoningSelectorDisplay(null, state.activeModelId);
+    if (!state.sessionId) return;
+    try {
+        await authFetch("/api/sessions/" + encodeURIComponent(state.sessionId), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ reasoning_effort: null }),
+        });
+    } catch (e) {
+        console.error("Failed to clear session reasoning effort", e);
+    }
+};
 
 function renderReasoningDropdownList(container, currentEffort, modelId = null) {
     container.innerHTML = "";

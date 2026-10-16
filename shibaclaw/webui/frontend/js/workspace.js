@@ -278,6 +278,66 @@
         const profile = document.getElementById("profile-selector");
         const actions = document.querySelector(".input-actions");
         if (profile && actions) actions.prepend(profile);
+        const plus = document.getElementById("btn-composer-plus");
+        const composer = document.querySelector(".workspace-composer");
+        const setPlusOpen = (open) => {
+            composer?.classList.toggle("plus-open", open);
+            plus?.setAttribute("aria-expanded", open ? "true" : "false");
+        };
+        plus?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setPlusOpen(!composer?.classList.contains("plus-open"));
+        });
+        document.addEventListener("click", (event) => {
+            if (composer?.classList.contains("plus-open") && !event.target.closest(".workspace-composer")) {
+                setPlusOpen(false);
+            }
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") setPlusOpen(false);
+        });
+        window.syncComposerChips = function () {
+            const box = document.getElementById("composer-chips");
+            if (!box) return;
+            box.replaceChildren();
+            const add = (icon, label, onClear) => {
+                if (!label) return;
+                const chip = document.createElement("span");
+                chip.className = "composer-chip";
+                const glyph = document.createElement("span");
+                glyph.className = "material-icons-round";
+                glyph.textContent = icon;
+                const text = document.createElement("span");
+                text.className = "label";
+                text.textContent = label;
+                chip.append(glyph, text);
+                if (onClear) {
+                    const close = document.createElement("button");
+                    close.type = "button";
+                    close.setAttribute("aria-label", label);
+                    close.innerHTML = '<span class="material-icons-round">close</span>';
+                    close.addEventListener("click", (event) => {
+                        event.stopPropagation();
+                        onClear();
+                    });
+                    chip.appendChild(close);
+                } else {
+                    chip.addEventListener("click", () => setPlusOpen(true));
+                }
+                box.appendChild(chip);
+            };
+            const effortBtn = document.getElementById("btn-reasoning-select");
+            const effort = document.getElementById("active-reasoning-display")?.textContent?.trim() || "";
+            const effortDefault = typeof t === "function" ? t("chat.effort_default") : "Default";
+            const effortNa = typeof t === "function" ? t("chat.effort_na") : "Effort: N/A";
+            if (effortBtn && !effortBtn.classList.contains("disabled") && effort && effort !== effortNa && !effort.endsWith(effortDefault)) {
+                const prefix = typeof t === "function" ? t("chat.effort_prefix") : "Effort: ";
+                add("psychology", effort.startsWith(prefix) ? effort.slice(prefix.length) : effort, () => window.clearComposerEffort?.());
+            }
+            const kb = document.getElementById("active-kb-display")?.textContent || "";
+            const kbCount = Number((kb.match(/(\d+)/) || [])[1] || 0);
+            if (kbCount > 0) add("library_books", kb, () => window.clearComposerKBs?.());
+        };
         const newChat = document.getElementById("btn-new-session");
         newChat?.addEventListener("click", window.showWorkspaceChat, { capture: true });
         document.querySelector(".logo")?.addEventListener("keydown", event => {
