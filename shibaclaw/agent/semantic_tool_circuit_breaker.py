@@ -14,7 +14,9 @@ class SemanticToolCircuitBreaker:
     """
     def __init__(self, workspace: Path):
         self.workspace = workspace
-        self.call_history = {}  # (tool_name, args_hash, result_hash) -> count
+        self.call_history = {}  # (tool_name, args_hash, result_hash) -> consecutive count
+        self._last_signature = None
+        self._blocked_arguments = None
         self.learnings_file = workspace / "memory" / "learnings.md"
 
     def _compute_hash(self, data: Any) -> str:
@@ -33,10 +35,16 @@ class SemanticToolCircuitBreaker:
         Records a tool call with its arguments and result.
         Returns True if the circuit breaker is tripped (3 identical calls), False otherwise.
         """
+        if result.startswith("[CircuitBreaker: Tool execution stalled."):
+            return True
         args_hash = self._compute_hash(arguments)
         result_hash = self._compute_hash(result)
         key = (tool_name, args_hash, result_hash)
 
+        if key != self._last_signature:
+            self.call_history.clear()
+            self._blocked_arguments = None
+        self._last_signature = key
         self.call_history[key] = self.call_history.get(key, 0) + 1
         count = self.call_history[key]
 
@@ -46,7 +54,8 @@ class SemanticToolCircuitBreaker:
             count
         )
 
-        if count >= 3:
+        if count == 3:
+            self._blocked_arguments = (tool_name, args_hash)
             logger.error(
                 "SemanticToolCircuitBreaker: Tripped for tool '%s' with identical arguments and result!",
                 tool_name
@@ -54,7 +63,11 @@ class SemanticToolCircuitBreaker:
             self.log_breaker_tripped(tool_name, arguments, result)
             return True
 
-        return False
+        return count >= 3
+
+    def should_block(self, tool_name: str, arguments: Any) -> bool:
+        """Block a stalled call until a different completed call changes the trace."""
+        return self._blocked_arguments == (tool_name, self._compute_hash(arguments))
 
     def get_tripped_message(self, tool_name: str) -> str:
         """Returns the in-band BreakerTripped strategy pivot message."""
@@ -85,6 +98,8 @@ class SemanticToolCircuitBreaker:
     def reset(self) -> None:
         """Resets the circuit breaker call history."""
         self.call_history.clear()
+        self._last_signature = None
+        self._blocked_arguments = None
 
     def log_breaker_tripped(self, tool_name: str, arguments: Any, result: str) -> None:
         """Logs the semantic tool circuit breaker tripped incident to memory/learnings.md."""

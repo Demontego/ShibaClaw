@@ -837,7 +837,6 @@ class ShibaBrain:
         stuck_detector = StuckDetector()
         sre_monitor = SREMonitor()
         semantic_breaker = SemanticToolCircuitBreaker(self.context.workspace)
-        tool_call_history: list[tuple[str, str]] = []
         executed_tool_calls: set[tuple[str, str]] = set()
         keep_checkpoint = False
 
@@ -1114,22 +1113,7 @@ class ShibaBrain:
                     args_str = json.dumps(tool_call.arguments, ensure_ascii=False)
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
                     call_key = (tool_call.name, args_str)
-                    tool_call_history.append(call_key)
                     executed_tool_calls.add(call_key)
-                    occurrences = tool_call_history.count(call_key)
-                    if occurrences >= 3:
-                        messages = self.context.add_tool_result(
-                            messages,
-                            tool_call.id,
-                            tool_call.name,
-                            (
-                                f"Error: Infinite loop detected. You have called '{tool_call.name}' "
-                                f"with the exact same arguments {occurrences} times. "
-                                "Please reassess your goal and try a different approach."
-                            ),
-                        )
-                        answered_calls.add(tool_call.id)
-                        continue
                     if tool_call.name == "agent_send" and str(session_key or "").startswith("agent:"):
                         messages = self.context.add_tool_result(
                             messages,
@@ -1183,6 +1167,8 @@ class ShibaBrain:
                         continue
                     tool_call.arguments = preflight_res.arguments
                     async def _run_tool(call: Any = tool_call) -> str:
+                        if semantic_breaker.should_block(call.name, call.arguments):
+                            return semantic_breaker.get_tripped_message(call.name)
                         result = ""
                         if call.name in {"spawn", "spawn_mea"}:
                             # Snapshot the current history, including completed work
