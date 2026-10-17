@@ -3,6 +3,7 @@
 ## [1.0.65] - 2026-10-17
 
 ### Changed
+- **MCP and Plugin experience** — Refactored the MCP and Plugin systems, added integration with the MCP Registry, simplified installation, and redesigned the UI for managing MCP servers and plugins.
 - **Windows installation and release pipeline** — The PowerShell bootstrap downloads the per-user setup, checks its SHA256 against GitHub release metadata, and starts it. The Windows release includes the Velopack setup and update feed; uploaded release assets and checksums are verified before publication.
 
 ### Fixed
