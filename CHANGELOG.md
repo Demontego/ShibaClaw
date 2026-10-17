@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [1.0.65] - 2026-10-17
+
+### Changed
+- **Windows installation and release pipeline** — The PowerShell bootstrap downloads the per-user setup, checks its SHA256 against GitHub release metadata, and starts it. The Windows release includes the Velopack setup and update feed; uploaded release assets and checksums are verified before publication.
+
+### Fixed
+- **Windows first launch** — Show the native window before tray initialization and defer backend startup until the window is available, keeping the existing loading screen responsive and avoiding the startup freeze and .NET error.
+
 ## [1.0.6] - 2026-10-16
 
 ### Changed

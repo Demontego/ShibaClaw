@@ -106,6 +106,7 @@ window.switchSettingsTab = function (tab, options = {}) {
 
 /* ── Extensions Subtabs ── */
 window.switchExtensionsSubTab = function(subtab) {
+    if (subtab === "mcp") subtab = "plugins";
     document.querySelectorAll(".extensions-inner-tab").forEach(t => t.classList.remove("active"));
     const tabEl = document.querySelector(`.extensions-inner-tab[data-subtab="${subtab}"]`);
     if (tabEl) tabEl.classList.add("active");
@@ -117,8 +118,10 @@ window.switchExtensionsSubTab = function(subtab) {
     try { localStorage.setItem("shibaclaw_extensions_subtab", subtab); } catch (e) { }
 
     if (subtab === "skills") loadSkillsPanel();
-    if (subtab === "plugins") loadPluginsPanel();
-    if (subtab === "mcp" && typeof loadMcpManagerPanel === "function") loadMcpManagerPanel();
+    if (subtab === "plugins") {
+        loadPluginsPanel();
+        if (typeof loadMcpManagerPanel === "function") loadMcpManagerPanel();
+    }
 };
 
 /* ── Skills panel ── */
@@ -561,10 +564,20 @@ async function loadOAuthPanel() {
             try {
                 const resp = await authFetch("/api/oauth/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: p.name }) });
                 const jd = await resp.json();
-                if (jd.ok) {
+                if (resp.ok && jd.ok) {
                     logsEl.style.display = "block";
-                    logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnected") : "Disconnected successfully.")}</div>`;
-                    _refreshOAuthStatus();
+                    const providers = await _refreshOAuthStatus();
+                    const current = providers && providers.find(item => item.name === p.name);
+                    if (current && current.status === "not_configured") {
+                        logsEl.innerHTML = `<div style="color:var(--text-primary);padding:8px">${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnected") : "Disconnected successfully.")}</div>`;
+                        _availableModels = [];
+                        _hasFetchedModels = false;
+                    } else {
+                        const detail = current && current.message ? ` ${current.message}` : " Refresh the page to check again.";
+                        logsEl.textContent = current && current.status === "configured" ? `Still configured.${detail}` : `Could not verify disconnection.${detail}`;
+                        btn.disabled = false;
+                        btn.innerHTML = `<span class="material-icons-round" style="font-size:14px;vertical-align:middle">logout</span> ${escapeHtml(typeof t === "function" ? t("settings.oauth.disconnect") : "Disconnect")}`;
+                    }
                 } else {
                     logsEl.style.display = "block";
                     logsEl.textContent = "Error disconnecting: " + (jd.error || "Unknown");
@@ -609,7 +622,9 @@ async function _refreshOAuthStatus() {
                 }
             }
         }
+        return data.providers || [];
     } catch { /* silent */ }
+    return null;
 }
 
 function _addProviderOption(sel, value, label) {

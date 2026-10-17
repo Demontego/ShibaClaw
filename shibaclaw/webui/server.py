@@ -48,12 +48,22 @@ from .routers.automation import (
 )
 from .routers.connected_apps import (
     cancel_connect_app,
-    connect_app,
-    disconnect_app,
-    get_app_status,
     get_backend_status,
-    list_apps,
     save_backend_settings,
+)
+from .routers.apps import (
+    api_list_apps,
+    api_get_app,
+    api_install_app,
+    api_uninstall_app,
+    api_enable_app,
+    api_disable_app,
+    api_connect_app,
+    api_disconnect_app,
+    api_get_app_auth_status,
+    api_get_app_tools,
+    api_update_app_tools,
+    api_create_custom_app,
 )
 from .routers.fs import api_file_get, api_file_save, api_fs_explore, api_upload
 from .routers.gateway import api_gateway_health, api_gateway_restart
@@ -216,16 +226,25 @@ def create_app(
         Route("/api/mcp/servers/{name}", delete_mcp_server, methods=["DELETE"]),
         Route("/api/mcp/servers/{name}/rename", rename_mcp_server, methods=["PATCH"]),
         Route("/api/mcp/servers/{name}/test", test_mcp_server, methods=["POST"]),
-        # ── Connected Apps (Klavis Strata) ───────────────────────────────────
-        # NOTE: /api/apps/backend MUST be before /api/apps/{app_id}/...
-        # otherwise Starlette matches "backend" as an app_id path param.
-        Route("/api/apps", list_apps, methods=["GET"]),
+        # ── Apps Marketplace ──────────────────────────────────────────────────
+        # NOTE: /api/apps/backend and /api/apps/custom MUST be before /api/apps/{app_id}/...
+        Route("/api/apps", api_list_apps, methods=["GET"]),
         Route("/api/apps/backend", get_backend_status, methods=["GET"]),
         Route("/api/apps/backend", save_backend_settings, methods=["PUT"]),
-        Route("/api/apps/{app_id}/connect", connect_app, methods=["POST"]),
+        Route("/api/apps/custom", api_create_custom_app, methods=["POST"]),
+        Route("/api/apps/{app_id}", api_get_app, methods=["GET"]),
+        Route("/api/apps/{app_id}/install", api_install_app, methods=["POST"]),
+        Route("/api/apps/{app_id}/uninstall", api_uninstall_app, methods=["POST"]),
+        Route("/api/apps/{app_id}/enable", api_enable_app, methods=["POST"]),
+        Route("/api/apps/{app_id}/disable", api_disable_app, methods=["POST"]),
+        Route("/api/apps/{app_id}/connect", api_connect_app, methods=["POST"]),
+        Route("/api/apps/{app_id}/connect", api_disconnect_app, methods=["DELETE"]),
+        Route("/api/apps/{app_id}/disconnect", api_disconnect_app, methods=["POST"]),
         Route("/api/apps/{app_id}/cancel", cancel_connect_app, methods=["POST"]),
-        Route("/api/apps/{app_id}/connect", disconnect_app, methods=["DELETE"]),
-        Route("/api/apps/{app_id}/status", get_app_status, methods=["GET"]),
+        Route("/api/apps/{app_id}/status", api_get_app_auth_status, methods=["GET"]),
+        Route("/api/apps/{app_id}/auth-status", api_get_app_auth_status, methods=["GET"]),
+        Route("/api/apps/{app_id}/tools", api_get_app_tools, methods=["GET"]),
+        Route("/api/apps/{app_id}/tools", api_update_app_tools, methods=["PUT"]),
         # ───────────────────────────────────────────────────────────────
         Route("/api/oauth/providers", api_oauth_providers, methods=["GET"]),
         Route("/api/oauth/login", api_oauth_login, methods=["POST"]),
@@ -499,6 +518,11 @@ class ServerManager:
         """Poll until the HTTP port is reachable or *timeout* seconds elapse."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            # A different local service may already own this port. A successful
+            # TCP connection alone does not mean this Uvicorn instance is ready.
+            if self._server is None or not self._server.started:
+                time.sleep(0.1)
+                continue
             try:
                 with socket.create_connection((self._host, self._port), timeout=0.5):
                     return True

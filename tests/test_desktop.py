@@ -418,7 +418,7 @@ class TestDesktopMainEntrypoint:
         fake_launcher.run = mock.Mock()
 
         with mock.patch.dict(sys.modules, {"shibaclaw.desktop.launcher": fake_launcher}):
-            with mock.patch("shibaclaw.desktop.__main__.setup_shiba_logging"):
+            with mock.patch("shibaclaw.helpers.logging.setup_shiba_logging"):
                 main()
 
         fake_launcher.run.assert_called_once_with(disable_auth=True)
@@ -430,7 +430,7 @@ class TestDesktopMainEntrypoint:
         fake_launcher.run = mock.Mock(side_effect=SystemExit(1))
 
         with mock.patch.dict(sys.modules, {"shibaclaw.desktop.launcher": fake_launcher}):
-            with mock.patch("shibaclaw.desktop.__main__.setup_shiba_logging"), mock.patch(
+            with mock.patch("shibaclaw.helpers.logging.setup_shiba_logging"), mock.patch(
                 "shibaclaw.desktop.__main__._show_startup_error"
             ) as mock_show_error:
                 with pytest.raises(SystemExit):

@@ -170,7 +170,20 @@ class OpenAIThinker(Thinker):
 
         # Strip provider prefix UNLESS the provider explicitly preserves it
         if not (provider_spec and getattr(provider_spec, "preserve_model_prefix", False)):
-            model = self._strip_provider_prefix(model, getattr(self, "_provider_name", None))
+            stripped = self._strip_provider_prefix(model, getattr(self, "_provider_name", None))
+            # For gateways, don't strip when the result is a bare name (no "/").
+            # Models like "openrouter/free" or "openrouter/auto" are meta-router
+            # IDs where the gateway name IS part of the model namespace.
+            if (
+                self._gateway
+                and self._gateway.is_gateway
+                and stripped
+                and "/" not in stripped
+                and "/" in model
+            ):
+                pass  # keep the original model with its prefix
+            else:
+                model = stripped
 
         # For pure OpenAI client, we don't need litellm_prefix logic!
         # Instead, we just need to respect `strip_model_prefix` if the gateway demands bare models.

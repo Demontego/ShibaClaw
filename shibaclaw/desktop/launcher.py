@@ -11,9 +11,10 @@ from __future__ import annotations
 import os
 import sys
 import threading
+from pathlib import Path
 from typing import Any
 from loguru import logger
-from shibaclaw.config.paths import get_assets_dir
+from shibaclaw.config.paths import get_app_root, get_assets_dir
 from shibaclaw.desktop.controller import DesktopController
 from shibaclaw.desktop.runtime import DesktopRuntime
 from shibaclaw.desktop.window_state import WindowState, load_window_state, save_window_state
@@ -31,18 +32,72 @@ def run(
     close_policy: str | None = None,
     disable_auth: bool = False,
 ) -> None:
-    """Bootstrap the runtime and open the native window.
-    *close_policy* controls what happens when the user clicks the window's
-    close button:
-    * ``'hide'``  — hides the window (future tray will keep app alive).
-    * ``'quit'``  — performs a full clean shutdown immediately.
-    For local Windows source runs, WebUI auth is disabled by default unless
-    ``SHIBACLAW_AUTH`` is already set or ``disable_auth`` is passed explicitly.
-    """
+    """Claim desktop ownership, show the native window, then boot the backend."""
+    _configure_desktop_file_logging()
     if get_os_type() != "windows":
         logger.warning(
             "Native launcher is intended for Windows; running anyway on {}", sys.platform
         )
+    instance = None
+    try:
+        if _single_instance_enabled():
+            from shibaclaw.desktop.single_instance import WindowsDesktopInstance
+
+            instance = WindowsDesktopInstance(get_app_root())
+            if not instance.acquire_or_notify():
+                logger.info("Activated the existing ShibaClaw desktop")
+                return
+        _run_window(
+            port=port,
+            host=host,
+            config_path=config_path,
+            workspace=workspace,
+            with_gateway=with_gateway,
+            close_policy=close_policy,
+            disable_auth=disable_auth,
+            instance=instance,
+        )
+    finally:
+        if instance is not None:
+            instance.close()
+
+
+def _configure_desktop_file_logging() -> None:
+    """Keep startup diagnostics available for the windowed desktop build."""
+    try:
+        from shibaclaw.config.paths import get_logs_dir
+
+        log_path = get_logs_dir() / "desktop.log"
+        logger.add(
+            log_path,
+            level="DEBUG" if _desktop_debug_enabled() else "INFO",
+            rotation="5 MB",
+            retention=3,
+            encoding="utf-8",
+            backtrace=True,
+            diagnose=False,
+            enqueue=True,
+        )
+    except OSError as exc:
+        logger.error("Could not create the desktop log file: {}", exc)
+
+
+def _single_instance_enabled() -> bool:
+    # Ownership belongs only to the interactive desktop, never CLI/gateway/tests.
+    return get_os_type() == "windows" and "PYTEST_CURRENT_TEST" not in os.environ
+
+
+def _run_window(
+    *,
+    port: int,
+    host: str,
+    config_path: str | None,
+    workspace: str | None,
+    with_gateway: bool,
+    close_policy: str | None,
+    disable_auth: bool,
+    instance: Any,
+) -> None:
     _configure_desktop_auth(disable_auth=disable_auth)
     if get_os_type() == "windows":
         _set_windows_app_user_model_id()
@@ -63,101 +118,72 @@ def run(
         host=host,
         with_gateway=with_gateway,
     )
-    logger.info("Starting ShibaClaw desktop runtime…")
-    runtime.start()
-    if not runtime.wait_ready(timeout=20.0):
-        logger.error("WebUI did not become ready in time — aborting")
-        runtime.stop()
-        sys.exit(1)
-    logger.info("WebUI ready at {}", runtime.base_url)
-    window_config = _resolve_window_config(runtime, close_policy)
-    window: Any = webview.create_window(
-        title="ShibaClaw",
-        url=runtime.authed_url,
-        width=window_config["width"],
-        height=window_config["height"],
-        x=window_config["x"],
-        y=window_config["y"],
-        resizable=True,
-        hidden=window_config.get("start_hidden", False),
-        frameless=False,
-        easy_drag=False,
-        text_select=True,
-    )
     quit_event = threading.Event()
-    force_exit_armed = threading.Event()
     shutdown_complete = threading.Event()
     initial_show_complete = threading.Event()
-
-    def _arm_force_exit(timeout: float = 3.0) -> None:
-        if force_exit_armed.is_set():
-            return
-        force_exit_armed.set()
-
-        def _force_exit_if_needed() -> None:
-            if shutdown_complete.wait(timeout=timeout):
-                return
-            logger.warning(
-                "Desktop shutdown did not finish within {} seconds; forcing process exit",
-                timeout,
-            )
-            os._exit(0)
-
-        threading.Thread(
-            target=_force_exit_if_needed,
-            name="shibaclaw-force-exit",
-            daemon=True,
-        ).start()
+    window_loaded = threading.Event()
+    window_shown = threading.Event()
 
     def _quit_callback() -> None:
         quit_event.set()
-        _arm_force_exit()
-        try:
-            native = getattr(window, "native", None)
-            if native is not None and getattr(native, "InvokeRequired", False):
-                import System
-                native.BeginInvoke(System.Action(window.destroy))
-            else:
-                window.destroy()
-        except Exception:
-            logger.debug("window.destroy() failed during quit", exc_info=True)
+        _dispatch_window_action(window, window.destroy, "destroy")
 
     def _on_loaded(*_args: Any) -> None:
-        if get_os_type() == "windows":
-            icon_path = _get_windows_icon_path()
-            if icon_path:
-                _apply_windows_window_icon(window, icon_path)
+        window_loaded.set()
+        startup.on_window_loaded()
         if window_config["start_hidden"] or initial_show_complete.is_set():
             return
         initial_show_complete.set()
         _window_show(window)
 
-    def _on_before_show(*_args: Any) -> None:
-        if get_os_type() != "windows":
-            return
-        icon_path = _get_windows_icon_path()
-        if icon_path:
-            _apply_windows_window_icon(window, icon_path)
+    window_config = _resolve_window_config(
+        runtime, close_policy, desktop_config=_read_desktop_config(config_path)
+    )
+    tray = None
+    from shibaclaw.desktop.startup import DesktopStartup, startup_html
 
+    window: Any = webview.create_window(
+        title="ShibaClaw",
+        html=startup_html(),
+        width=window_config["width"],
+        height=window_config["height"],
+        x=window_config["x"],
+        y=window_config["y"],
+        resizable=True,
+        hidden=window_config["start_hidden"],
+        frameless=False,
+        easy_drag=False,
+        text_select=True,
+        background_color="#101014",
+    )
     controller = DesktopController(
         runtime=runtime,
         window_show=lambda: _window_show(window),
         window_hide=lambda: _window_hide(window),
         quit_callback=_quit_callback,
     )
-    from shibaclaw.desktop.tray import HAS_TRAY_DEPS, TrayIcon
 
-    if HAS_TRAY_DEPS:
-        tray = TrayIcon(controller)
-        controller.set_tray(tray)
-        tray.start()
-    else:
-        logger.debug("Optional tray dependencies (pystray, PIL) missing; tray icon disabled")
+    def _shutdown_desktop() -> threading.Event:
+        controller.quit_app()
+        return shutdown_complete
+
+    runtime.set_desktop_shutdown(_shutdown_desktop)
+    startup = DesktopStartup(
+        runtime,
+        controller,
+        window,
+        quit_event,
+        window_ready=window_loaded,
+        window_shown=window_shown,
+    )
+    window.expose(startup.retry, startup.open_logs, startup.quit)
     if window_config.get("start_hidden"):
         controller.window_visible = False
     from shibaclaw.helpers.notification_manager import notification_manager
 
     def _on_notification(notif: dict[str, Any]) -> None:
+        if quit_event.is_set():
+            return
         title = notif.get("title") or "ShibaClaw"
         message = notif.get("message")
         if message:
@@ -170,7 +196,7 @@ def run(
         if quit_event.is_set():
             return True
         if window_config["close_policy"] == "hide":
-            _window_hide(window)
+            controller.hide_window()
             return False
         controller.quit_app()
         return False
@@ -189,16 +215,39 @@ def run(
         save_window_state(WindowState(width=window.width, height=window.height, x=x, y=y))
 
     def _on_start_setup() -> None:
-        if not window_config.get("start_hidden") and not initial_show_complete.is_set():
-            initial_show_complete.set()
-            _window_show(window)
+        nonlocal tray
+        if instance is not None:
+            instance.listen(controller.show_window)
+        # pywebview starts this worker while WinForms is still constructing the
+        # WebView2 control. Importing PIL/pystray and creating the tray icon at
+        # the same time can stall that native startup indefinitely.
+        if not window_shown.wait(timeout=30.0) or quit_event.is_set():
+            logger.error("Desktop window did not become visible before tray setup")
+            return
+        logger.debug("Desktop window visible; starting tray and backend")
+        from shibaclaw.desktop.tray import HAS_TRAY_DEPS, TrayIcon
+
+        if HAS_TRAY_DEPS:
+            tray = TrayIcon(controller)
+            controller.set_tray(tray)
+            tray.start()
+        else:
+            logger.debug("Optional tray dependencies missing; tray icon disabled")
+            window_config["close_policy"] = "quit"
+            window_config["start_hidden"] = False
+        startup.start()
 
     window.events.closing += _on_closing
     window.events.loaded += _on_loaded
+    window.events.closed += lambda *_args: quit_event.set()
     window.events.resized += _on_resized
     window.events.moved += _on_moved
     if get_os_type() == "windows":
-        window.events.shown += lambda *args: _on_shown(window, *args)
+        def _on_window_shown(*args: Any) -> None:
+            window_shown.set()
+            logger.debug("Native desktop window shown")
+
+        window.events.shown += _on_window_shown
     logger.info("Opening ShibaClaw window")
     if get_os_type() == "windows":
         os.environ.setdefault(
@@ -206,16 +255,21 @@ def run(
             "--disable-gpu-compositing",
         )
     try:
+        storage_path = get_app_root() / "desktop" / "webview"
+        storage_path.mkdir(parents=True, exist_ok=True)
         webview.start(
             func=_on_start_setup,
             debug=_desktop_debug_enabled(),
             icon=_get_icon_path(),
             gui="edgechromium",
             private_mode=False,
+            storage_path=str(storage_path),
         )
     finally:
+        quit_event.set()
         try:
-            tray.stop()
+            if tray is not None:
+                tray.stop()
         finally:
             runtime.stop()
             shutdown_complete.set()
@@ -255,27 +309,72 @@ def _on_shown(window: Any, *_args: Any) -> None:
 
 
 def _window_show(window: Any) -> None:
+    def _show_and_focus() -> None:
+        window.show()
+        if get_os_type() == "windows":
+            _focus_windows_window(window)
+
+    _dispatch_window_action(window, _show_and_focus, "show")
+
+
+def _focus_windows_window(window: Any) -> None:
+    """Restore a minimized/hidden desktop and make the native window active."""
+    import ctypes
+    from ctypes import wintypes
+
     try:
+        hwnd = _resolve_windows_window_handle(window)
+        if not hwnd:
+            return
+        user32 = ctypes.windll.user32
+        user32.IsIconic.argtypes = [wintypes.HWND]
+        user32.IsIconic.restype = wintypes.BOOL
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.ShowWindow.restype = wintypes.BOOL
+        user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+        user32.SetForegroundWindow.restype = wintypes.BOOL
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE preserves normal window geometry.
+        user32.SetForegroundWindow(hwnd)
         native = getattr(window, "native", None)
-        if native is not None and getattr(native, "InvokeRequired", False):
-            import System
-            native.BeginInvoke(System.Action(window.show))
-        else:
-            window.show()
+        if native is not None:
+            native.Activate()
     except Exception as exc:
-        logger.debug("window.show() failed: {}", exc)
+        logger.debug("Could not focus Windows desktop: {}", exc)
 
 
 def _window_hide(window: Any) -> None:
+    _dispatch_window_action(window, window.hide, "hide")
+
+
+def _dispatch_window_action(window: Any, action: Any, label: str) -> None:
+    """Never wait for pywebview readiness on the WinForms UI thread."""
+    shown = getattr(getattr(window, "events", None), "shown", None)
+    if shown is not None and callable(getattr(shown, "is_set", None)) and not shown.is_set():
+        def _after_shown() -> None:
+            if shown.wait(timeout=30.0):
+                _dispatch_window_action(window, action, label)
+            else:
+                logger.warning("Could not {} the desktop window: it was never shown", label)
+
+        threading.Thread(target=_after_shown, name=f"shibaclaw-window-{label}", daemon=True).start()
+        return
+
+    def _safe_action() -> None:
+        try:
+            action()
+        except Exception:
+            logger.exception("Could not {} the desktop window", label)
+
     try:
         native = getattr(window, "native", None)
         if native is not None and getattr(native, "InvokeRequired", False):
             import System
-            native.BeginInvoke(System.Action(window.hide))
+            native.BeginInvoke(System.Action(_safe_action))
         else:
-            window.hide()
-    except Exception as exc:
-        logger.debug("window.hide() failed: {}", exc)
+            _safe_action()
+    except Exception:
+        logger.exception("Could not schedule the desktop window {} action", label)
 
 
 def _desktop_debug_enabled() -> bool:
@@ -284,9 +383,30 @@ def _desktop_debug_enabled() -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def _resolve_window_config(runtime: DesktopRuntime, close_policy: str | None) -> dict[str, Any]:
+def _read_desktop_config(config_path: str | None) -> Any:
+    """Read only window preferences, without provider/plugin initialization."""
+    import json
+
+    from shibaclaw.config.loader import get_config_path
+    from shibaclaw.config.schema import DesktopConfig
+
+    path = Path(config_path).expanduser() if config_path else get_config_path()
+    try:
+        with path.open(encoding="utf-8") as stream:
+            data = json.load(stream)
+        return DesktopConfig.model_validate(data.get("desktop", {}))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return DesktopConfig()
+
+
+def _resolve_window_config(
+    runtime: DesktopRuntime,
+    close_policy: str | None,
+    *,
+    desktop_config: Any = None,
+) -> dict[str, Any]:
     """Resolve window geometry and behavior from state file or config defaults."""
-    desktop_cfg = runtime.config.desktop if runtime.config is not None else None
+    desktop_cfg = desktop_config or (runtime.config.desktop if runtime.config is not None else None)
     default_w = 880
     default_h = 1024
     if desktop_cfg:
@@ -300,11 +420,7 @@ def _resolve_window_config(runtime: DesktopRuntime, close_policy: str | None) ->
         "y": state.y,
         "start_hidden": desktop_cfg.start_hidden if desktop_cfg is not None else False,
         "close_policy": close_policy
-        or (
-            runtime.config.desktop.close_behavior
-            if runtime.config and runtime.config.desktop
-            else "hide"
-        ),
+        or (desktop_cfg.close_behavior if desktop_cfg is not None else "hide"),
     }
 
 

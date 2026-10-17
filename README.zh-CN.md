@@ -10,8 +10,11 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License" height="20"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="20">
+</a>
 </p>
 
 <p align="center">
@@ -41,9 +44,11 @@
 > 发布说明见 [CHANGELOG.md](./CHANGELOG.md)。
 
 <details open>
-<summary>🚀 <b>最新动态 — v1.0.6</b>（点击展开）</summary>
+<summary>🚀 <b>最新动态 — v1.0.65</b>（点击展开）</summary>
 
-**版本 v1.0.6 (2026-10-16):**
+**版本 v1.0.65 (2026-10-17):**
+
+- **Windows 安装** — PowerShell 命令会下载当前用户的安装程序、验证 SHA256 并启动安装。首次启动时，后台启动本地服务期间窗口仍可响应。
 
 - **保留 v1.0.3 设计，重新整合运行引擎改进** — 保留 v1.0.3 原有界面设计，同时重新整合 v1.0.4/v1.0.5 中与界面无关的改进和修复：运行可靠性、提供商重试和模型目录、订阅 OAuth、自动化、子代理以及可选的自我演进。保留隐私保护、Gemini 目录的精确主机验证和依赖项安全更新。不包含后续的界面重新设计。
 - **界面操作改进** — 侧栏历史记录和控件可通过滚动访问，设置按钮移入紧凑的底部图标栏。上下文用量指示器成为唯一支持无障碍操作的上下文按钮。桌面和较宽手机使用一行输入工具栏；窄屏手机使用两行，触控目标为44px。移动端模型名称显示为一行，上下文仅显示百分比。模型、推理强度和集合菜单使用统一主题，跟随对应按钮并保持在屏幕范围内。

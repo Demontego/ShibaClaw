@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1792187024274">
+    <link rel="stylesheet" href="/static/bundle.css?v=1792222803193">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
@@ -131,10 +131,9 @@
                 </button>
                 <button type="button" class="workspace-nav-item" data-workspace-page="apps"
                     onclick="openModal('connected-apps-modal')">
-                    <span class="material-icons-round" aria-hidden="true">grid_view</span><span
-                        class="workspace-nav-label" data-i18n="workspace.apps">Apps &amp; tools</span>
+                    <span class="material-icons-round" aria-hidden="true">extension</span><span
+                        class="workspace-nav-label" data-i18n="apps.nav_title">Plugin</span>
                 </button>
-                <div id="workspace-nav-current" class="workspace-nav-current" aria-hidden="true"></div>
             </nav>
 
             <!-- History Section -->
@@ -541,13 +540,12 @@
 
                     <div class="settings-sidebar-section" data-i18n="settings.sec.capabilities">Capabilities &amp;
                         Extensions</div>
-                    <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')">
+                    <button class="settings-sidebar-item" data-tab="tools" onclick="switchSettingsTab('tools')" style="display:none">
                         <span class="material-icons-round">build</span><span data-i18n="settings.tab.tools">Tools</span>
                     </button>
                     <button class="settings-sidebar-item" data-tab="extensions"
                         onclick="switchSettingsTab('extensions')">
-                        <span class="material-icons-round">extension</span><span
-                            data-i18n="settings.tab.extensions">Extensions</span>
+                        <span class="material-icons-round">extension</span><span data-i18n="apps.settings_nav">Skills &amp; Plugin</span>
                     </button>
 
                     <div class="settings-sidebar-section" data-i18n="settings.sec.system">System &amp; Maintenance</div>
@@ -945,13 +943,7 @@
                             </button>
                             <button class="extensions-inner-tab" data-subtab="plugins"
                                 onclick="switchExtensionsSubTab('plugins')">
-                                <span class="material-icons-round">extension</span> <span
-                                    data-i18n="settings.ext.plugins">Plugins</span>
-                            </button>
-                            <button class="extensions-inner-tab" data-subtab="mcp"
-                                onclick="switchExtensionsSubTab('mcp')">
-                                <span class="material-icons-round">hub</span> <span data-i18n="settings.ext.mcp">MCP
-                                    Servers</span>
+                                <span class="material-icons-round">extension</span> <span data-i18n="apps.nav_title">Plugin</span>
                             </button>
                         </div>
 
@@ -1036,43 +1028,27 @@
                             </div>
                         </div>
 
-                        <!-- Subpanel: Plugins -->
+                        <!-- Subpanel: Apps & Integrations -->
                         <div class="extensions-subpanel" id="subpanel-plugins">
-                            <div class="skills-toolbar">
-                                <input type="text" id="plugin-install-name" class="form-input"
-                                    placeholder="Plugin package name (e.g. shibaclaw-tts-supertonic) or Git URL..."
-                                    data-i18n-placeholder="settings.plugins.install_ph"
-                                    aria-label="Plugin package name or Git URL">
-                                <div class="skills-toolbar-actions">
-                                    <button type="button" class="btn-primary" onclick="installPlugin()">
-                                        <span class="material-icons-round"
-                                            style="font-size:16px;vertical-align:middle">download</span> <span
-                                            data-i18n="common.install">Install</span>
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="plugin-action-log" class="console-box"
-                                style="display:none; font-family:var(--font-mono); font-size:0.75rem; background:rgba(0,0,0,0.3); border:1px solid var(--border-color); border-radius:6px; padding:12px; margin-bottom:16px; max-height:200px; overflow-y:auto; white-space:pre-wrap; color:var(--text-secondary)">
-                            </div>
-                            <div class="skills-browse-section">
-                                <div class="skills-section-header">
-                                    <span class="material-icons-round">extension</span>
-                                    <span data-i18n="settings.plugins.installed">Installed Plugins</span>
-                                </div>
-                                <div id="installed-plugins-list" class="skills-list"></div>
-                            </div>
-                            <div class="skills-browse-section" style="margin-top: 1.5rem;">
-                                <div class="skills-section-header">
-                                    <span class="material-icons-round">cloud_download</span>
-                                    <span data-i18n="settings.plugins.available">Available Plugins</span>
-                                </div>
-                                <div id="available-plugins-list" class="skills-list"></div>
-                            </div>
-                        </div>
+                            <div id="apps-marketplace-container"></div>
 
-                        <!-- Subpanel: MCP -->
-                        <div class="extensions-subpanel" id="subpanel-mcp">
-                            <div id="mcp-manager-container"></div>
+                            <!-- Advanced Developer Drawer: Raw MCP Server Manager -->
+                            <details class="mcp-raw-manager-drawer" style="margin-top:24px; border:1px solid var(--border-color); border-radius:8px; padding:12px; background:rgba(255,255,255,0.02)">
+                                <summary style="cursor:pointer; font-weight:600; color:var(--text-secondary); font-size:0.88rem; display:flex; align-items:center; gap:6px">
+                                    <span class="material-icons-round" style="font-size:18px">tune</span>
+                                    <span>Advanced: Raw MCP Server Configurations</span>
+                                </summary>
+                                <div id="mcp-manager-container" style="margin-top:14px"></div>
+                            </details>
+
+                            <!-- Legacy element holders for full backward-compatibility -->
+                            <div style="display:none">
+                                <input type="text" id="plugin-install-name">
+                                <div id="plugin-action-log"></div>
+                                <div id="installed-plugins-list"></div>
+                                <div id="available-plugins-list"></div>
+                                <div id="subpanel-mcp"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -1198,13 +1174,6 @@
             <div class="workspace-page-intro">
                 <h2 id="workspace-page-heading"></h2>
                 <p id="workspace-page-description"></p>
-            </div>
-            <div id="workspace-app-actions" class="workspace-app-actions" hidden>
-                <button type="button" class="btn-secondary" onclick="openWorkspaceTools(false)"><span
-                        class="material-icons-round" aria-hidden="true">build</span><span
-                        data-i18n="settings.tab.tools">Tools</span></button>
-                <button type="button" class="btn-secondary" onclick="openWorkspaceTools(true)"><span
-                        class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
             </div>
             <div id="workspace-evolve-actions" class="workspace-app-actions" hidden>
                 <button type="button" class="btn-secondary" onclick="loadEvolve()"
@@ -1566,8 +1535,7 @@
     <div id="connected-apps-modal" class="modal-backdrop">
         <div class="modal" style="width: 720px; max-width: 95vw;">
             <div class="modal-header">
-                <h2><span class="material-icons-round">apps</span> <span data-i18n="apps.title">Connected Apps</span>
-                </h2>
+                <h2><span class="material-icons-round">extension</span> <span data-i18n="apps.nav_title">Plugin</span></h2>
                 <button class="btn-icon" data-i18n-aria="common.close" data-i18n-title="common.close" aria-label="Close"
                     title="Close" onclick="closeModal('connected-apps-modal')">
                     <span class="material-icons-round">close</span>
@@ -1885,8 +1853,8 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1792187024274"></script>
-    <script src="/static/js/chat_history_window.js?v=1792187024274"></script>
+    <script src="/static/bundle.js?v=1792222803193"></script>
+    <script src="/static/js/chat_history_window.js?v=1792222803193"></script>
 </body>
 
 </html>

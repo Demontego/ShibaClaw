@@ -126,7 +126,7 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
     document.createElementNS = (_, tag) => new Element(tag);
     document.getElementById = id => document.querySelector(`#${id}`);
     const html = readFrontend('index.html');
-    const ids = ['workspace-nav-current', 'workspace-nav-tooltip', 'chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-library-select', 'workspace-app-actions', 'workspace-evolve-actions',
+    const ids = ['workspace-nav-tooltip', 'chat-area', 'workspace-view', 'workspace-agents', 'workspace-agent-grid', 'workspace-library-tabs', 'workspace-library-select', 'workspace-evolve-actions',
         'library-tab-graph', 'library-tab-you', 'library-tab-people', 'workspace-agent-graph', 'agent-graph-nodes', 'agent-graph-svg', 'agent-graph-detail', 'workspace-library-book', 'library-sheet', 'library-you-title', 'library-you', 'library-people-title', 'library-people-search', 'library-people',
         'workspace-view-title', 'workspace-page-heading', 'workspace-page-description', 'workspace-stage',
         'workspace-context-toggle', 'workspace-theme', 'workspace-chat-title', 'chat-input', 'history-list', 'btn-new-session',

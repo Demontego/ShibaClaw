@@ -638,3 +638,152 @@
   box-shadow: 0 6px 16px color-mix(in srgb, var(--ca-accent) 35%, transparent);
   filter: brightness(1.08);
 }
+
+/* ── Apps Marketplace Additions ─────────────────────────────── */
+.apps-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.apps-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #a0a0a0);
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: all 0.2s ease;
+}
+
+.apps-tab-btn:hover {
+  color: var(--text-primary, #fff);
+  background: rgba(255,255,255,0.04);
+}
+
+.apps-tab-btn.active {
+  color: #fff;
+  background: var(--bg-surface, rgba(255,255,255,0.08));
+  border-color: var(--border-color, rgba(255,255,255,0.12));
+}
+
+.apps-categories-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 14px;
+  scrollbar-width: thin;
+}
+
+.apps-cat-pill {
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.apps-cat-pill:hover, .apps-cat-pill.active {
+  background: var(--shiba-gold, #E8A317);
+  color: #000;
+  border-color: var(--shiba-gold, #E8A317);
+  font-weight: 600;
+}
+
+.app-trust-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.app-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin-top: 2px;
+}
+
+.app-trust-badge--official {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.app-trust-badge--verified {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.app-trust-badge--community {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.app-trust-badge--custom {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.app-cap-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-secondary, #aaa);
+  margin-right: 4px;
+  margin-bottom: 4px;
+}
+
+.app-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 12px 0;
+  padding-right: 6px;
+}
+
+.app-tool-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.app-advanced-drawer {
+  margin-top: 14px;
+  padding: 10px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.76rem;
+  color: var(--text-secondary, #888);
+}

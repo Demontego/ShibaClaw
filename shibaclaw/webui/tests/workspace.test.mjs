@@ -24,7 +24,6 @@ test('workspace routes reuse the original panels and expose exactly one active p
         assert.equal(selected.length, 1);
         assert.equal(selected[0].dataset.workspacePage, page);
         assert.equal(nodes['workspace-library-tabs'].hidden, page !== 'library');
-        assert.equal(nodes['workspace-app-actions'].hidden, page !== 'apps');
         assert.equal(nodes['workspace-evolve-actions'].hidden, page !== 'evolution');
         assert.equal(nodes['workspace-agents'].hidden, true);
         assert.equal(nodes['workspace-page-heading'].textContent, app.t(`workspace.${page}`));
