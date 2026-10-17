@@ -204,7 +204,7 @@ def test_user_data_directory_cannot_overlap_install_root(run_installer, relation
     assert_success(run_installer(r'''
 $env:HOME = Join-Path $args[1] 'different home'
 $env:USERPROFILE = Join-Path $args[1] 'different profile'
-$dataPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.shibaclaw'
+$dataPath = Join-Path $env:USERPROFILE '.shibaclaw'
 $caught = $null
 ''' + "try { Install-ShibaClawSetup -Destination " + destination + r''' } catch { $caught = $_ }
 if ($null -eq $caught) { throw 'Data directory was accepted as the uninstallable application root' }
