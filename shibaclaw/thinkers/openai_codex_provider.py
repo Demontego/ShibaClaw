@@ -21,9 +21,9 @@ DEFAULT_ORIGINATOR = "shibaclaw"
 
 
 def _get_codex_token():
-    from oauth_cli_kit import get_token
+    from shibaclaw.security.codex_oauth import get_codex_token
 
-    return get_token()
+    return get_codex_token()
 
 
 class OpenAICodexThinker(Thinker):

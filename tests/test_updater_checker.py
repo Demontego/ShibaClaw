@@ -124,7 +124,8 @@ def test_check_exe_uses_release_assets(monkeypatch):
     assert result["update_available"] is True
     assert result["download_url"].endswith("ShibaClaw-windows.zip")
     assert result["manifest_url"].endswith("update_manifest.json")
-    assert result["action_kind"] == "automatic"
+    assert result["action_kind"] == "manual-url"
+    assert result["action_url"].endswith("ShibaClaw-Setup.exe")
     assert result["notification"]["category"] == "update"
 
 

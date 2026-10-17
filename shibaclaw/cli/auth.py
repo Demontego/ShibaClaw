@@ -23,9 +23,9 @@ def _is_oauth_authenticated(spec) -> bool:
         if os.path.exists(codex_path):
             return True
         try:
-            from oauth_cli_kit import get_token
+            from shibaclaw.security.codex_oauth import get_codex_token
 
-            token = get_token()
+            token = get_codex_token()
             return bool(token and getattr(token, "access", None))
         except Exception:
             return False
@@ -63,9 +63,9 @@ def _oauth_provider_status(spec) -> str:
     """Return status string for OAuth providers."""
     if spec.name == "openai_codex":
         try:
-            from oauth_cli_kit import get_token
+            from shibaclaw.security.codex_oauth import get_codex_token
 
-            token = get_token()
+            token = get_codex_token()
             if token and getattr(token, "access", None):
                 return "[green]✓ (OAuth authenticated)[/green]"
             return "[dim]not authenticated[/dim]"
@@ -157,11 +157,12 @@ def provider_logout(provider: str):
 @register_login("openai_codex")
 def _login_openai_codex() -> None:
     try:
-        from oauth_cli_kit import get_token, login_oauth_interactive
+        from oauth_cli_kit import login_oauth_interactive
+        from shibaclaw.security.codex_oauth import allow_codex_login, get_codex_token
 
         token = None
         try:
-            token = get_token()
+            token = get_codex_token()
         except Exception:
             pass
 
@@ -174,6 +175,7 @@ def _login_openai_codex() -> None:
         if not (token and token.access):
             get_console().print("[red]✗ Authentication failed[/red]")
             raise typer.Exit(1)
+        allow_codex_login()
         get_console().print(
             f"[green]✓ Authenticated with OpenAI Codex[/green]  [dim]{token.account_id}[/dim]"
         )

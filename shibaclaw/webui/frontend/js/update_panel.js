@@ -58,7 +58,7 @@ function _renderUpdateActionSection(data) {
     if (data.update_available && data.action_kind === "automatic") {
         buttons.push(`
             <button class="btn-primary" onclick="runUpdateAction()" ${_updateState.busy ? "disabled" : ""}>
-                <span class="material-icons-round" style="font-size:14px;vertical-align:middle">system_update</span> Install update
+                <span class="material-icons-round" style="font-size:14px;vertical-align:middle">system_update</span> ${data.managed_install ? (data.ready_to_restart ? "Restart to update" : "Download update") : "Install update"}
             </button>`);
     }
     if (actionUrl) {
@@ -103,13 +103,17 @@ window.runUpdateAction = async function () {
     if (!panel || !update || _updateState.busy) return;
     if (update.action_kind !== "automatic") return;
 
-    const confirmed = await shibaDialog(
-        "confirm",
-        "Apply update?",
-        "ShibaClaw will restart after a successful update.",
-        { confirmText: "Update" }
-    );
-    if (!confirmed) return;
+    const isManaged = update.install_method === "exe" && update.managed_install;
+    const phase = isManaged && update.ready_to_restart ? "restart" : "download";
+    if (!isManaged || phase === "restart") {
+        const confirmed = await shibaDialog(
+            "confirm",
+            isManaged ? "Restart to install update?" : "Apply update?",
+            isManaged ? "ShibaClaw will close and reopen to install the downloaded update. Your data will be preserved." : "ShibaClaw will restart after a successful update.",
+            { confirmText: isManaged ? "Restart" : "Update" }
+        );
+        if (!confirmed) return;
+    }
 
     _updateState.busy = true;
     const isPip = update.install_method === "pip";
@@ -121,7 +125,7 @@ window.runUpdateAction = async function () {
             </div>
             <div class="update-progress-container">
                 <div class="update-progress-header">
-                    <span class="update-progress-title">${isPip ? "Installing Update via pip" : "Downloading Update"}</span>
+                    <span class="update-progress-title">${isPip ? "Installing Update via pip" : phase === "restart" ? "Preparing restart" : "Downloading Update"}</span>
                     ${isPip ? "" : '<span class="update-progress-percent" id="update-progress-percent">0%</span>'}
                 </div>
                 <div class="update-progress-track ${isPip ? "indeterminate" : ""}">
@@ -135,7 +139,7 @@ window.runUpdateAction = async function () {
         const res = await authFetch("/api/update/apply", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ update, manifest: _updateState.manifest }),
+            body: JSON.stringify({ update: { ...update, phase }, manifest: _updateState.manifest }),
         });
         const report = await res.json();
         if (!res.ok || report.error) {
@@ -146,11 +150,16 @@ window.runUpdateAction = async function () {
         const output = (report.pip && report.pip.output) || (report.exe && report.exe.output) || "";
         const installerOutput = (!ok && output) ? escapeHtml(output) : "";
         const message = escapeHtml(report.message || "Update complete.");
+        if (ok && report.ready_to_restart) {
+            update.ready_to_restart = true;
+        }
         const icon = ok ? "check_circle" : "error_outline";
         const color = ok ? "var(--accent-green)" : "var(--accent-red)";
         const footer = report.restarting
             ? '<div class="update-meta">Restarting ShibaClaw now...</div>'
-            : '<div class="update-meta"><button class="btn-link" onclick="loadUpdatePanel(true)">Refresh status</button></div>';
+            : report.ready_to_restart
+                ? '<div class="update-actions"><button class="btn-primary" onclick="runUpdateAction()">Restart to update</button><button class="btn-link" onclick="loadUpdatePanel(true)">Later</button></div>'
+                : '<div class="update-meta"><button class="btn-link" onclick="loadUpdatePanel(true)">Refresh status</button></div>';
 
         panel.innerHTML = `
             <div class="update-available">
@@ -171,10 +180,10 @@ window.runUpdateAction = async function () {
                     </div>
                     <div class="update-progress-container">
                         <div class="update-progress-header">
-                            <span class="update-progress-title">Update in Progress</span>
+                            <span class="update-progress-title">Connection interrupted</span>
                         </div>
                         <div class="update-progress-status" style="white-space:normal;line-height:1.4">
-                            The installation is taking a while or the server is restarting. The update is continuing in the background. Please wait a moment and then check the status.
+                            ShibaClaw may be restarting, or the connection was interrupted. Check the update status before trying again.
                         </div>
                         <div class="update-meta" style="margin-top:12px">
                             <button class="btn-primary" onclick="loadUpdatePanel(true)">Refresh status</button>
@@ -232,7 +241,9 @@ async function loadUpdatePanel(force = false) {
             ? (typeof t === "function" ? t("update.available") : "Update available.")
             : (typeof t === "function" ? t("update.up_to_date") : "You're up to date.")));
 
-        let manifestSection = "";
+        let manifestSection = data.release_notes
+            ? _renderUpdateManifestSection({ release_notes: data.release_notes }, [])
+            : "";
         if (data.manifest_url && data.update_available) {
             _updateState.manifestUrl = data.manifest_url;
             try {

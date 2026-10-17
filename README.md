@@ -10,8 +10,8 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://img.shields.io/badge/Ask-DeepWiki-4C6EF5?style=flat-square" alt="Ask DeepWiki"></a>
 </p>
 
 <p align="center">
@@ -91,13 +91,15 @@ One command downloads the latest release, sets up shortcuts, and launches the UI
 irm https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | iex
 ```
 
+Or download and open **[ShibaClaw-Setup.exe](https://github.com/RikyZ90/ShibaClaw/releases/latest/download/ShibaClaw-Setup.exe)**. The PowerShell command downloads the same setup, verifies its SHA256 against the GitHub release asset digest, and starts it.
+
 **🐧 Linux / 🍎 macOS:**
 ```bash
 curl -fsSL https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.sh | bash
 ```
 
 > [!NOTE]
-> On Windows this downloads the pre-built desktop app from the latest GitHub release — no Python required, with Desktop/Start Menu shortcuts and clean uninstall via Apps & Features. On Linux/macOS the script installs via pip in an isolated virtual environment.
+> On Windows the setup installs the bundled desktop app for your user in `%LocalAppData%\ShibaClaw` — no Python required. Existing data in `%USERPROFILE%\.shibaclaw` is preserved. Installed desktop updates use **Download update**, then **Restart to update** when you are ready. Uninstall through Windows Settings; personal data is retained. The portable ZIP remains available as an advanced option, with manual updates. On Linux/macOS the script installs via pip in an isolated virtual environment. See [Windows installation and local packaging](docs/WINDOWS_INSTALLATION.md).
 
 ### Docker
 

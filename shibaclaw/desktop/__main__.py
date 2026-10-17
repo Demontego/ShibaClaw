@@ -16,9 +16,6 @@ if sys.platform == "win32":
     except (AttributeError, io.UnsupportedOperation):
         pass
 
-from shibaclaw.helpers.logging import setup_shiba_logging
-
-
 def _show_startup_error(message: str) -> None:
     """Show a visible startup error, even for GUI script launches on Windows."""
     if sys.platform == "win32":
@@ -40,6 +37,12 @@ def _show_startup_error(message: str) -> None:
 def main() -> None:
     import multiprocessing
     multiprocessing.freeze_support()
+
+    is_cli = len(sys.argv) >= 2 and sys.argv[1] in {"gateway", "-m", "--verify-desktop"}
+    if not is_cli:
+        from shibaclaw.desktop.windows_install import run_startup_hooks
+
+        run_startup_hooks()
 
     # Intercept subprocess calls (e.g. gateway) when bundled by PyInstaller
     if len(sys.argv) >= 2 and sys.argv[1] == "--verify-desktop":
@@ -63,6 +66,8 @@ def main() -> None:
         from shibaclaw.cli.commands import app
         sys.argv = [sys.argv[0]] + sys.argv[1:]
         sys.exit(app())
+
+    from shibaclaw.helpers.logging import setup_shiba_logging
 
     setup_shiba_logging()
     try:

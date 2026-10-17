@@ -268,12 +268,6 @@
         window.refreshWorkspaceAgents();
     };
 
-    window.openWorkspaceTools = async function (extensions) {
-        await window.openSettingsView();
-        window.switchSettingsTab(extensions ? "extensions" : "tools");
-        if (extensions) window.switchExtensionsSubTab("mcp");
-    };
-
     let _libraryMode = "graph";
 
     function applyLibraryMode(next = page) {

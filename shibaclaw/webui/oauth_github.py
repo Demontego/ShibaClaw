@@ -484,6 +484,10 @@ async def start_codex_oauth(job_id: str, jobs: dict):
                         f,
                     )
 
+                from shibaclaw.security.codex_oauth import allow_codex_login
+
+                allow_codex_login()
+
                 jobs[job_id]["status"] = "done"
                 account = getattr(token, "account_id", "unknown")
                 jobs[job_id]["logs"].append(f"✅ Authenticated with OpenAI Codex ({account})")

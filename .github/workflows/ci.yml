@@ -32,6 +32,21 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    name: Frontend Tests and Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+        working-directory: shibaclaw/webui
+      - run: npm test
+        working-directory: shibaclaw/webui
+      - run: npm run build
+        working-directory: shibaclaw/webui
+
   test:
     name: Run Tests and Linters
     runs-on: ubuntu-latest
@@ -51,6 +66,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --frozen --all-packages --extra dev
+
+      - name: Verify packaged application versions
+        run: uv run python scripts/verify_release.py
 
       - name: Lint with Ruff
         run: uv run ruff check .
@@ -75,6 +93,14 @@ jobs:
       - name: Install dependencies (desktop + dev)
         shell: bash
         run: uv sync --frozen --all-packages --extra dev --extra desktop --extra windows-native
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
       - name: Smoke-test desktop imports
         run: >
@@ -105,3 +131,24 @@ jobs:
           if ($proc.ExitCode -ne 0) {
             throw "ShibaClaw.exe gateway --help failed with exit code $($proc.ExitCode)"
           }
+
+          $proc = Start-Process -FilePath "dist/ShibaClaw/ShibaClaw.exe" -ArgumentList "--verify-desktop" -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 0) {
+            throw "ShibaClaw.exe desktop dependency verification failed with exit code $($proc.ExitCode)"
+          }
+
+      - name: Build Windows setup and validate update feed
+        run: uv run python scripts/package_windows.py --install-tool
+
+      - name: Keep Windows setup for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShibaClaw-windows-setup-ci
+          path: |
+            dist/windows-setup/ShibaClaw-Setup.exe
+            dist/windows-setup/*-full.nupkg
+            dist/windows-setup/releases.win.json
+            dist/windows-setup/SHA256SUMS
+            dist/ShibaClaw-windows.zip
+          if-no-files-found: error
+          retention-days: 7

@@ -11,14 +11,13 @@ from typing import Any, Callable
 
 import re
 
-import httpx
 from loguru import logger
 
 from shibaclaw.updater.detector import PYPI_PACKAGE, get_installation_method
 from shibaclaw.updater.manifest import normalize_manifest_path
 
 VERSION_PATTERN = re.compile(r"^[a-zA-Z0-9.\-_]+$")
-INSTALLER_URL = "https://raw.githubusercontent.com/RikyZ90/ShibaClaw/main/scripts/install/install.ps1"
+INSTALLER_URL = "https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1"
 
 
 def _old_dir(workspace_root: Path, new_version: str) -> Path:
@@ -27,36 +26,6 @@ def _old_dir(workspace_root: Path, new_version: str) -> Path:
     folder = workspace_root / "_old" / f"{date_str}_{new_version}"
     folder.mkdir(parents=True, exist_ok=True)
     return folder
-
-
-def _get_exe_install_dir() -> Path | None:
-    """Return the .shibaclaw install root by walking up from sys.executable.
-
-    Expected layout:  <install_dir>/.shibaclaw/app/ShibaClaw/ShibaClaw.exe
-    We walk upward from the exe directory looking for a parent whose name is
-    '.shibaclaw'.  If not found we fall back to $HOME/.shibaclaw so that
-    install.ps1 always receives an explicit -InstallDir argument.
-    """
-    try:
-        exe_path = Path(sys.executable).resolve()
-        # Walk up at most 6 levels to find a directory named ".shibaclaw"
-        candidate = exe_path.parent
-        for _ in range(6):
-            if candidate.name.lower() == ".shibaclaw":
-                return candidate
-            parent = candidate.parent
-            if parent == candidate:
-                break
-            candidate = parent
-    except Exception as _e:
-        logger.warning("Ignored error while searching for install dir: {}", _e)
-
-    # Fallback: use the standard default location
-    try:
-        return Path.home() / ".shibaclaw"
-    except Exception as _e:
-        logger.warning("Fallback install dir failed: {}", _e)
-        return None
 
 
 def _pip_upgrade(version: str | None) -> dict[str, Any]:
@@ -103,104 +72,6 @@ def _pip_upgrade(version: str | None) -> dict[str, Any]:
         "output": result.stdout + result.stderr,
         "command": " ".join(cmd),
     }
-
-
-def _exe_upgrade(
-    version: str,
-    download_url: str,
-    progress_cb: Callable[[int, int], None] | None = None,
-) -> dict[str, Any]:
-    import tempfile
-    from shibaclaw.config.paths import get_runtime_root
-
-    if not download_url:
-        return {"ok": False, "output": "No download URL provided."}
-
-    temp_ps1 = Path(tempfile.gettempdir()) / f"shibaclaw_install_{version}.ps1"
-    zip_path = Path(tempfile.gettempdir()) / f"shibaclaw_release_{version}.zip"
-
-    downloaded = False
-    try:
-        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
-            # Download installer script
-            try:
-                response = client.get(INSTALLER_URL)
-                response.raise_for_status()
-                temp_ps1.write_text(response.text, encoding="utf-8")
-                downloaded = True
-            except Exception as _e:
-                logger.warning("Failed to download install.ps1, will try fallback: {}", _e)
-
-            if not downloaded:
-                bundled_ps1 = get_runtime_root() / "scripts" / "install" / "install.ps1"
-                if bundled_ps1.exists():
-                    try:
-                        shutil.copy2(bundled_ps1, temp_ps1)
-                        downloaded = True
-                    except Exception as _e:
-                        logger.warning("Failed to copy bundled install.ps1: {}", _e)
-
-            if not downloaded:
-                return {"ok": False, "output": "Could not download or locate install.ps1 script."}
-
-            # Download update package
-            with client.stream("GET", download_url) as response:
-                response.raise_for_status()
-                total = int(response.headers.get("content-length", 0))
-                current = 0
-                with open(zip_path, "wb") as f:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        f.write(chunk)
-                        current += len(chunk)
-                        if progress_cb:
-                            try:
-                                progress_cb(current, total)
-                            except Exception as _e:
-                                logger.warning("Progress callback failed: {}", _e)
-    except Exception as exc:
-        if zip_path.exists():
-            try:
-                zip_path.unlink()
-            except Exception as _e:
-                logger.warning("Failed to clean up incomplete zip: {}", _e)
-        return {"ok": False, "output": f"Failed to download update package: {exc}"}
-
-    # Resolve install_dir robustly — always pass it explicitly to the PS1 script
-    install_dir = _get_exe_install_dir()
-    install_dir_str = str(install_dir) if install_dir else ""
-
-    try:
-        cmd = [
-            "powershell.exe",
-            "-WindowStyle", "Hidden",
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", str(temp_ps1),
-            "-Version", version,
-            "-LocalZipPath", str(zip_path),
-        ]
-
-        if install_dir_str:
-            cmd.extend(["-InstallDir", install_dir_str])
-
-        kwargs: dict[str, Any] = {"cwd": tempfile.gettempdir()}
-        if sys.platform == "win32":
-            create_no_window = 0x08000000
-            create_new_process_group = 0x00000200
-            kwargs["creationflags"] = create_no_window | create_new_process_group
-
-        subprocess.Popen(cmd, **kwargs)
-
-        logger.info(
-            "exe updater: launched installer for v{} | install_dir={} | cmd={}",
-            version,
-            install_dir_str or "(not passed)",
-            " ".join(cmd),
-        )
-
-        return {"ok": True, "output": "Installer script launched successfully."}
-    except Exception as exc:
-        return {"ok": False, "output": f"Failed to launch installer: {exc}"}
 
 
 def _backup_personal_files(
@@ -300,6 +171,8 @@ def apply_update(
 ) -> dict[str, Any]:
     """Apply an update or return a manual-action report for non-pip/non-exe installs."""
     normalized = _normalize_update_request(update_info, manifest)
+    if get_installation_method() == "exe":
+        normalized["install_method"] = "exe"
     install_method = normalized["install_method"]
     version = normalized.get("latest") or (manifest or {}).get("version") or "unknown"
 
@@ -322,13 +195,47 @@ def apply_update(
     if install_method not in ("pip", "exe") or normalized.get("action_kind") != "automatic":
         return _manual_report(normalized, version)
 
-    backup = _backup_personal_files(manifest, workspace_root, version)
-
     if install_method == "exe":
-        download_url = normalized.get("action_url") or normalized.get("download_url")
-        apply_result = _exe_upgrade(version, download_url, progress_cb)
-    else:
-        apply_result = _pip_upgrade(version)
+        from shibaclaw.desktop.windows_install import (
+            SETUP_URL, download_managed_update, get_managed_install_root, prepare_managed_restart,
+        )
+
+        # Portable/legacy executables never replace themselves or execute a
+        # client-provided URL. Migration uses the same setup as a fresh install.
+        if get_managed_install_root() is None:
+            return _manual_report({
+                **normalized,
+                "action_kind": "manual-url",
+                "action_command": None,
+                "action_url": SETUP_URL,
+                "action_label": "Download Windows setup",
+                "summary": "Install the Windows setup to enable managed updates. Your existing data is preserved.",
+            }, version)
+        phase = normalized.get("phase", "download")
+        if phase == "download":
+            apply_result = download_managed_update(version, progress_cb)
+        elif phase == "restart":
+            apply_result = prepare_managed_restart(version)
+        else:
+            apply_result = {"ok": False, "output": "Invalid desktop update phase."}
+        if apply_result.get("ok"):
+            from shibaclaw.updater.checker import invalidate_cache
+            invalidate_cache()
+        return {
+            "install_method": "exe",
+            "version": version,
+            "requires_manual_action": False,
+            "restarting": False,
+            "ready_to_restart": bool(apply_result.get("ready_to_restart")),
+            "action_kind": "automatic",
+            "message": apply_result.get("output", "Desktop update failed."),
+            "pip": None,
+            "exe": apply_result,
+            "backup": {"moved": [], "skipped": []},
+        }
+
+    backup = _backup_personal_files(manifest, workspace_root, version)
+    apply_result = _pip_upgrade(version)
 
     message = (
         f"Updated ShibaClaw to {version}."

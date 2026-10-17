@@ -371,6 +371,10 @@ class Config(BaseSettings):
         default_factory=ConnectedAppsConfig,
         description="Connected Apps state — app OAuth status and Klavis Strata session metadata.",
     )
+    apps: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Installed Apps marketplace state and metadata.",
+    )
 
     @property
     def workspace_path(self) -> Path:

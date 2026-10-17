@@ -1,4 +1,4 @@
-"""Build the portable Windows desktop bundle with PyInstaller."""
+"""Build the Windows desktop onedir bundle with PyInstaller."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _check_build_environment() -> None:
         raise SystemExit(
             "Missing desktop build dependencies: "
             + ", ".join(missing)
-            + ". Install them with: pip install -e \".[windows-native,dev,rag]\""
+            + ". Install them with: uv sync --extra desktop --extra windows-native --extra dev --extra rag"
         )
 
 
@@ -53,17 +53,15 @@ def _build_frontend() -> None:
     webui_dir = ROOT / "shibaclaw" / "webui"
     if (webui_dir / "build.mjs").exists():
         print("Building WebUI frontend assets...")
-        import shutil
         if not shutil.which("node"):
-            print("Warning: Node.js not found in PATH. Skipping frontend build. Ensure static assets are pre-built.")
-            return
-        try:
-            # On Windows, npm needs shell=True
-            if not (webui_dir / "node_modules").exists():
-                subprocess.run(["npm", "install"], check=True, cwd=webui_dir, shell=True)
-            subprocess.run(["node", "build.mjs"], check=True, cwd=webui_dir)
-        except Exception as e:
-            print(f"Warning: Frontend build failed: {e}")
+            raise SystemExit("Node.js is required to build the Windows frontend assets.")
+        if not (webui_dir / "node_modules").exists():
+            npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
+            if not npm:
+                raise SystemExit("npm is required to install the frontend build dependencies.")
+            subprocess.run([npm, "ci"], check=True, cwd=webui_dir)
+        subprocess.run(["node", "build.mjs"], check=True, cwd=webui_dir)
+
 
 def main() -> None:
     _check_build_environment()

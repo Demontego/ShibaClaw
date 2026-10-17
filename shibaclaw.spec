@@ -69,6 +69,7 @@ if _ico.exists():
 datas += collect_data_files("webview")
 datas += collect_data_files("clr_loader")
 datas += collect_data_files("pythonnet")
+datas += collect_data_files("velopack")
 
 # ---------------------------------------------------------------------------
 # Hidden imports that PyInstaller's static analysis misses
@@ -118,6 +119,8 @@ hiddenimports = [
     "webview.platforms.winforms",
     "pystray",
     "pystray._win32",
+    "velopack",
+    "velopack.velopack",
     "PIL",
     "PIL.Image",
     "pythoncom",
@@ -155,6 +158,7 @@ binaries = []
 binaries += collect_dynamic_libs("webview")
 binaries += collect_dynamic_libs("clr_loader")
 binaries += collect_dynamic_libs("pythonnet")
+binaries += collect_dynamic_libs("velopack")
 
 # ---------------------------------------------------------------------------
 # Analysis

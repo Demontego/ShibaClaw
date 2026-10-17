@@ -412,7 +412,7 @@ class GatewayClient:
                 auth_hdr = f"Authorization: Bearer {self._token}\r\n" if self._token else ""
                 writer.write(
                     (
-                        f"POST /api/chat HTTP/1.1\r\n"
+                        f"POST /api/chat HTTP/1.0\r\n"
                         f"Host: gw\r\n"
                         f"Content-Type: application/json\r\n"
                         f"Content-Length: {len(body)}\r\n"
@@ -422,11 +422,26 @@ class GatewayClient:
                 )
                 await writer.drain()
 
+                status_line = await asyncio.wait_for(reader.readline(), timeout=30)
+                try:
+                    status = int(status_line.split()[1])
+                except (IndexError, ValueError) as exc:
+                    raise ConnectionError("Invalid gateway HTTP response") from exc
                 while True:
                     line = await asyncio.wait_for(reader.readline(), timeout=30)
                     if line in (b"\r\n", b"\n", b""):
                         break
 
+                if status != 200:
+                    raw_error = await asyncio.wait_for(reader.read(4096), timeout=30)
+                    try:
+                        detail = json.loads(raw_error).get("error", "")
+                    except (ValueError, AttributeError):
+                        detail = ""
+                    yield {"t": "e", "error": f"Gateway HTTP {status}: {detail or 'request failed'}"}
+                    return
+
+                saw_result = False
                 while True:
                     line = await asyncio.wait_for(reader.readline(), timeout=600)
                     if not line:
@@ -434,7 +449,15 @@ class GatewayClient:
                     line = line.strip()
                     if not line:
                         continue
-                    yield json.loads(line)
+                    event = json.loads(line)
+                    if event.get("t") not in {"p", "i", "rt", "r", "e"}:
+                        yield {"t": "e", "error": "Invalid gateway chat response"}
+                        return
+                    if event["t"] in {"r", "e"}:
+                        saw_result = True
+                    yield event
+                if not saw_result:
+                    yield {"t": "e", "error": "Gateway chat stream ended without a response"}
                 return
             except GeneratorExit:
                 return

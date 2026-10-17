@@ -186,7 +186,12 @@ class CredentialManager:
                 except Exception:
                     pass
         except Exception as exc:
+            # Callers must not report a successful credential change when the
+            # old vault remains on disk. Mutations may already affect _cache.
+            self._cache = {}
+            self._cache_mtime = None
             logger.error("CredentialManager: failed to save store: {}", exc)
+            raise
 
     # ------------------------------------------------------------------
     # Admin user management

@@ -1,6 +1,6 @@
 /**
- * Connected Apps — real service grid with Klavis as invisible backend gateway.
- * Settings > Connected Apps
+ * Connected Apps — unified marketplace bridge.
+ * Settings > Connected Apps / Workspace > Apps
  */
 
 (function () {
@@ -71,12 +71,12 @@
   window.loadConnectedAppsPanel = async function () {
     const container = document.getElementById('connected-apps-container');
     if (!container) return;
-    container.innerHTML = `<div class="ca-loading">${escapeHtml(typeof t === "function" ? t("common.loading") : "Loading\u2026")}</div>`;
-    await Promise.all([_loadApps(), _loadBackend()]);
-    _renderPanel(container);
+    if (typeof window.loadAppsMarketplace === 'function') {
+      return window.loadAppsMarketplace(container);
+    }
+    container.innerHTML = `<div class="ca-loading">Loading Apps…</div>`;
   };
 
-  /* ── auto-hook modal opens ──────────────────────────────────────── */
   document.addEventListener('shiba-modal-opened', function (e) {
     if (e.detail && e.detail.id === 'connected-apps-modal') {
       if (typeof window.loadConnectedAppsPanel === 'function') {

@@ -1,0 +1,265 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-10-17T08:00:00Z",
+  "apps": [
+    {
+      "id": "google-workspace",
+      "name": "Google Workspace",
+      "description": "Access Gmail, Calendar, and Google Drive directly within ShibaClaw.",
+      "icon": "workspaces",
+      "category": "productivity",
+      "source": "curated",
+      "runtime_type": "mcp_remote",
+      "trust_level": "verified",
+      "version": "1.2.0",
+      "capabilities": ["Gmail", "Google Calendar", "Google Drive"],
+      "auth": {
+        "type": "oauth2",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/gmail.modify",
+          "https://www.googleapis.com/auth/calendar",
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "requires_client_credentials": true,
+        "fields": [
+          {
+            "key": "client_id",
+            "label": "Google Client ID",
+            "type": "text",
+            "required": true,
+            "placeholder": "your-client-id.apps.googleusercontent.com",
+            "help_text": "OAuth 2.0 Client ID from Google Cloud Console"
+          },
+          {
+            "key": "client_secret",
+            "label": "Google Client Secret",
+            "type": "password",
+            "required": true,
+            "placeholder": "••••••••••••••••",
+            "help_text": "OAuth 2.0 Client Secret from Google Cloud Console"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "streamableHttp",
+        "url": "https://mcp.workspace.google.com/mcp"
+      }
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "description": "Repositories, Issues, Pull Requests, and code search.",
+      "icon": "code",
+      "category": "development",
+      "source": "curated",
+      "runtime_type": "mcp_remote",
+      "trust_level": "official",
+      "version": "1.4.0",
+      "capabilities": ["Repositories", "Issues", "Pull Requests", "Code Search"],
+      "auth": {
+        "type": "api_key",
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "GitHub Personal Access Token",
+            "type": "password",
+            "required": true,
+            "placeholder": "ghp_••••••••••••••••••••••••••••••••••••",
+            "help_text": "Token with repo and read:org permissions"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "streamableHttp",
+        "url": "https://api.githubcopilot.com/mcp"
+      }
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "description": "Read, write, and search pages and databases in Notion.",
+      "icon": "description",
+      "category": "productivity",
+      "source": "curated",
+      "runtime_type": "mcp_remote",
+      "trust_level": "verified",
+      "version": "1.1.0",
+      "capabilities": ["Pages", "Databases", "Workspace Search"],
+      "auth": {
+        "type": "api_key",
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "Notion Integration Secret",
+            "type": "password",
+            "required": true,
+            "placeholder": "secret_••••••••••••••••••••••••••••••••••••",
+            "help_text": "Internal Integration Secret from Notion Developers portal"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "streamableHttp",
+        "url": "https://mcp.notion.com/mcp"
+      }
+    },
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL",
+      "description": "Inspect database schemas, query tables, and analyze SQL data.",
+      "icon": "storage",
+      "category": "databases",
+      "source": "curated",
+      "runtime_type": "mcp_local",
+      "trust_level": "official",
+      "version": "0.6.2",
+      "capabilities": ["Query execution", "Schema inspection", "Table analysis"],
+      "auth": {
+        "type": "custom",
+        "fields": [
+          {
+            "key": "connection_string",
+            "label": "PostgreSQL Connection URI",
+            "type": "password",
+            "required": true,
+            "placeholder": "postgresql://user:password@localhost:5432/mydb",
+            "help_text": "Standard PostgreSQL connection URI"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-postgres"]
+      }
+    },
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "description": "WhatsApp messaging channel integration using Node.js bridge (Baileys).",
+      "icon": "chat",
+      "category": "communication",
+      "source": "curated",
+      "runtime_type": "native_plugin",
+      "trust_level": "official",
+      "version": "0.1.0",
+      "package_name": "shibaclaw-channel-whatsapp",
+      "capabilities": ["Incoming messages", "Outgoing messages", "Media attachments"],
+      "auth": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "supertonic-tts",
+      "name": "Supertonic TTS",
+      "description": "Ultra-fast local offline text-to-speech using Supertonic ONNX engine.",
+      "icon": "volume_up",
+      "category": "media",
+      "source": "curated",
+      "runtime_type": "native_plugin",
+      "trust_level": "official",
+      "version": "0.1.0",
+      "package_name": "shibaclaw-tts-supertonic",
+      "capabilities": ["Offline voice synthesis", "Multi-voice support", "Low latency"],
+      "auth": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "shibaclaw-rag",
+      "name": "RAG & Knowledge Base",
+      "description": "Semantic search and document uploading (PDF, CSV, HTML, TXT) via Hybrid RAG.",
+      "icon": "menu_book",
+      "category": "ai",
+      "source": "curated",
+      "runtime_type": "native_plugin",
+      "trust_level": "official",
+      "version": "1.0.0",
+      "package_name": "shibaclaw-rag",
+      "capabilities": ["Document ingestion", "Semantic search", "Vector retrieval"],
+      "auth": {
+        "type": "none"
+      }
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "description": "Post messages, read channels, and collaborate with teams in Slack.",
+      "icon": "forum",
+      "category": "communication",
+      "source": "curated",
+      "runtime_type": "mcp_remote",
+      "trust_level": "verified",
+      "version": "1.0.5",
+      "capabilities": ["Send messages", "Channel history", "User search"],
+      "auth": {
+        "type": "api_key",
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "Slack Bot Token",
+            "type": "password",
+            "required": true,
+            "placeholder": "xoxb-••••••••••••-••••••••••••",
+            "help_text": "OAuth bot token starting with xoxb-"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "streamableHttp",
+        "url": "https://mcp.slack.com/mcp"
+      }
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "description": "Web and local business search powered by the privacy-preserving Brave Search API.",
+      "icon": "travel_explore",
+      "category": "search",
+      "source": "curated",
+      "runtime_type": "mcp_remote",
+      "trust_level": "verified",
+      "version": "1.0.0",
+      "capabilities": ["Web search", "News search", "Local search"],
+      "auth": {
+        "type": "api_key",
+        "fields": [
+          {
+            "key": "api_key",
+            "label": "Brave Search API Key",
+            "type": "password",
+            "required": true,
+            "placeholder": "BSA••••••••••••••••••••••••••••••••",
+            "help_text": "API key from brave.com/search/api"
+          }
+        ]
+      },
+      "mcp_config": {
+        "type": "streamableHttp",
+        "url": "https://mcp.brave.com/search/v1"
+      }
+    },
+    {
+      "id": "filesystem",
+      "name": "Filesystem Access",
+      "description": "Safe directory inspection and file manipulation for the workspace.",
+      "icon": "folder_open",
+      "category": "development",
+      "source": "curated",
+      "runtime_type": "mcp_local",
+      "trust_level": "official",
+      "version": "0.6.0",
+      "capabilities": ["Read files", "List directories", "File edits"],
+      "auth": {
+        "type": "none"
+      },
+      "mcp_config": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+      }
+    }
+  ]
+}

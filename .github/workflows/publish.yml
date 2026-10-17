@@ -29,6 +29,15 @@ jobs:
             exit 1
           fi
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag and all packaged application versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/verify_release.py --tag "$RELEASE_TAG"
+
   # ── PyPI ────────────────────────────────────────────────────────────────────
   pypi:
     name: Publish to PyPI
@@ -57,7 +66,7 @@ jobs:
       - name: Build WebUI frontend
         run: |
           cd shibaclaw/webui
-          npm install
+          npm ci
           node build.mjs
 
       - name: Build package
@@ -124,16 +133,36 @@ jobs:
           name: ShibaClaw-windows-exe
           path: dist-windows/
 
-      - name: Publish GitHub release with update manifest and Windows exe
+      - name: Publish GitHub release with Windows setup, update feed and portable ZIP
+        id: windows_release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             shibaclaw/updater/update_manifest.json
             dist-windows/ShibaClaw-windows.zip
+            dist-windows/windows-setup/ShibaClaw-Setup.exe
+            dist-windows/windows-setup/*-full.nupkg
+            dist-windows/windows-setup/releases.win.json
+            dist-windows/windows-setup/SHA256SUMS
             scripts/install/install.ps1
             scripts/install/install.sh
           fail_on_unmatched_files: true
           generate_release_notes: true
+          draft: true
+
+      - name: Verify uploaded artifacts before publishing the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_ID: ${{ steps.windows_release.outputs.id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" | python scripts/verify_release_assets.py --tag "$RELEASE_TAG" --checksums dist-windows/windows-setup/SHA256SUMS
+
+      - name: Publish the complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.windows_release.outputs.id }}
+        run: gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false > /dev/null
 
   # ── Windows .exe (PyInstaller onedir) ───────────────────────────────────────
   windows-exe:
@@ -151,6 +180,14 @@ jobs:
         with:
           python-version: "3.14"
           enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
       - name: Install dependencies (desktop + dev)
         shell: bash
@@ -181,13 +218,22 @@ jobs:
         shell: pwsh
         run: Get-ChildItem dist/ShibaClaw -Recurse -Include '*.dll','*.exe' | Unblock-File
 
-      - name: Zip artifact
-        shell: pwsh
-        run: Compress-Archive -Path dist/ShibaClaw -DestinationPath dist/ShibaClaw-windows.zip
+      - name: Package Windows setup, Velopack feed and legacy portable ZIP
+        run: uv run python scripts/package_windows.py --install-tool
+        # Optional signing uses Velopack's existing VPK_SIGN_PARAMS or
+        # VPK_SIGN_TEMPLATE environment configuration. Without a configured
+        # signing identity this produces unsigned artifacts; SHA256 verifies
+        # download integrity, not a publisher signature.
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ShibaClaw-windows-exe
-          path: dist/ShibaClaw-windows.zip
+          path: |
+            dist/ShibaClaw-windows.zip
+            dist/windows-setup/ShibaClaw-Setup.exe
+            dist/windows-setup/*-full.nupkg
+            dist/windows-setup/releases.win.json
+            dist/windows-setup/SHA256SUMS
+          if-no-files-found: error
           retention-days: 7
