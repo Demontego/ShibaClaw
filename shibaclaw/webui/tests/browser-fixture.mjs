@@ -181,7 +181,7 @@ export function browserFixture({ stored = {}, dark = false } = {}) {
         $: id => document.getElementById(id),
         authFetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })),
         addEventListener() {},
-        realtime: { emit: (...args) => emissions.push(args) },
+        realtime: { emit: (...args) => emissions.push(args), on() {} },
         loadFs: async () => {},
         closeSettingsView: () => {},
         console, setTimeout, clearTimeout, setInterval, clearInterval,

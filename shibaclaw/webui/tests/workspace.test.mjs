@@ -140,7 +140,7 @@ test('Escape preserves context while a foreground dialog is active', async () =>
 test('appearance follows system changes and persists an explicit selection across reloads', () => {
     const { document, nodes, storage, systemTheme } = browserFixture({ dark: true });
     assert.equal(document.documentElement.dataset.theme, 'dark');
-    assert.equal(nodes['btn-theme-icon'].textContent, 'routine');
+    assert.equal(nodes['btn-theme-icon'].textContent, 'brightness_auto');
     systemTheme.matches = false;
     systemTheme.dispatchEvent({ type: 'change' });
     assert.equal(document.documentElement.dataset.theme, 'light');

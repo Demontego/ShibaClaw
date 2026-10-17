@@ -3336,6 +3336,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.14.0,<1.0.0" },
     { name = "typer", specifier = ">=0.27.3,<1.0.0" },
     { name = "uvicorn", specifier = ">=0.54.0,<1.0.0" },
+    { name = "velopack", marker = "sys_platform == 'win32' and extra == 'desktop'", specifier = "==1.2.161" },
     { name = "websockets", specifier = ">=16.1.1,<17.0" },
     { name = "wecom-aibot-sdk-python", marker = "extra == 'wecom'", specifier = ">=0.1.7" },
 ]

@@ -269,6 +269,7 @@ async def _install_plugin_source(package: str) -> JSONResponse:
         env["TMPDIR"] = str(custom_tmp)
         extra_kwargs["env"] = env
 
+    pip_base = _get_pip_cmd()
     if local_path.is_dir():
         install_target = str(local_path)
         cmd = pip_base + ["install", install_target]
