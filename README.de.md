@@ -10,8 +10,11 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License" height="20"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="20">
+</a>
 </p>
 
 <p align="center">
@@ -41,9 +44,11 @@
 > Versionshinweise finden sich in [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Neuigkeiten — v1.0.6</b> (zum Ausklappen klicken)</summary>
+<summary>🚀 <b>Neuigkeiten — v1.0.65</b> (zum Ausklappen klicken)</summary>
 
-**Version v1.0.6 (2026-10-16):**
+**Version v1.0.65 (2026-10-17):**
+
+- **Windows-Installation** — Der PowerShell-Befehl lädt das Setup für den aktuellen Benutzer herunter, prüft dessen SHA256 und startet es. Beim ersten Start bleibt das Fenster reaktionsfähig, während der lokale Dienst startet.
 
 - **Design von v1.0.3, Laufzeitverbesserungen wieder integriert** — Behält das ursprüngliche Oberflächendesign von v1.0.3 und integriert die Verbesserungen und Korrekturen außerhalb der UI aus v1.0.4/v1.0.5 erneut: Laufzeitzuverlässigkeit, Anbieter-Wiederholungen und Modellkataloge, Abonnement-OAuth, Automatisierungen, Subagenten und optionale Selbstevolution. Datenschutz, die exakte Hostprüfung für den Gemini-Modellkatalog und Sicherheitsupdates der Abhängigkeiten bleiben erhalten. Die spätere Neugestaltung der Oberfläche ist nicht enthalten.
 - **Gezielte Oberflächenkorrekturen** — Verlauf und Bedienelemente der Seitenleiste bleiben erreichbar; Einstellungen steht in der kompakten Fußleiste. Die Kontextanzeige ist die einzige barrierefrei beschriftete Kontextschaltfläche. Desktop und breitere Telefone verwenden eine Eingabeleiste; schmale Telefone verwenden zwei Zeilen mit 44px großen Touch-Flächen, einzeiligen Modellnamen und einer Kontextanzeige in Prozent. Modell-, Denkaufwand- und Sammlungsmenüs teilen das Design, folgen ihren Schaltflächen und bleiben im sichtbaren Bereich.

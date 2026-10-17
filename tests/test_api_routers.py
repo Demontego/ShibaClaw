@@ -199,6 +199,60 @@ def test_api_update_apply_returns_manual_report_without_restart(client):
     assert data["action_kind"] == "manual-command"
 
 
+def test_api_downloaded_desktop_update_does_not_shutdown(client):
+    report = {
+        "install_method": "exe", "version": "1.0.7", "ready_to_restart": True,
+        "exe": {"ok": True, "ready_to_restart": True}, "pip": None,
+        "message": "Downloaded; restart later.",
+    }
+    with patch("shibaclaw.updater.apply.apply_update", return_value=report), patch(
+        "shibaclaw.webui.routers.system.os._exit"
+    ) as exit_process, patch("shibaclaw.webui.routers.system._shutdown_callback") as shutdown:
+        response = client.post("/api/update/apply", json={"update": {
+            "install_method": "exe", "latest": "1.0.7", "phase": "download",
+        }})
+        assert response.status_code == 200
+        assert response.json()["ready_to_restart"]
+        assert response.json()["restarting"] is False
+        shutdown.assert_not_called()
+        exit_process.assert_not_called()
+
+
+def test_api_desktop_restart_waits_for_cleanup(client):
+    events = []
+
+    class Completion:
+        def wait(self, timeout):
+            events.append("cleanup-finished")
+            return True
+
+    def shutdown():
+        events.append("shutdown-requested")
+        return Completion()
+
+    report = {"exe": {"ok": True, "restart_required": True}, "pip": None}
+    with patch("shibaclaw.updater.apply.apply_update", return_value=report), patch(
+        "shibaclaw.webui.routers.system._shutdown_callback", shutdown
+    ), patch("shibaclaw.webui.routers.system.os._exit", side_effect=lambda code: events.append("exit")):
+        response = client.post("/api/update/apply", json={"update": {"phase": "restart"}})
+    assert response.json()["restarting"]
+    assert events == ["shutdown-requested", "cleanup-finished", "exit"]
+
+
+def test_api_desktop_restart_does_not_exit_after_failed_cleanup(client):
+    from unittest.mock import Mock
+
+    completion = Mock()
+    completion.wait.return_value = False
+    with patch("shibaclaw.updater.apply.apply_update", return_value={
+        "exe": {"ok": True, "restart_required": True}, "pip": None,
+    }), patch("shibaclaw.webui.routers.system._shutdown_callback", return_value=completion), patch(
+        "shibaclaw.webui.routers.system.os._exit"
+    ) as exit_process:
+        client.post("/api/update/apply", json={"update": {"phase": "restart"}})
+        exit_process.assert_not_called()
+
+
 def test_api_notifications_create_list_and_mark_read(client):
     response = client.post(
         "/api/v1/notifications",

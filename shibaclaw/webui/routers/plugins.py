@@ -248,6 +248,19 @@ async def _install_plugin_exe(package: str) -> JSONResponse:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
+def _get_pip_cmd() -> list[str]:
+    """Return command prefix for pip operations, supporting both standard pip and uv."""
+    try:
+        import pip  # noqa: F401
+        return [sys.executable, "-m", "pip"]
+    except ImportError:
+        pass
+    uv_bin = shutil.which("uv")
+    if uv_bin:
+        return [uv_bin, "pip"]
+    return [sys.executable, "-m", "pip"]
+
+
 async def _install_plugin_source(package: str) -> JSONResponse:
     workspace_root = Path(__file__).resolve().parent.parent.parent.parent
     local_path = workspace_root / "plugins" / package
@@ -264,23 +277,24 @@ async def _install_plugin_source(package: str) -> JSONResponse:
         env["TMPDIR"] = str(custom_tmp)
         extra_kwargs["env"] = env
 
+    pip_base = _get_pip_cmd()
     if package == "shibaclaw-rag":
         is_source = (workspace_root / "pyproject.toml").exists()
         if is_source:
-            cmd = [sys.executable, "-m", "pip", "install", "-e", ".[rag]"]
+            cmd = pip_base + ["install", "-e", ".[rag]"]
             extra_kwargs["cwd"] = str(workspace_root)
         else:
             target = f"shibaclaw[rag]=={__version__}" if __version__ != "dev" else "shibaclaw[rag]"
-            cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", target]
+            cmd = pip_base + ["install", "--no-cache-dir", target]
     elif local_path.is_dir():
         install_target = str(local_path)
-        cmd = [sys.executable, "-m", "pip", "install", install_target]
+        cmd = pip_base + ["install", install_target]
     else:
         # tag already computed at function top
         install_target = (
             f"git+https://github.com/RikyZ90/ShibaClaw.git@{tag}#subdirectory=plugins/{package}"
         )
-        cmd = [sys.executable, "-m", "pip", "install", install_target]
+        cmd = pip_base + ["install", install_target]
 
     logger.info("Installing plugin: {}", " ".join(cmd))
 
@@ -459,11 +473,9 @@ async def api_uninstall_plugin(request: Request) -> JSONResponse:
                 {"ok": False, "error": f"Failed to delete plugin folder: {str(e)}"}, status_code=500
             )
 
+    pip_base = _get_pip_cmd()
     if package == "shibaclaw-rag":
-        cmd = [
-            sys.executable,
-            "-m",
-            "pip",
+        cmd = pip_base + [
             "uninstall",
             "-y",
             "langchain",
@@ -477,7 +489,7 @@ async def api_uninstall_plugin(request: Request) -> JSONResponse:
             "beautifulsoup4",
         ]
     else:
-        cmd = [sys.executable, "-m", "pip", "uninstall", "-y", package]
+        cmd = pip_base + ["uninstall", "-y", package]
 
     logger.info("Uninstalling plugin: {}", " ".join(cmd))
 

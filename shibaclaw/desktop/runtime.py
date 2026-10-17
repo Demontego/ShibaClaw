@@ -58,50 +58,105 @@ class DesktopRuntime:
         self._server_mgr: Any | None = None  # ServerManager, imported lazily
         self._gateway_monitor: threading.Thread | None = None
         self._stopping = False
+        self._stop_requested = threading.Event()
+        self._cancel_event: threading.Event | None = None
+        self._lifecycle_lock = threading.RLock()
+        self._desktop_shutdown: Callable[[], Any] | None = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def start(self) -> None:
+    def start(
+        self,
+        on_progress: Callable[[str], None] | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
         """Bootstrap config, provider, gateway, and WebUI server."""
-        self._load_config()
-        self._start_gateway()
-        self._start_server()
+        with self._lifecycle_lock:
+            if self._server_mgr is not None:
+                return
+            self._stopping = False
+            self._stop_requested.clear()
+            self._cancel_event = cancel_event
+            try:
+                self._check_start_cancelled()
+                if on_progress:
+                    on_progress("Preparing your workspace…")
+                self._load_config()
+                self._check_start_cancelled()
+                self._resolve_webui_port()
+                self._check_start_cancelled()
+                if on_progress:
+                    on_progress("Starting the local AI service…")
+                self._start_gateway()
+                self._check_start_cancelled()
+                if on_progress:
+                    on_progress("Starting your workspace…")
+                self._start_server()
+                self._check_start_cancelled()
+            except BaseException:
+                self._stopping = True
+                try:
+                    self._stop_server()
+                finally:
+                    self._stop_gateway()
+                raise
 
     def wait_ready(self, timeout: float = 20.0) -> bool:
         """Block until the WebUI HTTP port is reachable (or timeout)."""
-        if self._server_mgr is None:
+        server = self._server_mgr
+        if server is None or self._stop_requested.is_set():
             return False
-        return self._server_mgr.wait_ready(timeout=timeout)
+        return server.wait_ready(timeout=timeout)
 
     def stop(self) -> None:
         """Shut down the WebUI server and gateway subprocess cleanly."""
+        # Signal before taking the lock so startup can leave its readiness loop.
         self._stopping = True
-        self._stop_server()
-        self._stop_gateway()
+        self._stop_requested.set()
+        with self._lifecycle_lock:
+            try:
+                self._stop_server()
+            finally:
+                self._stop_gateway()
 
     def restart_server(self) -> bool:
         """Stop then restart the WebUI server in place (no new process).
 
         Returns True when the server is reachable again after the restart.
         """
-        self._stop_server()
-        self._start_server()
-        return self.wait_ready(timeout=15.0)
+        with self._lifecycle_lock:
+            if self._stopping:
+                return False
+            self._stop_server()
+            self._start_server()
+            return self.wait_ready(timeout=15.0)
+
+    def set_desktop_shutdown(self, callback: Callable[[], Any]) -> None:
+        """Register the full desktop shutdown action before starting the server.
+
+        The action must return promptly; it may return a completion Event for
+        update code running outside the server event loop to wait on.
+        """
+        self._desktop_shutdown = callback
 
     def _restart_gateway(self, pre_start_hook: Callable[[], None] | None = None) -> None:
         """Stop then restart the gateway subprocess in place."""
         def _do_restart() -> None:
-            logger.info("Restarting gateway subprocess…")
-            self._stop_gateway()
-            if pre_start_hook:
-                try:
-                    pre_start_hook()
-                except Exception as e:
-                    logger.error("pre_start_hook failed: {}", e)
-            self._start_gateway()
-            logger.info("Gateway subprocess restarted")
+            with self._lifecycle_lock:
+                if self._stopping:
+                    return
+                logger.info("Restarting gateway subprocess…")
+                self._stop_gateway()
+                if pre_start_hook:
+                    try:
+                        pre_start_hook()
+                    except Exception as e:
+                        logger.error("pre_start_hook failed: {}", e)
+                if not self._stopping:
+                    self._start_gateway()
+                    logger.info("Gateway subprocess restarted")
 
         threading.Thread(target=_do_restart, name="shibaclaw-gw-restart", daemon=True).start()
 
@@ -129,11 +184,30 @@ class DesktopRuntime:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _check_start_cancelled(self) -> None:
+        if self._stop_requested.is_set() or (
+            self._cancel_event is not None and self._cancel_event.is_set()
+        ):
+            raise RuntimeError("Desktop startup was cancelled")
+
     def _load_config(self) -> None:
         from shibaclaw.cli.base import _load_runtime_config, _make_provider
 
         self.config = _load_runtime_config(self._config_path, self._workspace)
         self.provider = _make_provider(self.config, exit_on_error=False)
+
+    def _resolve_webui_port(self) -> None:
+        """Avoid attaching the desktop window to another service on its default port."""
+        if is_tcp_port_available(self._host, self._port):
+            return
+        configured_port = self._port
+        self._port = find_free_tcp_port(self._host)
+        logger.warning(
+            "Desktop WebUI port {} is unavailable on {}. Using fallback port {}.",
+            configured_port,
+            self._host,
+            self._port,
+        )
 
     @property
     def close_policy(self) -> str:
@@ -200,11 +274,13 @@ class DesktopRuntime:
 
         logger.debug("Starting gateway subprocess: {}", gw_cmd)
         self._gateway_proc = subprocess.Popen(gw_cmd, env=gateway_env, **extra_kwargs)
+        proc = self._gateway_proc
 
         # Wait up to 45s for the actual ShibaClaw health endpoint to answer (increased for first-run setup)
         deadline = time.monotonic() + 45.0
         while time.monotonic() < deadline:
-            if self._gateway_proc.poll() is not None:
+            self._check_start_cancelled()
+            if proc.poll() is not None:
                 logger.error("Gateway process exited early")
                 self._gateway_proc = None
                 raise RuntimeError(
@@ -230,7 +306,7 @@ class DesktopRuntime:
                         await gateway_client.start()
                     asyncio.run_coroutine_threadsafe(_reconnect(), loop)
                 return
-            time.sleep(0.1)
+            self._stop_requested.wait(0.1)
 
         self._stop_gateway()
         raise RuntimeError(
@@ -244,11 +320,12 @@ class DesktopRuntime:
         configured_http = self.config.gateway.port
         configured_ws = self.config.gateway.ws_port
         for _ in range(15):
+            self._check_start_cancelled()
             if is_tcp_port_available(gateway_host, configured_http) and is_tcp_port_available(
                 gateway_host, configured_ws
             ):
                 return configured_http, configured_ws
-            time.sleep(0.1)
+            self._stop_requested.wait(0.1)
 
         fallback_http = find_free_tcp_port(gateway_host)
         fallback_ws = find_free_tcp_port(gateway_host, exclude={fallback_http})
@@ -291,12 +368,13 @@ class DesktopRuntime:
         )
         self._server_mgr.start()
         set_restart_callback(self._restart_gateway)
-        set_shutdown_callback(self._stop_gateway)
+        set_shutdown_callback(self._desktop_shutdown or self._stop_gateway)
 
     def _stop_server(self) -> None:
         if self._server_mgr is not None:
-            self._server_mgr.stop()
+            server = self._server_mgr
             self._server_mgr = None
+            server.stop()
 
     def _stop_gateway(self) -> None:
         if self._gateway_proc is None:
@@ -311,8 +389,11 @@ class DesktopRuntime:
             except subprocess.TimeoutExpired:
                 logger.warning("Gateway did not exit; killing")
                 proc.kill()
-        except OSError:
-            pass
+                proc.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            if proc.poll() is None:
+                self._gateway_proc = proc
+                raise RuntimeError("The gateway process could not be stopped cleanly") from exc
 
     def _start_gateway_monitor(self) -> None:
         """Start a daemon thread that watches the gateway subprocess.
@@ -320,21 +401,23 @@ class DesktopRuntime:
         If the gateway exits with code 0 (restart requested via WebUI) and we
         are not in a full shutdown, automatically relaunch it.
         """
+        proc = self._gateway_proc
+        if proc is None:
+            return
+
         def _monitor() -> None:
-            proc = self._gateway_proc
-            if proc is None:
-                return
             proc.wait()
-            if self._stopping:
-                return
-            exit_code = proc.returncode
-            logger.info("Gateway subprocess exited with code {}", exit_code)
-            if exit_code == 0:
-                logger.info("Gateway requested restart; relaunching…")
-                try:
-                    self._start_gateway()
-                except Exception as exc:
-                    logger.error("Failed to relaunch gateway: {}", exc)
+            with self._lifecycle_lock:
+                if self._stopping or self._gateway_proc is not proc:
+                    return
+                exit_code = proc.returncode
+                logger.info("Gateway subprocess exited with code {}", exit_code)
+                if exit_code == 0:
+                    logger.info("Gateway requested restart; relaunching…")
+                    try:
+                        self._start_gateway()
+                    except Exception as exc:
+                        logger.error("Failed to relaunch gateway: {}", exc)
 
         t = threading.Thread(target=_monitor, name="shibaclaw-gw-monitor", daemon=True)
         t.start()

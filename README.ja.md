@@ -10,8 +10,11 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License" height="20"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="20">
+</a>
 </p>
 
 <p align="center">
@@ -41,9 +44,11 @@
 > リリースノートは [CHANGELOG.md](./CHANGELOG.md) にあります。
 
 <details open>
-<summary>🚀 <b>最新情報 — v1.0.6</b>（クリックで展開）</summary>
+<summary>🚀 <b>最新情報 — v1.0.65</b>（クリックで展開）</summary>
 
-**バージョン v1.0.6（2026-10-16）：**
+**バージョン v1.0.65（2026-10-17）：**
+
+- **Windows のインストール** — PowerShell コマンドでユーザー用セットアップをダウンロードし、SHA256 を検証して起動できます。初回起動時もローカルサービスの準備中にウィンドウが応答します。
 
 - **v1.0.3 のデザインを維持し、実行エンジンの改善を再統合** — v1.0.3 本来の画面デザインを維持し、v1.0.4/v1.0.5 の UI 以外の改善と修正を再統合します。実行の信頼性、プロバイダの再試行とモデルカタログ、サブスクリプション OAuth、自動化、サブエージェント、任意の自己進化が対象です。プライバシー保護、Gemini カタログの正確なホスト検証、依存関係のセキュリティ更新も維持します。後続の画面再設計は含みません。
 - **画面操作の改善** — サイドバーの履歴と操作ボタンをスクロールで利用でき、設定をコンパクトな下部アイコン列に配置します。コンテキスト使用量表示を、アクセシビリティに対応した唯一のコンテキストボタンに統一します。デスクトップと幅の広いスマートフォンでは入力操作を1行に、狭いスマートフォンでは44pxのタッチ領域を備えた2行にまとめます。モバイルのモデル名は1行、コンテキストは割合のみで表示します。モデル・推論強度・コレクションのメニューは共通のテーマでボタンに追従し、画面内に収まります。

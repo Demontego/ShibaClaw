@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 try:
@@ -17,7 +18,7 @@ except ImportError:
 
 from loguru import logger
 
-from shibaclaw.config.paths import get_assets_dir
+from shibaclaw.config.paths import get_app_root, get_assets_dir
 
 if TYPE_CHECKING:
     from shibaclaw.desktop.controller import DesktopController
@@ -110,11 +111,7 @@ class TrayIcon:
                 winreg.DeleteValue(key, "ShibaClaw")
                 logger.info("Autostart disabled")
             else:
-                exe_path = sys.executable
-                if getattr(sys, 'frozen', False):
-                    cmd = f'"{exe_path}"'
-                else:
-                    cmd = f'"{exe_path}" -m shibaclaw'
+                cmd = _autostart_command()
                 winreg.SetValueEx(key, "ShibaClaw", 0, winreg.REG_SZ, cmd)
                 logger.info(f"Autostart enabled: {cmd}")
             winreg.CloseKey(key)
@@ -148,6 +145,7 @@ class TrayIcon:
         if self._thread and self._thread.is_alive():
             return
 
+        _migrate_managed_autostart()
         self._thread = threading.Thread(target=self._run_icon, daemon=True, name="TrayIconThread")
         self._thread.start()
         logger.info("Process started")
@@ -174,3 +172,68 @@ class TrayIcon:
             self._thread.join(timeout=2.0)
             self._thread = None
         logger.info("Stopped")
+
+
+def _autostart_command() -> str:
+    """Use the stable installed launcher, retaining portable/source support."""
+    from shibaclaw.desktop.windows_install import get_managed_install_root
+
+    root = get_managed_install_root()
+    if root is not None:
+        return f'"{root / "ShibaClaw.exe"}"'
+    executable = Path(sys.executable)
+    if getattr(sys, "frozen", False):
+        return f'"{executable}"'
+    # A source invocation needs the desktop subcommand; the CLI root shows help.
+    pythonw = executable.with_name("pythonw.exe")
+    if sys.platform == "win32" and pythonw.is_file():
+        executable = pythonw
+    return f'"{executable}" -m shibaclaw desktop'
+
+
+def _migrate_managed_autostart() -> bool:
+    """Repair only known ShibaClaw startup commands, preserving the opt-in."""
+    if sys.platform != "win32":
+        return False
+    from shibaclaw.desktop.windows_install import get_managed_install_root
+
+    root = get_managed_install_root()
+    if root is None:
+        return False
+    import winreg
+
+    key = None
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE,
+        )
+        value, value_type = winreg.QueryValueEx(key, "ShibaClaw")
+        if value_type != winreg.REG_SZ or not isinstance(value, str):
+            return False
+
+        def _normalize(command: str) -> str:
+            return command.strip().replace("/", "\\").casefold()
+
+        known_paths = (
+            root / "current" / "ShibaClaw.exe",
+            get_app_root() / "app" / "ShibaClaw" / "ShibaClaw.exe",
+        )
+        known_commands = {
+            _normalize(command)
+            for path in known_paths
+            for command in (str(path), f'"{path}"')
+        }
+        if _normalize(value) not in known_commands:
+            return False
+        winreg.SetValueEx(key, "ShibaClaw", 0, winreg.REG_SZ, f'"{root / "ShibaClaw.exe"}"')
+        logger.info("Updated the existing startup entry to the installed launcher")
+        return True
+    except OSError as exc:
+        logger.debug("Startup entry migration unavailable: {}", exc)
+        return False
+    finally:
+        if key is not None:
+            winreg.CloseKey(key)

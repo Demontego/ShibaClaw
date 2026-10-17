@@ -10,8 +10,11 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License" height="20"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="20">
+</a>
 </p>
 
 <p align="center">
@@ -41,9 +44,11 @@
 > Las notas de versión están en [CHANGELOG.md](./CHANGELOG.md).
 
 <details open>
-<summary>🚀 <b>Novedades — v1.0.6</b> (haz clic para expandir)</summary>
+<summary>🚀 <b>Novedades — v1.0.65</b> (haz clic para expandir)</summary>
 
-**Versión v1.0.6 (2026-10-16):**
+**Versión v1.0.65 (2026-10-17):**
+
+- **Instalación en Windows** — El comando de PowerShell descarga el instalador para el usuario, verifica su SHA256 y lo inicia. Durante el primer arranque, la ventana sigue respondiendo mientras se inicia el servicio local.
 
 - **Diseño v1.0.3, mejoras del motor reintegradas** — Conserva el diseño original de la interfaz de v1.0.3 y reintegra las mejoras y correcciones ajenas a la interfaz de v1.0.4/v1.0.5: fiabilidad del motor, reintentos y catálogos de proveedores, OAuth de suscripción, automatizaciones, subagentes y autoevolución opcional. Mantiene las protecciones de privacidad, la validación exacta del host del catálogo de Gemini y las actualizaciones de seguridad de las dependencias. No incluye el rediseño posterior de la interfaz.
 - **Correcciones específicas de la interfaz** — Mantiene accesibles el historial y los controles de la barra lateral y mueve Ajustes al pie compacto. El indicador de uso del contexto es el único botón accesible de contexto. El escritorio y los teléfonos más anchos usan una barra del editor; los teléfonos estrechos usan dos filas con controles táctiles de 44px, nombres de modelos en una línea y contexto solo en porcentaje. Los menús de modelo, razonamiento y colección comparten el tema, siguen sus botones y permanecen dentro de la pantalla.

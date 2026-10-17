@@ -49,18 +49,9 @@
         tooltip.style.top = `${Math.max(8, Math.min(rect.top + (rect.height - size.height) / 2, window.innerHeight - size.height - 8))}px`;
     }
 
-    function updateNavigationCaption() {
-        const caption = document.getElementById("workspace-nav-current");
-        if (!caption) return;
-        const current = [...document.querySelectorAll(".workspace-nav-item")].find(button => button.dataset.workspacePage === page);
-        caption.hidden = !current;
-        caption.textContent = current ? t(`workspace.${page === "chat" ? "conversations" : page}`) : "";
-    }
-
     window.setWorkspaceNav = function (next) {
         page = next;
         hideNavigationTooltip();
-        updateNavigationCaption();
         const view = document.getElementById("workspace-view");
         if (view) view.dataset.page = next;
         const librarySelect = document.getElementById("workspace-library-select");
@@ -90,7 +81,6 @@
             if (button.classList.contains("workspace-nav-item")) button.removeAttribute("title");
             else button.title = label;
         });
-        updateNavigationCaption();
         if (navigationTooltipButton) showNavigationTooltip(navigationTooltipButton);
         if (page === "agents") renderAgents();
     }
@@ -130,7 +120,6 @@
         document.getElementById("workspace-view").style.display = "flex";
         document.getElementById("workspace-agents").hidden = next !== "agents";
         document.getElementById("workspace-library-tabs").hidden = next !== "library";
-        document.getElementById("workspace-app-actions").hidden = next !== "apps";
         document.getElementById("workspace-evolve-actions").hidden = next !== "evolution";
         window.setWorkspaceNav(next);
         translateWorkspace();
@@ -255,12 +244,6 @@
     window.openWorkspaceAgents = function () {
         showPage("agents");
         window.refreshWorkspaceAgents();
-    };
-
-    window.openWorkspaceTools = async function (extensions) {
-        await window.openSettingsView();
-        window.switchSettingsTab(extensions ? "extensions" : "tools");
-        if (extensions) window.switchExtensionsSubTab("mcp");
     };
 
     let _libraryMode = "graph";

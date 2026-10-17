@@ -43,6 +43,11 @@ _DEFAULT_HEADERS = {
 
 
 def _cache_key(install_method: InstallMethod, current_version: str) -> str:
+    if install_method == "exe":
+        from shibaclaw.desktop.windows_install import get_managed_install_root
+
+        kind = "managed" if get_managed_install_root() else "portable"
+        return f"{install_method}:{kind}:{current_version}"
     return f"{install_method}:{current_version}"
 
 
@@ -65,12 +70,12 @@ def _blank_result(install_method: InstallMethod, current: str) -> dict[str, Any]
             ],
         },
         "exe": {
-            "action_kind": "automatic",
-            "action_label": "Manual download",
+            "action_kind": "manual-url",
+            "action_label": "Download Windows setup",
             "action_command": None,
             "action_url": f"{GITHUB_REPO_URL}/releases/latest",
             "notes": [
-                "ShibaClaw will automatically download and replace the executable. A UAC prompt may appear.",
+                "The Windows setup enables managed updates and preserves your existing ShibaClaw data.",
             ],
         },
         "source": {
@@ -357,6 +362,33 @@ def _check_docker(current: str) -> dict[str, Any]:
 
 def _check_exe(current: str) -> dict[str, Any]:
     result = _blank_result("exe", current)
+    from shibaclaw.desktop.windows_install import (
+        SETUP_URL,
+        check_managed_update,
+        get_managed_install_root,
+    )
+
+    if get_managed_install_root() is not None:
+        managed = check_managed_update()
+        result.update(managed)
+        result.update({
+            "display_current": managed["current"],
+            "display_latest": managed["latest"],
+            "action_kind": "automatic",
+            "action_label": "Release notes",
+            "action_url": _release_url_for(managed["latest"]),
+            "release_url": _release_url_for(managed["latest"]),
+            "managed_install": True,
+            "notes": ["Updates preserve your chats, credentials, settings, and workspace."],
+            "summary": (
+                "Update downloaded. Restart when you are ready to install it."
+                if managed["ready_to_restart"] else
+                f"Windows desktop build {managed['latest']} is available."
+                if managed["update_available"] else "You're up to date."
+            ),
+        })
+        return _finalize_result(result)
+
     release = _latest_release_info()
     latest = release["latest"]
 
@@ -364,9 +396,10 @@ def _check_exe(current: str) -> dict[str, Any]:
     result["display_latest"] = latest
     result["download_url"] = release["download_url"]
     result["release_url"] = release["release_url"]
-    result["action_url"] = release["download_url"] or result["release_url"]
+    result["action_url"] = SETUP_URL
     result["manifest_url"] = release["manifest_url"]
     result["update_available"] = _version_key(latest) > _version_key(current)
+    result["managed_install"] = False
     result["summary"] = (
         f"Windows desktop build {latest} is available."
         if result["update_available"]

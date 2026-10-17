@@ -4161,7 +4161,7 @@ wheels = [
 
 [[package]]
 name = "shibaclaw"
-version = "1.0.6"
+version = "1.0.65"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -4213,6 +4213,7 @@ desktop = [
     { name = "pillow" },
     { name = "pystray" },
     { name = "pywebview" },
+    { name = "velopack", marker = "sys_platform == 'win32'" },
 ]
 dev = [
     { name = "httpx" },
@@ -4252,6 +4253,7 @@ full = [
     { name = "qq-botpy" },
     { name = "slack-sdk" },
     { name = "slackify-markdown" },
+    { name = "velopack", marker = "sys_platform == 'win32'" },
     { name = "wecom-aibot-sdk-python" },
 ]
 matrix = [
@@ -4379,6 +4381,7 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.14.0,<1.0.0" },
     { name = "typer", specifier = ">=0.27.2,<1.0.0" },
     { name = "uvicorn", specifier = ">=0.52.4,<1.0.0" },
+    { name = "velopack", marker = "sys_platform == 'win32' and extra == 'desktop'", specifier = "==1.2.161" },
     { name = "websockets", specifier = ">=16.1.1,<17.0" },
     { name = "wecom-aibot-sdk-python", marker = "extra == 'wecom'", specifier = ">=0.1.5" },
 ]
@@ -5007,6 +5010,17 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f2/0f/3f86e61397dd33bf2ccf28188c40db6a740658aeebbbf6e7dbc101a1f487/uvicorn-0.52.4.tar.gz", hash = "sha256:73acfee47a0b133c5de13d219492d62d8a31e935f4fe6e41a232451a15379f86", size = 100627, upload-time = "2026-08-19T06:27:41.821Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/79/4a20b54ab0491485ccd8c077db2d39187c7f12b3e15485d38a7be37c81b4/uvicorn-0.52.4-py3-none-any.whl", hash = "sha256:f86e41a149d7d05a9969337e3946a9c171c06a5d42680896daaba624aeac8da1", size = 79871, upload-time = "2026-08-19T06:27:40.36Z" },
+]
+
+[[package]]
+name = "velopack"
+version = "1.2.161"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/aa/bf2bcea59cc586c9fdd079640f8534d78f36d59e5bfb6395fb5746d0d786/velopack-1.2.161.tar.gz", hash = "sha256:beb7655e1ad42f1fe3d9dcbf2694fb255b13d0131ea03579bbe55ba3accd9b85", size = 129748, upload-time = "2026-09-29T11:41:11.76Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/24/c8/38b2243592aa69b3aba5fd01caaa7fc67d1f483b79e9d8b7f0e009afc5ea/velopack-1.2.161-cp38-abi3-win32.whl", hash = "sha256:c42ceb4ded31edc94dee92d80e6298e3e8af5100d5c28f49938bdb550d947011", size = 1083500, upload-time = "2026-09-29T11:41:07.211Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/4a/1906caadfbada25e987f8f20ec61667221e73ab0d01c1164bbcb33b10e44/velopack-1.2.161-cp38-abi3-win_amd64.whl", hash = "sha256:3a85b4a39c7644d06dafa44bd197d1e88d429f3f05ead57031552cf17ffcf36e", size = 1363140, upload-time = "2026-09-29T11:41:08.642Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/2c/5b3dff114b232c89770fad264d7db66657654479ca8ecae7a76d7cf36f6f/velopack-1.2.161-cp38-abi3-win_arm64.whl", hash = "sha256:5d410ff340fb1346a38a96a7617633983be1bbefbdba9def0b8c1545dec06856", size = 1296839, upload-time = "2026-09-29T11:41:10.348Z" },
 ]
 
 [[package]]

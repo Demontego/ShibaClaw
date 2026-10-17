@@ -523,6 +523,17 @@ async def _handle_user_message(ws_id: str, ws: WebSocket, data: dict[str, Any]) 
 
             await _synthesize_tts_response(config, response_content, final_atts)
 
+            if not response_content and not final_atts:
+                await _emit_to_session(
+                    session_key,
+                    {
+                        "type": "error",
+                        "message": "The agent returned no response. Check the gateway connection and model configuration.",
+                        "session_key": session_key,
+                    },
+                )
+                return
+
             await _emit_to_session(
                 session_key,
                 {

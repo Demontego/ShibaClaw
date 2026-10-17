@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from loguru import logger
+from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -249,28 +250,39 @@ async def api_update_apply(request: Request):
     pip_result = report.get("pip") or {}
     exe_result = report.get("exe") or {}
 
-    if pip_result.get("ok") or exe_result.get("ok"):
+    if exe_result.get("ok") and exe_result.get("restart_required"):
+        # Run after the response has been sent, outside the server event loop.
+        # The updater is already waiting for this process to exit; the desktop
+        # must first stop its gateway and release tray/window resources.
+        def finish_desktop_update():
+            try:
+                if _shutdown_callback is not None:
+                    completion = _shutdown_callback()
+                    if hasattr(completion, "wait") and not completion.wait(timeout=30):
+                        logger.error("Desktop update shutdown did not finish; refusing to leave a running gateway.")
+                        return
+            except Exception:
+                logger.exception("Desktop update shutdown failed")
+                return
+            os._exit(0)
+
+        report["restarting"] = True
+        return JSONResponse(report, background=BackgroundTask(finish_desktop_update))
+
+    if pip_result.get("ok"):
         async def _do_restart():
             await asyncio.sleep(1.0)
 
             from shibaclaw.updater.checker import invalidate_cache
             invalidate_cache()
 
-            if exe_result.get("ok"):
-                if _shutdown_callback is not None:
-                    try:
-                        _shutdown_callback()
-                    except Exception as _e:
-                        logger.debug("Ignored error: {}", _e)
-                os._exit(0)
-            else:
-                if _shutdown_callback is not None:
-                    try:
-                        _shutdown_callback()
-                    except Exception as _e:
-                        logger.debug("Ignored error: {}", _e)
-                _schedule_restart_outside_loop(delay=2.0)
-                _graceful_shutdown_server()
+            if _shutdown_callback is not None:
+                try:
+                    _shutdown_callback()
+                except Exception as _e:
+                    logger.debug("Ignored error: {}", _e)
+            _schedule_restart_outside_loop(delay=2.0)
+            _graceful_shutdown_server()
 
         asyncio.create_task(_do_restart())
         report["restarting"] = True

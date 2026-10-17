@@ -8,9 +8,37 @@ from shibaclaw.webui.ws_handler import (
     processing_state,
     sessions,
     _ws_clients,
+    _session_tasks,
 )
 from shibaclaw.webui.agent_manager import agent_manager
 from shibaclaw.webui.gateway_client import gateway_client
+
+
+@pytest.mark.asyncio
+async def test_ws_handler_reports_empty_gateway_result_instead_of_blank_response():
+    agent_manager.config = MagicMock()
+    agent_manager._pack_manager = MagicMock()
+    session_key = "webui:empty_result"
+    sessions["ws-empty"] = {"session_key": session_key, "processing": False, "queue": deque()}
+    _ws_clients["ws-empty"] = MagicMock()
+
+    async def empty_chat_stream(payload, request_id):
+        yield {"t": "r", "content": "", "media": []}
+
+    try:
+        with patch("shibaclaw.webui.ws_handler._emit_to_session", AsyncMock()) as emit, \
+             patch("shibaclaw.webui.ws_handler._emit_session_status_all", AsyncMock()), \
+             patch.object(gateway_client, "chat_stream", side_effect=empty_chat_stream):
+            await _handle_user_message("ws-empty", _ws_clients["ws-empty"], {"content": "hello", "id": "msg-empty"})
+            await _session_tasks[session_key]
+
+        events = [call.args[1] for call in emit.call_args_list]
+        assert any(event.get("type") == "error" and "no response" in event.get("message", "") for event in events)
+        assert not any(event.get("type") == "response" and not event.get("content") for event in events)
+    finally:
+        sessions.pop("ws-empty", None)
+        _ws_clients.pop("ws-empty", None)
+        processing_state.pop(session_key, None)
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,22 @@ function Confirm-Uninstall {
     }
 }
 
+# This is only the legacy ZIP/pipx uninstaller. Velopack owns the new setup's
+# binaries, shared shortcut names and uninstall registration.
+$managedCandidates = @($InstallDir)
+if ($env:LOCALAPPDATA) { $managedCandidates += (Join-Path $env:LOCALAPPDATA 'ShibaClaw') }
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ShibaClaw'
+$registered = Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction SilentlyContinue
+if ($registered -and $registered.InstallLocation) { $managedCandidates += $registered.InstallLocation }
+foreach ($candidate in ($managedCandidates | Where-Object { $_ })) {
+    if ((Test-Path -LiteralPath (Join-Path $candidate 'Update.exe') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $candidate 'current\sq.version') -PathType Leaf)) {
+        Write-Warn 'A setup-managed ShibaClaw installation is present. Use Windows Settings > Apps to uninstall it.'
+        Write-Warn 'Legacy files and user data have been left untouched.'
+        return
+    }
+}
+
 Write-Step "Starting ShibaClaw uninstall..."
 Log-Message "Starting uninstall from $PWD"
 

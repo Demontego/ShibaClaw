@@ -10,8 +10,11 @@
   <a href="https://pypi.org/project/shibaclaw/"><img src="https://img.shields.io/pypi/v/shibaclaw.svg?style=flat-square&color=orange" alt="version"></a>
   <a href="https://pepy.tech/projects/shibaclaw"><img src="https://static.pepy.tech/personalized-badge/shibaclaw?period=total&units=ABBREVIATION&left_color=YELLOWGREEN&right_color=ORANGE&left_text=downloads" alt="PyPI Downloads"></a>
   <img src="https://img.shields.io/badge/python-%3E%3D3.12-blue?style=flat-square&logo=python&logoColor=white" alt="python">
-  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE"><img src="https://img.shields.io/github/license/RikyZ90/ShibaClaw?style=flat-square&label=license&color=blue" alt="license"></a>
-  <a href="https://deepwiki.com/RikyZ90/ShibaClaw"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/RikyZ90/ShibaClaw/blob/main/LICENSE">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 License" height="20"></a>
+  <a href="https://deepwiki.com/RikyZ90/ShibaClaw">
+  <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" height="20">
+</a>
 </p>
 
 <p align="center">
@@ -38,9 +41,11 @@
 ---
 
 <details open>
-<summary>🚀 <b>What's new — v1.0.6</b> (click to expand)</summary>
+<summary>🚀 <b>What's new — v1.0.65</b> (click to expand)</summary>
 
-**Version v1.0.6 (2026-10-16):**
+**Version v1.0.65 (2026-10-17):**
+
+- **Windows installation** — The PowerShell command downloads the per-user setup, verifies its SHA256, and launches it. First-launch startup keeps the native window responsive while the local service starts.
 
 - **v1.0.3 design, restored runtime improvements** — Keeps the original v1.0.3 interface design while reintegrating the non-UI improvements and fixes from v1.0.4/v1.0.5: runtime reliability, provider retries and catalogs, subscription OAuth, automation, subagents, and opt-in self-evolution. Privacy protections, exact Gemini catalog host validation, and dependency security updates are retained. The later interface redesign is not included.
 - **Targeted interface fixes** — Keeps sidebar history and footer controls reachable and moves Settings into the compact footer. The context-usage badge is the single accessible context button. Desktop and wider phones use one composer toolbar; narrow phones use two rows with 44px touch targets, single-line model names, and percentage-only context usage. Model, effort, and collection menus share the theme, follow their buttons, and stay inside the viewport.
@@ -91,13 +96,15 @@ One command downloads the latest release, sets up shortcuts, and launches the UI
 irm https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.ps1 | iex
 ```
 
+Or download and open **[ShibaClaw-Setup.exe](https://github.com/RikyZ90/ShibaClaw/releases/latest/download/ShibaClaw-Setup.exe)**. The PowerShell command downloads the same setup, verifies its SHA256 against the GitHub release asset digest, and starts it.
+
 **🐧 Linux / 🍎 macOS:**
 ```bash
 curl -fsSL https://github.com/RikyZ90/ShibaClaw/releases/latest/download/install.sh | bash
 ```
 
 > [!NOTE]
-> On Windows this downloads the pre-built desktop app from the latest GitHub release — no Python required, with Desktop/Start Menu shortcuts and clean uninstall via Apps & Features. On Linux/macOS the script installs via pip in an isolated virtual environment.
+> On Windows the setup installs the bundled desktop app for your user in `%LocalAppData%\ShibaClaw` — no Python required. Existing data in `%USERPROFILE%\.shibaclaw` is preserved. Installed desktop updates use **Download update**, then **Restart to update** when you are ready. Uninstall through Windows Settings; personal data is retained. The portable ZIP remains available as an advanced option, with manual updates. On Linux/macOS the script installs via pip in an isolated virtual environment. See [Windows installation and local packaging](docs/WINDOWS_INSTALLATION.md).
 
 ### Docker
 

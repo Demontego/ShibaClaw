@@ -50,6 +50,7 @@ class DesktopController:
         self._window_hide = window_hide
         self._quit_callback = quit_callback
         self._quitting = False
+        self._quit_lock = threading.Lock()
         self._tray: TrayIcon | None = None
         self._window_visible = True
         self._last_native_notify = 0.0
@@ -77,6 +78,8 @@ class DesktopController:
 
     def show_window(self) -> None:
         """Bring the embedded window to the foreground."""
+        if self._quitting:
+            return
         self._window_visible = True
         if self._window_show:
             self._window_show()
@@ -136,15 +139,18 @@ class DesktopController:
 
     def quit_app(self) -> None:
         """Perform a clean shutdown: stop server, gateway, then exit."""
-        if self._quitting:
-            return
-        self._quitting = True
+        with self._quit_lock:
+            if self._quitting:
+                return
+            self._quitting = True
 
         def _do_quit() -> None:
             logger.info("Desktop quit requested — shutting down…")
-            if self._quit_callback:
-                self._quit_callback()
-            self._runtime.stop()
+            try:
+                if self._quit_callback:
+                    self._quit_callback()
+            finally:
+                self._runtime.stop()
 
         threading.Thread(target=_do_quit, name="shibaclaw-quit", daemon=True).start()
 

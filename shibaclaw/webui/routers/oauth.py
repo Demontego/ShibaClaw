@@ -44,9 +44,9 @@ def get_oauth_providers_status() -> list[dict]:
                     msg = "No configured API key"
             elif p["name"] == "openai_codex":
                 try:
-                    from oauth_cli_kit import get_token
+                    from shibaclaw.security.codex_oauth import get_codex_token
 
-                    tk = get_token()
+                    tk = get_codex_token()
                     if tk and getattr(tk, "access", None):
                         status, msg = (
                             "configured",
@@ -152,45 +152,54 @@ async def api_oauth_disconnect(request: Request):
     provider = data.get("provider")
     if not provider:
         return JSONResponse({"error": "No provider specified"}, status_code=400)
+    if not isinstance(provider, str):
+        return JSONResponse({"error": "Unknown provider"}, status_code=404)
+    provider = provider.replace("-", "_")
+    if provider not in {
+        "openrouter", "github_copilot", "openai_codex", "anthropic", "xai", "google_gemini_cli"
+    }:
+        return JSONResponse({"error": "Unknown provider"}, status_code=404)
 
-    if provider == "openrouter":
-        from shibaclaw.config.manager import config_manager
-        from shibaclaw.security.credential_manager import get_credential_manager
-        cm = get_credential_manager()
-        await run_in_threadpool(cm.delete_secret, "providers", "openrouter.api_key")
-        config = config_manager.load_config()
-        config_manager.save_config(config)
-        await agent_manager.reload_config(config)
-    elif provider == "github_copilot":
-        try:
+    env_name = {
+        "openrouter": "OPENROUTER_API_KEY",
+        "github_copilot": "GITHUB_COPILOT_TOKEN",
+    }.get(provider)
+    if env_name and os.environ.get(env_name):
+        return JSONResponse({
+            "error": f"Remove {env_name} from the server environment and restart ShibaClaw to disconnect.",
+        }, status_code=409)
+
+    try:
+        if provider == "openrouter":
+            from shibaclaw.security.credential_manager import get_credential_manager
+            from shibaclaw.security.oauth_store import OAuthTokenStore
+
+            cm = get_credential_manager()
+            await run_in_threadpool(cm.delete_secret, "providers", "openrouter.api_key")
+            await run_in_threadpool(OAuthTokenStore().delete_token, provider)
+            if agent_manager.config:
+                await agent_manager.reload_config(agent_manager.config)
+        elif provider == "github_copilot":
             home = os.path.expanduser("~")
             token_path = os.path.join(home, ".shibaclaw", "github_copilot", "access-token")
-            if os.path.exists(token_path):
+            try:
                 os.remove(token_path)
-        except Exception:
-            pass
-    elif provider == "openai_codex":
-        try:
-            from oauth_cli_kit.providers import OPENAI_CODEX_PROVIDER
-            from oauth_cli_kit.storage import FileTokenStorage
-            
-            storage = FileTokenStorage(token_filename=OPENAI_CODEX_PROVIDER.token_filename)
-            token_path = storage.get_token_path()
-            if os.path.exists(token_path):
-                os.remove(token_path)
-        except Exception:
-            pass
-    elif provider == "anthropic":
-        from shibaclaw.cli.subscription_oauth import remove_claude_oauth
+            except FileNotFoundError:
+                pass
+        elif provider == "openai_codex":
+            from shibaclaw.security.codex_oauth import disconnect_codex
 
-        try:
+            await run_in_threadpool(disconnect_codex)
+        elif provider == "anthropic":
+            from shibaclaw.cli.subscription_oauth import remove_claude_oauth
+
             await run_in_threadpool(remove_claude_oauth)
-        except (OSError, ValueError):
-            return JSONResponse({"error": "Unable to remove Claude login"}, status_code=500)
-    else:
-        from shibaclaw.security.oauth_store import OAuthTokenStore
-        store = OAuthTokenStore()
-        store.delete_token(provider)
+        else:
+            from shibaclaw.security.oauth_store import OAuthTokenStore
+
+            await run_in_threadpool(OAuthTokenStore().delete_token, provider)
+    except Exception:
+        return JSONResponse({"error": "Unable to remove provider login"}, status_code=500)
 
     invalidate_models_cache()
     return JSONResponse({"ok": True})

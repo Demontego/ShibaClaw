@@ -191,6 +191,11 @@ class TestCodexOAuth:
         )
         monkeypatch.setattr(storage, "FileTokenStorage", FakeStorage)
         monkeypatch.setattr(oauth_module.os.path, "expanduser", lambda _: str(tmp_path))
+        monkeypatch.setattr(
+            "shibaclaw.security.codex_oauth._disconnect_marker",
+            lambda: tmp_path / "disconnected",
+        )
+        (tmp_path / "disconnected").touch()
 
         jobs = {"job-1": {"provider": "openai_codex", "status": "running", "logs": []}}
         response = await start_codex_oauth("job-1", jobs)
@@ -211,6 +216,7 @@ class TestCodexOAuth:
             await asyncio.sleep(0)
 
         assert jobs["job-1"]["status"] == "done"
+        assert not (tmp_path / "disconnected").exists()
         assert observed["code"] == "auth-code-xyz"
         assert observed["verifier"] == "verifier-123"
         assert observed["provider"].client_id == "client-id"
