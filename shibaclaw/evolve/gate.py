@@ -26,6 +26,58 @@ If the code backlog is empty, study one world topic from USER.md and memory/peop
 """
 
 
+def campaign_text(data: dict) -> str:
+    text = data.get("campaign")
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+    return CAMPAIGN
+
+
+def alarm_minutes(data: dict) -> int:
+    raw = data.get("every_min")
+    try:
+        minutes = int(raw)
+    except (TypeError, ValueError):
+        return ALARM_MS // 60_000
+    return max(5, min(minutes, 24 * 60))
+
+
+def chosen_model(data: dict) -> str | None:
+    raw = data.get("model")
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text or "\n" in text or len(text) > 200:
+        return None
+    return text
+
+
+def mcp_names(data: dict) -> list[str]:
+    raw = data.get("mcps")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name or name in out or len(name) > 80:
+            continue
+        out.append(name)
+        if len(out) >= 12:
+            break
+    return out
+
+
+def wake_message(data: dict) -> str:
+    text = campaign_text(data)
+    names = mcp_names(data)
+    if not names:
+        return text
+    listed = ", ".join(names)
+    return text.rstrip() + f"\n\nThis wake must use these MCP servers: {listed}.\n"
+
+
 def state_path(workspace: Path) -> Path:
     override = os.environ.get("EVOLVE_STATE")
     if override:

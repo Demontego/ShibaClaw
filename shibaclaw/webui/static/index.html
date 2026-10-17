@@ -27,7 +27,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1792184647966">
+    <link rel="stylesheet" href="/static/bundle.css?v=1792223585443">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
@@ -81,7 +81,9 @@
                         <div class="header-sub-row">
                             <span class="version" id="sidebar-version" onclick="openChangelog()"
                                 data-i18n-title="version.whats_new" title="View what's new">loading...</span>
-                            <div class="status-micro" id="status-card">
+                            <div class="status-micro" id="status-card" role="button" tabindex="0"
+                                data-i18n-title="workspace.workspace_summary" title="Workspace status"
+                                onclick="toggleWorkspaceStatus(event)">
                                 <div class="status-dot disconnected" id="status-dot"></div>
                                 <span class="status-text" id="status-text"
                                     data-i18n="status.connecting">Connecting...</span>
@@ -94,9 +96,28 @@
                         </div>
                     </div>
                 </div>
+                <details class="workspace-summary-section" id="workspace-summary">
+                    <summary data-i18n="workspace.workspace_summary">Workspace status</summary>
+                    <div class="summary-row" data-i18n-title="summary.channels_title" title="Active Channels">
+                        <div class="status-dot disconnected" id="summary-ch-dot"></div>
+                        <span><span data-i18n="summary.channel">Channel:</span> <strong
+                                id="summary-channels">--</strong></span>
+                    </div>
+                    <div class="summary-row" data-i18n-title="summary.provider_title" title="Configured Provider">
+                        <div class="status-dot disconnected" id="summary-provider-dot"></div>
+                        <span><span data-i18n="summary.provider">Provider:</span> <strong
+                                id="summary-provider">--</strong></span>
+                    </div>
+                    <div class="summary-row" data-i18n-title="summary.restrict_title"
+                        title="Restrict agent to workspace directory">
+                        <div class="status-dot disconnected" id="summary-restrict-dot"></div>
+                        <span><span data-i18n="summary.restrict">Restrict WP:</span> <strong
+                                id="summary-restrict-badge">--</strong></span>
+                    </div>
+                </details>
                 <button class="sidebar-toggle" id="sidebar-toggle" data-i18n-aria="chrome.toggle_sidebar"
                     aria-label="Toggle sidebar">
-                    <span class="material-icons-round">menu</span>
+                    <span class="material-icons-round">chevron_left</span>
                 </button>
             </div>
 
@@ -163,30 +184,11 @@
                     onclick="openModal('settings-modal')"><span class="material-icons-round"
                         aria-hidden="true">settings</span><span class="workspace-nav-label"
                         data-i18n="workspace.settings">Settings</span></button>
-                <details class="sidebar-section workspace-summary-section" id="workspace-summary">
-                    <summary data-i18n="workspace.workspace_summary">Workspace status</summary>
-                    <div class="summary-row" data-i18n-title="summary.channels_title" title="Active Channels">
-                        <div class="status-dot disconnected" id="summary-ch-dot"></div>
-                        <span><span data-i18n="summary.channel">Channel:</span> <strong
-                                id="summary-channels">--</strong></span>
-                    </div>
-                    <div class="summary-row" data-i18n-title="summary.provider_title" title="Configured Provider">
-                        <div class="status-dot disconnected" id="summary-provider-dot"></div>
-                        <span><span data-i18n="summary.provider">Provider:</span> <strong
-                                id="summary-provider">--</strong></span>
-                    </div>
-                    <div class="summary-row" data-i18n-title="summary.restrict_title"
-                        title="Restrict agent to workspace directory">
-                        <div class="status-dot disconnected" id="summary-restrict-dot"></div>
-                        <span><span data-i18n="summary.restrict">Restrict WP:</span> <strong
-                                id="summary-restrict-badge">--</strong></span>
-                    </div>
-                </details>
                 <div class="footer-actions">
                     <button class="btn-command btn-theme btn-icon-only" id="btn-theme" type="button"
                         data-i18n-title="workspace.theme" data-i18n-aria="workspace.theme" title="Appearance"
                         aria-label="Appearance"><span class="material-icons-round" id="btn-theme-icon"
-                            aria-hidden="true">routine</span></button>
+                            aria-hidden="true">brightness_auto</span></button>
                     <div class="lang-switcher" id="lang-switcher">
                         <button class="btn-command btn-lang btn-icon-only" id="btn-lang" type="button"
                             data-i18n-title="footer.language" data-i18n-aria="footer.language" title="Language"
@@ -229,7 +231,7 @@
                 <button type="button" class="workspace-sidebar-expand btn-icon" id="workspace-sidebar-toggle"
                     onclick="toggleWorkspaceSidebar()" data-i18n-title="chrome.toggle_sidebar"
                     data-i18n-aria="chrome.toggle_sidebar" aria-label="Toggle sidebar" aria-controls="sidebar"
-                    aria-expanded="false"><span class="material-icons-round" aria-hidden="true">menu</span></button>
+                    aria-expanded="false"><span class="material-icons-round" aria-hidden="true">chevron_right</span></button>
                 <div class="workspace-breadcrumb"><span data-i18n="workspace.title">Your workspace</span><span
                         aria-hidden="true">/</span><span id="workspace-chat-title" data-i18n="workspace.new_chat">New
                         chat</span></div>
@@ -1190,7 +1192,7 @@
                         aria-hidden="true">/</span>
                     <h1 id="workspace-view-title"></h1>
                 </div>
-                <button type="button" class="btn-secondary workspace-back" onclick="showWorkspaceChat()"
+                <button type="button" class="btn-icon workspace-back" onclick="showWorkspaceChat()"
                     data-i18n-title="workspace.back_chat" data-i18n-aria="workspace.back_chat"><span
                         class="material-icons-round" aria-hidden="true">arrow_back</span><span
                         data-i18n="workspace.back_chat">Back to conversation</span></button>
@@ -1207,7 +1209,7 @@
                         class="material-icons-round" aria-hidden="true">extension</span><span>MCP</span></button>
             </div>
             <div id="workspace-evolve-actions" class="workspace-page-actions workspace-app-actions" hidden>
-                <button type="button" class="btn-secondary" onclick="loadEvolve()" data-i18n-aria="common.refresh"
+                <button type="button" class="btn-secondary evolve-refresh" onclick="loadEvolve()" data-i18n-aria="common.refresh"
                     aria-label="Refresh"><span class="material-icons-round"
                         aria-hidden="true">refresh</span></button>
             </div>
@@ -1493,7 +1495,7 @@
                     <h2 id="evolve-title">Evolution</h2>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <button class="btn-icon" aria-label="Refresh" title="Refresh" onclick="loadEvolve()">
+                    <button class="btn-icon evolve-refresh" aria-label="Refresh" title="Refresh" onclick="loadEvolve()">
                         <span class="material-icons-round">refresh</span>
                     </button>
                     <button class="btn-icon" aria-label="Close" title="Close" onclick="closeModal('evolve-modal')">
@@ -1501,21 +1503,9 @@
                     </button>
                 </div>
             </div>
-            <div class="modal-body" id="evolve-content" style="flex: 1; overflow-y: auto; padding: 16px;"></div>
+            <div class="modal-body" id="evolve-content"></div>
         </div>
     </div>
-    <style>
-        .evolve-status { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; margin-bottom: 8px; }
-        .evolve-chip { padding: 2px 8px; border-radius: 12px; background: rgba(212, 175, 55, 0.15); color: var(--shiba-gold, #d4af37); }
-        .evolve-repo { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
-        .evolve-block { margin: 0 0 14px; }
-        .evolve-block h3 { margin: 0 0 6px; font-size: 13px; }
-        .evolve-block pre { white-space: pre-wrap; margin: 0; font-size: 12px; line-height: 1.45; max-height: 220px; overflow: auto; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 8px; }
-        .evolve-commits { list-style: none; margin: 0; padding: 0; font-size: 12px; }
-        .evolve-commits li { padding: 4px 0; border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06)); }
-        .evolve-commits span { color: var(--text-muted); margin-left: 6px; }
-        .evolve-loading, .evolve-error { padding: 2rem; text-align: center; }
-    </style>
 
     <!-- ══ Memory Manager Modal ══════════════════════════════════════════ -->
     <div id="memory-modal" class="modal-backdrop">
@@ -1926,9 +1916,9 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1792184647966"></script>
-    <script src="/static/js/evolve.js?v=1792184647966"></script>
-    <script src="/static/js/chat_history_window.js?v=1792184647966"></script>
+    <script src="/static/bundle.js?v=1792223585443"></script>
+    <script src="/static/js/evolve.js?v=1792223585443"></script>
+    <script src="/static/js/chat_history_window.js?v=1792223585443"></script>
 </body>
 
 </html>

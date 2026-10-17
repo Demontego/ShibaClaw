@@ -7,10 +7,38 @@ import subprocess
 from datetime import timezone, tzinfo
 from pathlib import Path
 
-from shibaclaw.evolve.gate import JOB_NAME, MAX_APPLIES, applies_today, gate, load
+from shibaclaw.evolve.gate import (
+    JOB_NAME,
+    MAX_APPLIES,
+    alarm_minutes,
+    applies_today,
+    campaign_text,
+    chosen_model,
+    gate,
+    load,
+    mcp_names,
+)
 
 UTC = timezone.utc
 _TEXT_CAP = 12000
+
+
+def _outline(text: str, limit: int = 14) -> list[dict]:
+    out: list[dict] = []
+    for line in text.splitlines():
+        item = line.strip()
+        kind = ""
+        body = ""
+        if item.startswith("## "):
+            kind, body = "stage", item[3:].strip()
+        elif item.startswith("- "):
+            kind, body = "step", item[2:].strip()
+        if not body:
+            continue
+        out.append({"kind": kind, "text": body[:180]})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _tail(path: Path, limit: int = _TEXT_CAP) -> str:
@@ -76,17 +104,25 @@ def _repo_view(repo: Path) -> dict:
     }
 
 
-def _job(path: Path | None) -> dict | None:
+def is_digest_job(name: str, message: str) -> bool:
+    return name.startswith("Сводка эволюции") or "EVOLVE_DIGEST_QUIET" in message
+
+
+def _read_jobs(path: Path | None) -> list[dict]:
     if path is None or not path.is_file():
-        return None
+        return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
+        return []
     jobs = data.get("jobs") if isinstance(data, dict) else None
     if not isinstance(jobs, list):
-        return None
-    job = next((item for item in jobs if item.get("name") == JOB_NAME), None)
+        return []
+    return [item for item in jobs if isinstance(item, dict)]
+
+
+def _job(path: Path | None) -> dict | None:
+    job = next((item for item in _read_jobs(path) if item.get("name") == JOB_NAME), None)
     if not isinstance(job, dict):
         return None
     schedule = job.get("schedule") if isinstance(job.get("schedule"), dict) else {}
@@ -97,6 +133,36 @@ def _job(path: Path | None) -> dict | None:
         "next_run_at_ms": state.get("nextRunAtMs") or state.get("next_run_at_ms") or 0,
         "last_status": state.get("lastStatus") or state.get("last_status") or "",
         "last_run_at_ms": state.get("lastRunAtMs") or state.get("last_run_at_ms") or 0,
+    }
+
+
+def _digest(path: Path | None) -> dict | None:
+    job = next(
+        (
+            item
+            for item in _read_jobs(path)
+            if is_digest_job(
+                str(item.get("name") or ""),
+                str((item.get("payload") or {}).get("message") or ""),
+            )
+        ),
+        None,
+    )
+    if job is None:
+        return None
+    schedule = job.get("schedule") if isinstance(job.get("schedule"), dict) else {}
+    state = job.get("state") if isinstance(job.get("state"), dict) else {}
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    return {
+        "id": str(job.get("id") or ""),
+        "enabled": bool(job.get("enabled")),
+        "message": str(payload.get("message") or ""),
+        "expr": str(schedule.get("expr") or ""),
+        "tz": str(schedule.get("tz") or ""),
+        "model": str(payload.get("model") or ""),
+        "last_status": state.get("lastStatus") or state.get("last_status") or "",
+        "last_run_at_ms": state.get("lastRunAtMs") or state.get("last_run_at_ms") or 0,
+        "next_run_at_ms": state.get("nextRunAtMs") or state.get("next_run_at_ms") or 0,
     }
 
 
@@ -124,6 +190,8 @@ def snapshot(
     names = {0: "ready", 2: "panic", 3: "off", 5: "in progress", 6: "daily budget", 7: "cooldown"}
     repo = _body_repo(workspace)
     knowledge = workspace / "memory" / "knowledge"
+    chronicle = _tail(workspace / "memory" / "evolution" / "LOG.md")
+    backlog = _tail(knowledge / "improvement-backlog.md")
     return {
         "label": names.get(code, str(code)),
         "code": code,
@@ -133,9 +201,18 @@ def snapshot(
         "max_applies": MAX_APPLIES,
         "running_since": data.get("running_since"),
         "job": _job(automation_file),
+        "digest": _digest(automation_file),
         "body": _body(workspace),
-        "chronicle": _tail(workspace / "memory" / "evolution" / "LOG.md"),
-        "backlog": _tail(knowledge / "improvement-backlog.md"),
+        "campaign": campaign_text(data),
+        "settings": {
+            "every_min": alarm_minutes(data),
+            "model": chosen_model(data) or "",
+            "mcps": mcp_names(data),
+        },
+        "map": _outline(backlog),
+        "steps": [item for item in _outline(chronicle, 24) if item["kind"] == "step"][-8:],
+        "chronicle": chronicle,
+        "backlog": backlog,
         "patterns": _tail(knowledge / "patterns.md"),
         "world": _tail(workspace / "memory" / "evolution" / "WORLD.md"),
         "repo": _repo_view(repo) if repo else None,

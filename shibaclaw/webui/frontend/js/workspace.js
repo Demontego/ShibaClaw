@@ -24,7 +24,7 @@
         if (select) select.value = theme;
         const icon = document.getElementById("btn-theme-icon");
         const themeBtn = document.getElementById("btn-theme");
-        if (icon) icon.textContent = theme === "system" ? "routine" : (document.documentElement.dataset.theme === "light" ? "light_mode" : "dark_mode");
+        if (icon) icon.textContent = theme === "system" ? "brightness_auto" : (document.documentElement.dataset.theme === "light" ? "light_mode" : "dark_mode");
         if (themeBtn) {
             const label = typeof t === "function" ? t("workspace.theme") : "Appearance";
             themeBtn.title = label;
@@ -156,9 +156,25 @@
     };
 
     window.toggleWorkspaceSidebar = function () {
+        if (window.matchMedia("(max-width: 900px)").matches) return;
         const collapsed = document.body.classList.toggle("workspace-sidebar-collapsed");
+        if (collapsed) document.getElementById("workspace-summary")?.removeAttribute("open");
         try { localStorage.setItem("shibaclaw_sidebar_collapsed", String(collapsed)); } catch (_) { /* optional storage */ }
     };
+
+    window.toggleWorkspaceStatus = function (event) {
+        if (event.target.closest("#btn-restart")) return;
+        const box = document.getElementById("workspace-summary");
+        if (!box || document.body.classList.contains("workspace-sidebar-collapsed")) return;
+        box.open = !box.open;
+    };
+
+    document.addEventListener("click", (event) => {
+        const box = document.getElementById("workspace-summary");
+        if (!box?.open) return;
+        if (event.target.closest("#workspace-summary, #status-card")) return;
+        box.open = false;
+    });
 
     function applySidebarForViewport() {
         if (window.matchMedia("(max-width: 900px)").matches) {

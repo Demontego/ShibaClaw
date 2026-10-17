@@ -9,17 +9,18 @@ from typing import Any
 from shibaclaw.automation.types import AutomationPayload, AutomationSchedule
 from shibaclaw.evolve.ci_gate import github_ci, run_local_ci
 from shibaclaw.evolve.gate import (
-    ALARM_MS,
-    CAMPAIGN,
     JOB_NAME,
     SESSION_KEY,
+    alarm_minutes,
     begin,
+    chosen_model,
     end,
     gate,
     load,
     note_apply,
     save,
     status_line,
+    wake_message,
 )
 
 UTC = timezone.utc
@@ -84,14 +85,15 @@ def _telegram_identity(sender_id: str) -> set[str]:
     return found
 
 
-def _payload(owner: str | None) -> dict:
+def _payload(owner: str | None, message: str, model: str | None) -> dict:
     return {
         "kind": "scheduled",
-        "message": CAMPAIGN,
+        "message": message,
         "deliver": bool(owner),
         "channel": "telegram" if owner else None,
         "to": owner,
         "sessionKey": SESSION_KEY,
+        "model": model,
         "targets": {"telegram": owner} if owner else {},
     }
 
@@ -106,30 +108,38 @@ def sync_alarm(
     *,
     enabled: bool,
     owner: str | None,
-    every_ms: int = ALARM_MS,
+    every_ms: int | None = None,
 ) -> str:
+    every = alarm_minutes(data) * 60_000 if every_ms is None else every_ms
+    message = wake_message(data)
+    model = chosen_model(data)
     found = next((job for job in automation.list_jobs() if job.name == JOB_NAME), None)
     if found is None:
         found = automation.add_job(
             name=JOB_NAME,
-            schedule=AutomationSchedule(kind="every", every_ms=every_ms),
+            schedule=AutomationSchedule(kind="every", every_ms=every),
             payload=AutomationPayload(
                 kind="scheduled",
-                message=CAMPAIGN,
+                message=message,
                 deliver=bool(owner),
                 channel="telegram" if owner else None,
                 to=owner,
                 session_key=SESSION_KEY,
+                model=model,
                 targets={"telegram": owner} if owner else {},
             ),
         )
     updated = automation.update_job(
         found.id,
-        {"enabled": enabled, "schedule": _schedule(every_ms), "payload": _payload(owner)},
+        {
+            "enabled": enabled,
+            "schedule": _schedule(every),
+            "payload": _payload(owner, message, model),
+        },
     )
     job_id = updated.id if updated is not None else found.id
     data["job_id"] = job_id
-    return f"job {job_id} enabled={enabled} alarm={every_ms // 60000}m"
+    return f"job {job_id} enabled={enabled} alarm={every // 60000}m"
 
 
 def handle(

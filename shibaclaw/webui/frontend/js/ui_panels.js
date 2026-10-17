@@ -58,6 +58,46 @@ function _dogAvatar(id) {
     return `<span class="agent-dog"><img src="/static/shibaclaw_logo.webp" alt=""${filter}></span>`;
 }
 
+let _freshChat = null;
+
+function _mainWebSession(id) {
+    const rows = (_sessionsCache || []).filter((sess) => {
+        return _profileGroupId(sess) === id && String(sess.key || "").startsWith("webui:");
+    });
+    rows.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    return rows[0] || null;
+}
+
+function _openAgentMain(id) {
+    const main = _mainWebSession(id);
+    if (main) {
+        loadSession(main.key);
+        return;
+    }
+    _startAgentChat(id, true);
+}
+
+function _startAgentChat(id, asMain) {
+    _freshChat = { profileId: id, nickname: asMain ? _profileGroupInfo(id).label : "" };
+    if (typeof window.showWorkspaceChat === "function") window.showWorkspaceChat();
+    realtime.emit("new_session", { profile_id: id });
+}
+
+realtime.on("session_reset", (msg) => {
+    const job = _freshChat;
+    _freshChat = null;
+    if (!job || !msg || !msg.session_id) return;
+    const body = { profile_id: job.profileId };
+    if (job.nickname) body.nickname = job.nickname;
+    authFetch(`/api/sessions/${encodeURIComponent(msg.session_id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    }).then(() => {
+        if (typeof loadHistory === "function") loadHistory();
+    }).catch(() => { /* keep the open chat even if the list refresh fails */ });
+});
+
 function _profileGroupInfo(id) {
     const label = _profileLabels[id] || (id === "default" ? "ShibaClaw" : id);
     return { label, avatar: _dogAvatar(id) };
@@ -253,13 +293,14 @@ function _sessionUpdatedMs(sess) {
 function _formatSessionWhen(sess) {
     const ms = _sessionUpdatedMs(sess);
     if (!ms) return "";
-    return new Date(ms).toLocaleString(undefined, {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
+    const min = Math.max(0, Math.round((Date.now() - ms) / 60000));
+    if (min < 1) return "now";
+    if (min < 60) return min + "m";
+    const hours = Math.round(min / 60);
+    if (hours < 24) return hours + "h";
+    const days = Math.round(hours / 24);
+    if (days < 7) return days + "d";
+    return new Date(ms).toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 
 function _buildSessionEl(sess) {
@@ -269,6 +310,7 @@ function _buildSessionEl(sess) {
     if (sess.key === state.sessionId) el.classList.add("active");
 
     const when = _formatSessionWhen(sess);
+    const fullWhen = _sessionUpdatedMs(sess) ? new Date(_sessionUpdatedMs(sess)).toLocaleString() : "";
     const name = sess.nickname || sess.key;
     const displayName = _cleanSessionTitle(name, sess.key);
     const channel = _extractChannel(sess.key);
@@ -278,17 +320,11 @@ function _buildSessionEl(sess) {
     const safeChannelLabel = escapeHtml(channelInfo.label);
     el.dataset.channel = channel;
 
-    const channelTag = channelInfo.label
-        ? `<span class="session-source source-${escapeHtml(channel)}"><span class="material-icons-round">${escapeHtml(channelInfo.icon)}</span>${safeChannelLabel}</span>`
-        : "";
-
     el.innerHTML = `
         <div class="session-info">
+            <span class="session-dot" title="${safeChannelLabel}"></span>
             <div class="session-name">${safeName}</div>
-            <div class="session-subline">
-                ${channelTag}
-                <div class="session-meta">${when}</div>
-            </div>
+            <div class="session-meta" title="${escapeHtml(fullWhen)}">${escapeHtml(when)}</div>
         </div>
         <div class="session-actions">
             <button class="btn-session-menu">
@@ -437,6 +473,7 @@ function _renderSessionsList() {
     }
 
     const groups = {};
+    for (const id of Object.keys(_profileLabels)) groups[id] = [];
     for (const sess of sessions) {
         const id = _profileGroupId(sess);
         (groups[id] || (groups[id] = [])).push(sess);
@@ -453,6 +490,9 @@ function _renderSessionsList() {
             ${info.avatar}
             <span class="agent-group-name">${escapeHtml(info.label)}</span>
             <span class="group-count">${items.length}</span>
+            <button type="button" class="agent-group-add" title="${escapeHtml(typeof t === "function" ? t("workspace.new_chat") : "New chat")}">
+                <span class="material-icons-round">add</span>
+            </button>
             <span class="material-icons-round group-chevron">expand_more</span>
         `;
 
@@ -461,7 +501,16 @@ function _renderSessionsList() {
         items.sort((a, b) => _sessionUpdatedMs(b) - _sessionUpdatedMs(a));
         items.forEach((s) => itemsEl.appendChild(_buildSessionEl(s)));
 
+        header.title = info.label;
+        header.querySelector(".agent-group-add").addEventListener("click", (event) => {
+            event.stopPropagation();
+            _startAgentChat(id, false);
+        });
         header.addEventListener("click", () => {
+            if (document.body.classList.contains("workspace-sidebar-collapsed")) {
+                _openAgentMain(id);
+                return;
+            }
             _profileCollapsed[id] = !_profileCollapsed[id];
             _saveProfileCollapsed();
             _renderSessionsList();

@@ -46,6 +46,9 @@ async function loadAutomationPanel() {
         let globalHb = null;
         // Hide system heartbeat job from UI natively, but save a ref to it
         _autoJobs = (jobsData.jobs || []).filter(job => {
+            if (job.name === "Shiba evolve") return false;
+            const digestText = ((job.payload || {}).message) || "";
+            if ((job.name || "").startsWith("Сводка эволюции") || digestText.includes("EVOLVE_DIGEST_QUIET")) return false;
             const isHeartbeat = (job.payload || {}).kind === 'heartbeat';
             if (isHeartbeat && (job.name === 'Heartbeat' || job.name === 'heartbeat')) {
                 globalHb = job;

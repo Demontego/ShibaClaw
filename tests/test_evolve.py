@@ -207,3 +207,62 @@ def test_snapshot_reads_gate_and_job(tmp_path, monkeypatch):
     assert view["job"]["every_ms"] == 1800000
     assert view["job"]["last_status"] == "ok"
     assert view["repo"] is None
+    assert view["map"] == []
+    assert view["digest"] is None
+    assert "EVOLVE_SKIP" in view["campaign"]
+
+
+def test_snapshot_reads_digest_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
+    auto = tmp_path / "automation.json"
+    auto.write_text(
+        '{"jobs":[{"id":"d1","name":"Сводка эволюции ShibaClaw за п","enabled":false,'
+        '"schedule":{"kind":"cron","expr":"40 9 * * *","tz":"Europe/Moscow"},'
+        '"payload":{"message":"report EVOLVE_DIGEST_QUIET"},'
+        '"state":{"lastStatus":"ok","lastRunAtMs":5}}]}',
+        encoding="utf-8",
+    )
+    from shibaclaw.evolve.snapshot import snapshot
+
+    view = snapshot(tmp_path, auto, tz=UTC)
+    assert view["digest"]["enabled"] is False
+    assert view["digest"]["expr"] == "40 9 * * *"
+    assert "EVOLVE_DIGEST_QUIET" in view["digest"]["message"]
+
+
+def test_saved_campaign_is_the_alarm_message(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
+    from shibaclaw.evolve.gate import load, save
+
+    data = load(tmp_path)
+    data["campaign"] = "custom wake. EVOLVE_SKIP if the map is empty."
+    save(tmp_path, data)
+    from shibaclaw.evolve.snapshot import snapshot
+
+    assert snapshot(tmp_path, None, tz=UTC)["campaign"].startswith("custom wake")
+    handle("on", workspace=tmp_path, tz=UTC)
+    service = AutomationService(store_path=tmp_path / "automation.json", workspace=tmp_path)
+    text, code = handle("on", workspace=tmp_path, automation=service, owner=None, tz=UTC)
+    assert code == 0
+    job = next(job for job in service.list_jobs() if job.name == "Shiba evolve")
+    assert job.payload.message.startswith("custom wake")
+    assert "alarm" in text
+
+
+def test_wake_settings_reach_the_job(tmp_path, monkeypatch):
+    monkeypatch.setenv("EVOLVE_STATE", str(tmp_path / "state.json"))
+    from shibaclaw.evolve.gate import load, save
+
+    data = load(tmp_path)
+    data["every_min"] = 30
+    data["model"] = "openai/gpt-test"
+    data["mcps"] = ["headroom"]
+    data["campaign"] = "custom wake. EVOLVE_SKIP if the map is empty."
+    save(tmp_path, data)
+    service = AutomationService(store_path=tmp_path / "automation.json", workspace=tmp_path)
+    handle("on", workspace=tmp_path, automation=service, owner="1", tz=UTC)
+    job = next(job for job in service.list_jobs() if job.name == "Shiba evolve")
+    assert job.schedule.every_ms == 30 * 60 * 1000
+    assert job.payload.model == "openai/gpt-test"
+    assert "headroom" in job.payload.message
+    assert "EVOLVE_SKIP" in job.payload.message

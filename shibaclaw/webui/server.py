@@ -73,7 +73,7 @@ from .routers.mcp_manager import (
     test_mcp_server,
     upsert_mcp_server,
 )
-from .routers.evolve import api_evolve_get
+from .routers.evolve import api_evolve_get, api_evolve_post
 from .routers.memory import api_memory_forget, api_memory_get, api_memory_save
 from .routers.oauth import (
     api_oauth_code,
@@ -173,19 +173,8 @@ def create_app(
         response.headers["Expires"] = "0"
         return response
 
-    async def desktop_index(_request):
-        desktop = STATIC_DIR / "desktop" / "index.html"
-        if not desktop.exists():
-            return await index(_request)
-        response = FileResponse(desktop)
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
     routes = [
         Route("/", index),
-        Route("/desktop", desktop_index),
         Route("/api/auth/verify", api_auth_verify, methods=["POST"]),
         Route("/api/auth/status", api_auth_status, methods=["GET"]),
         Route("/api/auth/setup", api_auth_setup, methods=["POST"]),
@@ -211,6 +200,7 @@ def create_app(
         Route("/api/memory/save", api_memory_save, methods=["POST"]),
         Route("/api/memory/forget", api_memory_forget, methods=["POST"]),
         Route("/api/evolve", api_evolve_get, methods=["GET"]),
+        Route("/api/evolve", api_evolve_post, methods=["POST"]),
         Route("/api/gateway-health", api_gateway_health),
         Route("/api/gateway-restart", api_gateway_restart, methods=["POST"]),
         # ── Automation (unified) ─────────────────────────────────────────────

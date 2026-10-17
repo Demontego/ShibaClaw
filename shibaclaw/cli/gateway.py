@@ -265,13 +265,25 @@ async def gateway_command(
         async def _noop_progress(*_args, **_kwargs) -> None:
             return None
 
+        meta: dict = {"hidden": True}
+        if session_key == "automation:shiba-evolve":
+            try:
+                from shibaclaw.evolve.gate import load as load_evolve
+                from shibaclaw.evolve.gate import mcp_names
+
+                names = mcp_names(load_evolve(config.workspace_path))
+                if names:
+                    meta["mentioned_mcps"] = names
+            except Exception:
+                pass
+
         out = await agent.process_direct(
             job.payload.message,
             session_key,
             channel="automation",
             chat_id=job.id,
             on_progress=_noop_progress,
-            metadata={"hidden": True},
+            metadata=meta,
             model=job.payload.model,
         )
         response = out.content if out else ""
