@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from shibaclaw.apps.models import AppDefinition, RuntimeType
 from shibaclaw.apps.installer import AppInstaller

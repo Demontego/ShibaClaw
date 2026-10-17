@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import pytest
 from starlette.requests import Request
-from starlette.responses import JSONResponse
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from shibaclaw.webui.routers.apps import (
     api_list_apps,
@@ -15,7 +14,6 @@ from shibaclaw.webui.routers.apps import (
     api_disable_app,
     api_connect_app,
     api_disconnect_app,
-    api_get_app_tools,
     api_update_app_tools,
     api_create_custom_app,
 )

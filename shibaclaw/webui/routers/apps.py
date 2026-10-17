@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from loguru import logger
 
 from shibaclaw.apps.models import AppDefinition, RuntimeType, TrustLevel, AppAuthDefinition
 from shibaclaw.apps.registry.manager import AppRegistryManager

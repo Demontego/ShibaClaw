@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from shibaclaw.apps.models import AppDefinition, AppAuthDefinition, AppAuthField, AuthState
+from shibaclaw.apps.models import AppDefinition, AppAuthDefinition, AuthState
 from shibaclaw.apps.auth import AppAuthManager
 from shibaclaw.config.schema import Config, MCPServerConfig
 
@@ -38,7 +38,7 @@ async def test_auth_api_key_storage(auth_mgr):
     )
 
     with patch("shibaclaw.apps.auth._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.auth.save_config") as mock_save:
+            patch("shibaclaw.apps.auth.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg
@@ -83,7 +83,7 @@ async def test_auth_disconnect_cleans_secrets(auth_mgr):
     )
 
     with patch("shibaclaw.apps.auth._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.auth.save_config") as mock_save:
+            patch("shibaclaw.apps.auth.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg

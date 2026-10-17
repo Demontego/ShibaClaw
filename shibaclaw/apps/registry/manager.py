@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
-from loguru import logger
 
 from shibaclaw.apps.models import AppDefinition
-from shibaclaw.apps.registry.base import BaseAppRegistry
 from shibaclaw.apps.registry.curated import CuratedAppRegistry
 from shibaclaw.apps.registry.mcp_registry import MCPRegistryProvider
 from shibaclaw.apps.registry.native import NativePluginRegistryProvider

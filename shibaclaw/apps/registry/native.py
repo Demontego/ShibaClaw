@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 from shibaclaw.apps.models import AppDefinition, TrustLevel, RuntimeType, AppAuthDefinition
 from shibaclaw.apps.registry.base import BaseAppRegistry
 from shibaclaw.config.loader import load_config

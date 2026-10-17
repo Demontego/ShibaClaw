@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import Any
 from loguru import logger
 
-from shibaclaw.apps.models import AppDefinition, InstalledAppRecord, RuntimeType, TrustLevel
+from shibaclaw.apps.models import AppDefinition, InstalledAppRecord, RuntimeType
 from shibaclaw.apps.registry.manager import AppRegistryManager
 from shibaclaw.apps.state import AppStateManager
 from shibaclaw.apps.auth import AppAuthManager

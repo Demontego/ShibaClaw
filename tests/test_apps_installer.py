@@ -39,7 +39,7 @@ async def test_install_remote_mcp_app(mock_managers):
 
     mock_cfg = Config()
     with patch("shibaclaw.apps.installer._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.installer.save_config") as mock_save:
+            patch("shibaclaw.apps.installer.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg
@@ -92,7 +92,7 @@ async def test_uninstall_app_cleans_up(mock_managers):
     )
 
     with patch("shibaclaw.apps.installer._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.installer.save_config") as mock_save:
+            patch("shibaclaw.apps.installer.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg
@@ -120,7 +120,7 @@ async def test_toggle_app_enabled(mock_managers):
     )
 
     with patch("shibaclaw.apps.installer._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.installer.save_config") as mock_save:
+            patch("shibaclaw.apps.installer.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg
@@ -152,7 +152,7 @@ async def test_update_enabled_tools(mock_managers):
     )
 
     with patch("shibaclaw.apps.installer._get_agent_mgr") as mock_get_mgr, \
-         patch("shibaclaw.apps.installer.save_config") as mock_save:
+            patch("shibaclaw.apps.installer.save_config"):
         mock_agent_mgr = MagicMock()
         mock_get_mgr.return_value = mock_agent_mgr
         mock_agent_mgr.config = mock_cfg
