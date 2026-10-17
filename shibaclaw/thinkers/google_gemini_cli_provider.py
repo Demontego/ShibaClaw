@@ -1,12 +1,9 @@
 """Google Gemini CLI provider."""
 
-from typing import Any
-
 import httpx
 from loguru import logger
 
 from shibaclaw.security.oauth_store import OAuthTokenStore
-from shibaclaw.thinkers.base import LLMResponse
 from shibaclaw.thinkers.openai_provider import OpenAIThinker
 
 
@@ -18,6 +15,8 @@ class GoogleGeminiCLIThinker(OpenAIThinker):
     refreshes it if necessary,
     and calls the OpenAI-compatible Gemini API endpoint.
     """
+
+    _session_label = "Google Gemini CLI"
 
     def __init__(self, default_model: str = "gemini-2.0-flash"):
         self._store = OAuthTokenStore()
@@ -75,7 +74,9 @@ class GoogleGeminiCLIThinker(OpenAIThinker):
                     if err_json.get("error") == "invalid_grant":
                         # Mark as disconnected
                         self._store.delete_token("google_gemini_cli")
-                        raise ValueError("Google Gemini CLI session expired (invalid_grant). Please reconnect in the WebUI.")
+                        raise ValueError(
+                            "Google Gemini CLI session expired (invalid_grant). Please reconnect in the WebUI."
+                        )
                 except Exception:
                     pass
                 raise RuntimeError(
@@ -105,61 +106,3 @@ class GoogleGeminiCLIThinker(OpenAIThinker):
 
         # shortcut: the CLI token is accepted for chat, but the model-list call returns 403.
         return [{"id": mid, "name": mid} for mid in get_all_models() if mid.startswith("gemini-")]
-
-    async def chat(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
-        reasoning_effort: str | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
-    ) -> LLMResponse:
-        try:
-            session_token = await self._get_session_token()
-            self._client.api_key = session_token
-        except Exception as e:
-            return LLMResponse(
-                content=f"Error authenticating with Google Gemini CLI: {e}", finish_reason="error"
-            )
-
-        return await super().chat(
-            messages=messages,
-            tools=tools,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            reasoning_effort=reasoning_effort,
-            tool_choice=tool_choice,
-        )
-
-    async def chat_streaming(
-        self,
-        messages: list[dict[str, Any]],
-        on_token: Any = None,
-        tools: list[dict[str, Any]] | None = None,
-        model: str | None = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.7,
-        reasoning_effort: str | None = None,
-        tool_choice: str | dict[str, Any] | None = None,
-    ) -> LLMResponse:
-        try:
-            session_token = await self._get_session_token()
-            self._client.api_key = session_token
-        except Exception as e:
-            return LLMResponse(
-                content=f"Error authenticating with Google Gemini CLI: {e}", finish_reason="error"
-            )
-
-        return await super().chat_streaming(
-            messages=messages,
-            on_token=on_token,
-            tools=tools,
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            reasoning_effort=reasoning_effort,
-            tool_choice=tool_choice,
-        )

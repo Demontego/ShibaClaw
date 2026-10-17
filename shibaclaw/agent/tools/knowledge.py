@@ -21,7 +21,7 @@ class KnowledgeSearchTool(Tool):
         return (
             "CRITICAL: You MUST use this tool FIRST if the user's question can be answered by "
             "the Active Knowledge Bases in your system prompt. Search for information inside "
-            "user-created Knowledge Bases (Collezioni) via semantic similarity before using "
+            "user-created Knowledge Bases (Collezioni) with BM25 keyword search before using "
             "web_search."
         )
 
@@ -50,7 +50,7 @@ class KnowledgeSearchTool(Tool):
         from shibaclaw.agent.knowledge_manager import KnowledgeManager, is_rag_available
 
         if not is_rag_available():
-            return "Error: Knowledge Bases require RAG extras. Run: uv sync --extra rag"
+            return "Error: RAG is removed from this build."
 
         query = kwargs.get("query")
         collection_ids = kwargs.get("collection_ids")
@@ -82,7 +82,7 @@ class KnowledgeSearchTool(Tool):
             out = ["### Knowledge Search Results ###"]
             for i, doc in enumerate(docs):
                 out.append(
-                    f"--- Document {i+1} (Source: {doc.metadata.get('source', 'Unknown')}, "
+                    f"--- Document {i + 1} (Source: {doc.metadata.get('source', 'Unknown')}, "
                     f"Score: {doc.metadata.get('score', 0):.3f}) ---"
                 )
                 out.append(doc.page_content)

@@ -102,6 +102,10 @@ class OpenAIThinker(Thinker):
     OpenAI-compatible endpoint.
     """
 
+    # Subclasses that refresh an OAuth session set this. Chat then installs
+    # the token before the request. None keeps the key from __init__.
+    _session_label: str | None = None
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -129,6 +133,10 @@ class OpenAIThinker(Thinker):
             spec = self._gateway
 
         resolved_base = api_base or (spec.default_api_base if spec else None)
+        if spec and spec.name == "xai" and not api_base:
+            from shibaclaw.thinkers.xai import xai_api_base
+
+            resolved_base = xai_api_base(resolved_key)
 
         # Stable session affinity for custom backends
         default_headers = {
@@ -162,6 +170,19 @@ class OpenAIThinker(Thinker):
         if s and s.env_key:
             return os.environ.get(s.env_key)
 
+        return None
+
+    async def _ensure_session_token(self) -> LLMResponse | None:
+        label = self._session_label
+        if not label:
+            return None
+        try:
+            self._client.api_key = await self._get_session_token()
+        except Exception as exc:
+            return LLMResponse(
+                content=f"Error authenticating with {label}: {exc}",
+                finish_reason="error",
+            )
         return None
 
     def _resolve_model(self, model: str) -> str:
@@ -327,6 +348,9 @@ class OpenAIThinker(Thinker):
         reasoning_effort: str | None = None,
         tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
+        auth_error = await self._ensure_session_token()
+        if auth_error is not None:
+            return auth_error
         original_model = model or self.default_model
         resolved_model = self._resolve_model(original_model)
 
@@ -431,6 +455,9 @@ class OpenAIThinker(Thinker):
         tool_choice: str | dict[str, Any] | None = None,
     ) -> LLMResponse:
         """Stream OpenAI response, calling on_token for each text delta."""
+        auth_error = await self._ensure_session_token()
+        if auth_error is not None:
+            return auth_error
         original_model = model or self.default_model
         resolved_model = self._resolve_model(original_model)
 

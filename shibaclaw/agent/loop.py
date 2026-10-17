@@ -38,6 +38,7 @@ from shibaclaw.agent.tools.interactive import (
     SessionSearchTool,
     UpdateProgressTool,
 )
+from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.agent.tools.memory_search import MemorySearchTool
 from shibaclaw.agent.tools.memory_ops import MemoryForgetTool, ProposeSkillTool
 from shibaclaw.agent.tools.message import MessageTool
@@ -45,7 +46,6 @@ from shibaclaw.agent.tools.registry import SkillVault
 from shibaclaw.agent.tools.shell import ExecTool
 from shibaclaw.agent.tools.spawn import SpawnMeaTool, SpawnTool
 from shibaclaw.agent.tools.web import WebFetchTool, WebSearchTool
-from shibaclaw.agent.tools.knowledge import KnowledgeSearchTool
 from shibaclaw.agent.interactive import normalize_permission_mode
 from shibaclaw.brain.manager import PackManager, Session
 from shibaclaw.bus.events import InboundMessage, OutboundMessage
@@ -348,7 +348,6 @@ class ShibaBrain:
             return resolved_provider
         return self.provider
 
-
     def _filter_tools_for_profile(
         self, tool_defs: list[dict], profile_id: str | None
     ) -> list[dict]:
@@ -435,11 +434,8 @@ class ShibaBrain:
                 )
             )
         self.tools.register(WebSearchTool(config=self.web_search_config, proxy=self.web_proxy))
-        from shibaclaw.agent.knowledge_manager import is_rag_available
-
-        if is_rag_available():
-            self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(WebFetchTool(proxy=self.web_proxy))
+        self.tools.register(KnowledgeSearchTool(workspace=self.workspace))
         self.tools.register(MemorySearchTool(workspace=self.workspace))
         self.tools.register(MemoryForgetTool(workspace=self.workspace))
         self.tools.register(ProposeSkillTool(workspace=self.workspace))
@@ -483,9 +479,7 @@ class ShibaBrain:
             from shibaclaw.agent.tools.secretary import BusinessSearchTool, BusinessSendTool
 
             owner_ids = _telegram_allow_from_ids(self.channels_config)
-            self.tools.register(
-                BusinessSearchTool(sessions=self.sessions, owner_ids=owner_ids)
-            )
+            self.tools.register(BusinessSearchTool(sessions=self.sessions, owner_ids=owner_ids))
             self.tools.register(
                 BusinessSendTool(
                     sessions=self.sessions,
@@ -603,10 +597,7 @@ class ShibaBrain:
             return True
         return "github" in tool_name.lower() and tool_name.startswith("mcp_")
 
-
-    def _is_allowlisted_turn(
-        self, metadata: dict | None, channel: str | None = None
-    ) -> bool:
+    def _is_allowlisted_turn(self, metadata: dict | None, channel: str | None = None) -> bool:
         """WebUI/CLI/system and allowlisted Telegram senders keep full tools.
 
         Telegram is fail-closed: missing ``is_allowlisted`` → restricted tools.
@@ -711,9 +702,7 @@ class ShibaBrain:
                         }
                         if name == "spawn_mea":
                             kwargs["ephemeral"] = self._checkpoint_forbidden(session_key, metadata)
-                        tool.set_context(
-                            channel, chat_id, session_key, **kwargs
-                        )
+                        tool.set_context(channel, chat_id, session_key, **kwargs)
                     else:
                         tool.set_context(channel, chat_id, session_key)
         for name in (
@@ -759,10 +748,18 @@ class ShibaBrain:
         """Format tool calls as concise hint, e.g. 'web_search("query")'."""
 
         def _mask_sensitive(val: str) -> str:
-            val = re.sub(r'(?i)(bearer\s+)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
-            val = re.sub(r'(?i)(api[_-]?key["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
-            val = re.sub(r'(?i)(token["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r'\1***', val)
-            val = re.sub(r'(?i)([?&](?:token|key|api[_-]?key|access[_-]?token)=)[A-Za-z0-9\-\._~+/]{10,}', r'\1***', val)
+            val = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9\-\._~+/]{15,}", r"\1***", val)
+            val = re.sub(
+                r'(?i)(api[_-]?key["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r"\1***", val
+            )
+            val = re.sub(
+                r'(?i)(token["\']?\s*[:=]\s*["\']?)[A-Za-z0-9\-\._~+/]{15,}', r"\1***", val
+            )
+            val = re.sub(
+                r"(?i)([?&](?:token|key|api[_-]?key|access[_-]?token)=)[A-Za-z0-9\-\._~+/]{10,}",
+                r"\1***",
+                val,
+            )
             if len(val) > 100:
                 val = val[:47] + "..."
             return val
@@ -905,10 +902,14 @@ class ShibaBrain:
         private = self._checkpoint_forbidden(session_key, metadata)
         if private and session_key:
             checkpoint_mgr.delete_checkpoint(session_key)
-        checkpoint = None if private or not session_key else checkpoint_mgr.load_checkpoint(session_key)
+        checkpoint = (
+            None if private or not session_key else checkpoint_mgr.load_checkpoint(session_key)
+        )
         if checkpoint:
             messages, _saved_iteration, _checkpoint_meta = checkpoint
-            fresh = next((item for item in reversed(initial_messages) if item.get("role") == "user"), None)
+            fresh = next(
+                (item for item in reversed(initial_messages) if item.get("role") == "user"), None
+            )
             if fresh and (
                 not messages
                 or messages[-1].get("role") != "user"
@@ -945,8 +946,14 @@ class ShibaBrain:
             from shibaclaw.agent.profiles import ProfileManager
 
             profiles = ProfileManager(self.workspace)
-            if profiles.get_allowed_models(profile_id) == [] or not profiles.model_allowed(profile_id, active_model):
-                return f"Model `{active_model}` is not allowed for this profile.", tools_used, messages
+            if profiles.get_allowed_models(profile_id) == [] or not profiles.model_allowed(
+                profile_id, active_model
+            ):
+                return (
+                    f"Model `{active_model}` is not allowed for this profile.",
+                    tools_used,
+                    messages,
+                )
         except Exception as exc:
             logger.warning("effective model allowlist check failed closed: {}", exc)
             return "Could not validate profile model allowlist.", tools_used, messages
@@ -970,9 +977,7 @@ class ShibaBrain:
             return "No provider is configured for the selected model.", tools_used, messages
 
         # Tool definitions don't change mid-loop; compute once.
-        tool_defs = self._filter_tools_for_profile(
-            self.tools.get_definitions(), profile_id
-        )
+        tool_defs = self._filter_tools_for_profile(self.tools.get_definitions(), profile_id)
         tool_defs = self._filter_tools_for_allowlist(
             tool_defs, metadata, channel, chat_id=chat_id, profile_id=profile_id
         )
@@ -1198,10 +1203,9 @@ class ShibaBrain:
                     logger.debug("Tool call: {}({})", tool_call.name, args_str[:200])
                     call_key = (tool_call.name, args_str)
                     executed_tool_calls.add(call_key)
-                    if (
-                        tool_call.name in {"agent_send", "agent_create"}
-                        and str(session_key or "").startswith("agent:")
-                    ):
+                    if tool_call.name in {"agent_send", "agent_create"} and str(
+                        session_key or ""
+                    ).startswith("agent:"):
                         messages = self.context.add_tool_result(
                             messages,
                             tool_call.id,
@@ -1215,10 +1219,7 @@ class ShibaBrain:
                             messages,
                             tool_call.id,
                             tool_call.name,
-                            (
-                                f"Error: Tool '{tool_call.name}' is disabled "
-                                f"for this profile."
-                            ),
+                            (f"Error: Tool '{tool_call.name}' is disabled for this profile."),
                         )
                         answered_calls.add(tool_call.id)
                         continue
@@ -1257,6 +1258,7 @@ class ShibaBrain:
                         answered_calls.add(tool_call.id)
                         continue
                     tool_call.arguments = preflight_res.arguments
+
                     async def _run_tool(call: Any = tool_call) -> str:
                         if semantic_breaker.should_block(call.name, call.arguments):
                             return semantic_breaker.get_tripped_message(call.name)
@@ -1425,7 +1427,9 @@ class ShibaBrain:
                     for call in response.tool_calls:
                         if call.id not in answered_calls:
                             messages = self.context.add_tool_result(
-                                messages, call.id, call.name,
+                                messages,
+                                call.id,
+                                call.name,
                                 final_content or "Stopped. This tool was not started.",
                             )
                 messages.extend(tool_pivots)
@@ -1564,9 +1568,7 @@ class ShibaBrain:
             else:
                 task = asyncio.create_task(self._dispatch(msg))
                 self._active_tasks.setdefault(msg.session_key, []).append(task)
-                task.add_done_callback(
-                    lambda t, k=msg.session_key: self._remove_active_task(k, t)
-                )
+                task.add_done_callback(lambda t, k=msg.session_key: self._remove_active_task(k, t))
 
     def _remove_active_task(self, session_key: str, task: asyncio.Task) -> None:
         tasks = self._active_tasks.get(session_key)
@@ -1597,11 +1599,7 @@ class ShibaBrain:
                         for task in self._active_tasks.get(key, [])
                         if task is not current and not task.done()
                     ]
-                    kept = [
-                        task
-                        for task in self._active_tasks.get(key, [])
-                        if task is current
-                    ]
+                    kept = [task for task in self._active_tasks.get(key, []) if task is current]
                     if kept:
                         self._active_tasks[key] = kept
                     else:
@@ -1693,7 +1691,8 @@ class ShibaBrain:
         journal = self._journal_for(session_key)
         current = asyncio.current_task()
         tasks = [
-            task for task in self._active_tasks.get(session_key, [])
+            task
+            for task in self._active_tasks.get(session_key, [])
             if task is not current and not task.done()
         ]
         if mode == "when_idle":
@@ -1867,7 +1866,9 @@ class ShibaBrain:
                 return screened
             session = self.sessions.get_or_create(key)
             profile_id = session.metadata.get("profile_id") or None
-            effective_model = model_override or self._resolve_model(profile_id, session.metadata, self.workspace)
+            effective_model = model_override or self._resolve_model(
+                profile_id, session.metadata, self.workspace
+            )
             self._set_tool_context(
                 channel,
                 chat_id,
@@ -1895,9 +1896,7 @@ class ShibaBrain:
             except JournalError as exc:
                 logger.error("turn journal: {}", exc)
                 return OutboundMessage(channel=channel, chat_id=chat_id, content=REFUSAL)
-            _temp = self._resolve_temperature(
-                profile_id, session.metadata, self.workspace
-            )
+            _temp = self._resolve_temperature(profile_id, session.metadata, self.workspace)
             final_content, _, all_msgs = await self._run_agent_loop(
                 messages,
                 channel=channel,
@@ -2015,15 +2014,11 @@ class ShibaBrain:
             CheckpointManager(self.context.workspace).delete_checkpoint(key)
             self._steering_queues.pop(key, None)
             snapshot = session.messages[session.last_consolidated :]
-            incognito = bool(
-                session.metadata.get("incognito") or session.metadata.get("ephemeral")
-            )
+            incognito = bool(session.metadata.get("incognito") or session.metadata.get("ephemeral"))
             # Schedule archive while session (and incognito flag) still in cache.
             if snapshot and not incognito:
                 self._schedule_background(
-                    self.memory_consolidator.archive_snapshot(
-                        snapshot, session_key=session.key
-                    )
+                    self.memory_consolidator.archive_snapshot(snapshot, session_key=session.key)
                 )
             session.clear()
             await self.sessions.asave(session)
@@ -2058,47 +2053,50 @@ class ShibaBrain:
                     channel=msg.channel,
                     chat_id=msg.chat_id,
                     content="Checking for updates...",
-                    metadata={"msg_type": "system"}
+                    metadata={"msg_type": "system"},
                 )
             )
             try:
                 from shibaclaw.updater.checker import check_for_update
                 from shibaclaw.updater.apply import apply_update
                 import asyncio
-                
+
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(None, check_for_update)
-                
+
                 if not result.get("update_available"):
                     return OutboundMessage(
                         channel=msg.channel,
                         chat_id=msg.chat_id,
                         content=result.get("summary") or "You are already up to date.",
                     )
-                
+
                 if result.get("action_kind") != "automatic":
                     return OutboundMessage(
                         channel=msg.channel,
                         chat_id=msg.chat_id,
                         content=f"An update is available ({result.get('latest')}), but it requires manual installation. Please check the WebUI for instructions.",
                     )
-                
+
                 await self.bus.publish_outbound(
                     OutboundMessage(
                         channel=msg.channel,
                         chat_id=msg.chat_id,
                         content=f"Installing update: {result.get('latest')}...\nThis might take a minute.",
-                        metadata={"msg_type": "system"}
+                        metadata={"msg_type": "system"},
                     )
                 )
-                
+
                 workspace_root = self.workspace
                 manifest_url = result.get("manifest_url")
                 manifest = None
                 if manifest_url:
                     try:
                         from shibaclaw.updater.manifest import fetch_manifest
-                        manifest = await loop.run_in_executor(None, lambda: fetch_manifest(manifest_url))
+
+                        manifest = await loop.run_in_executor(
+                            None, lambda: fetch_manifest(manifest_url)
+                        )
                     except Exception as e:
                         logger.warning("Failed to fetch manifest: {}", e)
 
@@ -2106,10 +2104,10 @@ class ShibaBrain:
                     None,
                     lambda: apply_update(result, workspace_root, manifest=manifest),
                 )
-                
+
                 pip_result = report.get("pip") or {}
                 exe_result = report.get("exe") or {}
-                
+
                 if pip_result.get("ok") or exe_result.get("ok"):
                     return OutboundMessage(
                         channel=msg.channel,
@@ -2117,7 +2115,12 @@ class ShibaBrain:
                         content="✅ Update installed successfully!\n\n**IMPORTANT:** You must now restart ShibaClaw manually (e.g. from the terminal or WebUI) for the update to take effect.",
                     )
                 else:
-                    err = pip_result.get("output") or exe_result.get("output") or report.get("message") or "Unknown error"
+                    err = (
+                        pip_result.get("output")
+                        or exe_result.get("output")
+                        or report.get("message")
+                        or "Unknown error"
+                    )
                     return OutboundMessage(
                         channel=msg.channel,
                         chat_id=msg.chat_id,
@@ -2136,7 +2139,8 @@ class ShibaBrain:
             msg.chat_id,
             msg.metadata.get("message_id"),
             session_key=key,
-            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
+            model=model_override
+            or self._resolve_model(profile_id, session.metadata, self.workspace),
             metadata=msg.metadata,
             profile_id=profile_id,
         )
@@ -2261,9 +2265,7 @@ class ShibaBrain:
                 )
             )
 
-        _temp = self._resolve_temperature(
-            profile_id, session.metadata, self.workspace
-        )
+        _temp = self._resolve_temperature(profile_id, session.metadata, self.workspace)
         final_content, _, all_msgs = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
@@ -2271,7 +2273,8 @@ class ShibaBrain:
             channel=msg.channel,
             chat_id=msg.chat_id,
             profile_id=profile_id,
-            model=model_override or self._resolve_model(profile_id, session.metadata, self.workspace),
+            model=model_override
+            or self._resolve_model(profile_id, session.metadata, self.workspace),
             session_key=key,
             metadata=msg.metadata,
             temperature=_temp,
@@ -2375,9 +2378,7 @@ class ShibaBrain:
                     if content.startswith("**[USER INJECTION DURING TASK]**\n\n"):
                         content = content.replace("**[USER INJECTION DURING TASK]**\n\n", "", 1)
                         entry["content"] = content
-                    if content.startswith(
-                        ScentBuilder._RUNTIME_CONTEXT_TAG
-                    ):
+                    if content.startswith(ScentBuilder._RUNTIME_CONTEXT_TAG):
                         parts = content.split("\n\n", 1)
                         if len(parts) > 1 and parts[1].strip():
                             entry["content"] = parts[1]

@@ -32,7 +32,7 @@ def _check_build_environment() -> None:
         )
 
     missing = []
-    for module_name in ("PyInstaller", "PIL", "pystray", "webview", "langchain"):
+    for module_name in ("PyInstaller", "PIL", "pystray", "webview"):
         try:
             __import__(module_name)
         except ImportError:

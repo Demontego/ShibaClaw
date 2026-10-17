@@ -70,36 +70,6 @@ datas += collect_data_files("webview")
 datas += collect_data_files("clr_loader")
 datas += collect_data_files("pythonnet")
 
-# RAG dependencies runtime data (model configs, tokenizer files, etc.)
-try:
-    datas += collect_data_files("sentence_transformers")
-except Exception:
-    pass  # RAG extras not installed — skip gracefully
-try:
-    datas += collect_data_files("langchain")
-except Exception:
-    pass
-try:
-    datas += collect_data_files("langchain_core")
-except Exception:
-    pass
-try:
-    datas += collect_data_files("langchain_community")
-except Exception:
-    pass
-try:
-    datas += collect_data_files("langchain_huggingface")
-except Exception:
-    pass
-try:
-    datas += collect_data_files("langchain_openai")
-except Exception:
-    pass
-try:
-    datas += collect_data_files("langchain_google_genai")
-except Exception:
-    pass
-
 # ---------------------------------------------------------------------------
 # Hidden imports that PyInstaller's static analysis misses
 # ---------------------------------------------------------------------------
@@ -162,9 +132,6 @@ hiddenimports = [
     "readability",
     "lxml",
     "lxml._elementpath",
-    # RAG dependencies
-    "langchain_openai",
-    "langchain_google_genai",
     # .NET bridge (pythonnet / clr_loader)
     "clr",
     "pythonnet",
@@ -178,23 +145,6 @@ hiddenimports = [
     "clr_loader.util",
     "clr_loader.util.find",
     "clr_loader.util.clr_error",
-    # RAG / Knowledge Base dependencies (bundled via [rag] extra)
-    "langchain",
-    "langchain.text_splitter",
-    "langchain_core",
-    "langchain_core.documents",
-    "langchain_core.embeddings",
-    "langchain_core.vectorstores",
-    "langchain_community",
-    "langchain_community.document_loaders",
-    "langchain_community.vectorstores",
-    "langchain_community.vectorstores.faiss",
-    "langchain_huggingface",
-    "langchain_text_splitters",
-    "faiss",
-    "sentence_transformers",
-    "pypdf",
-    "bs4",
 ]
 
 # ---------------------------------------------------------------------------

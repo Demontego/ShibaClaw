@@ -25,6 +25,20 @@ from shibaclaw.agent.knowledge_manager import is_rag_available
 _plugin_lock = asyncio.Lock()
 
 
+async def _stream_pip_output(stream: asyncio.StreamReader, is_err: bool, label: str) -> bytes:
+    output = []
+    while True:
+        line = await stream.readline()
+        if not line:
+            break
+        output.append(line)
+        line_str = line.decode("utf-8", errors="replace").strip()
+        if line_str:
+            kind = "stderr" if is_err else "stdout"
+            logger.debug("{} {}: {}", label, kind, line_str)
+    return b"".join(output)
+
+
 def with_plugin_lock(func):
     import functools
 
@@ -77,31 +91,9 @@ async def api_list_plugins(request: Request) -> JSONResponse:
             }
         )
 
-    rag_available = is_rag_available()
     rag = []
-    if rag_available:
-        rag.append(
-            {
-                "name": "shibaclaw-rag",
-                "display_name": "RAG & Knowledge Base (Local/Cloud)",
-                "type": "rag",
-                "enabled": True,
-                "installed": True,
-            }
-        )
 
     available = []
-
-    if not rag_available:
-        available.append(
-            {
-                "name": "shibaclaw-rag",
-                "display_name": "RAG & Knowledge Base (Local/Cloud)",
-                "type": "rag",
-                "description": "Enables semantic search and document uploading (PDF, CSV, HTML, TXT) via Hybrid RAG (Gemini, OpenRouter, or Local HF Embeddings).",
-                "installed": False,
-            }
-        )
 
     if "supertonic" not in installed_tts:
         available.append(
@@ -264,15 +256,7 @@ async def _install_plugin_source(package: str) -> JSONResponse:
         env["TMPDIR"] = str(custom_tmp)
         extra_kwargs["env"] = env
 
-    if package == "shibaclaw-rag":
-        is_source = (workspace_root / "pyproject.toml").exists()
-        if is_source:
-            cmd = [sys.executable, "-m", "pip", "install", "-e", ".[rag]"]
-            extra_kwargs["cwd"] = str(workspace_root)
-        else:
-            target = f"shibaclaw[rag]=={__version__}" if __version__ != "dev" else "shibaclaw[rag]"
-            cmd = [sys.executable, "-m", "pip", "install", "--no-cache-dir", target]
-    elif local_path.is_dir():
+    if local_path.is_dir():
         install_target = str(local_path)
         cmd = [sys.executable, "-m", "pip", "install", install_target]
     else:
@@ -284,21 +268,6 @@ async def _install_plugin_source(package: str) -> JSONResponse:
 
     logger.info("Installing plugin: {}", " ".join(cmd))
 
-    async def _stream_output(stream: asyncio.StreamReader, is_err: bool) -> bytes:
-        output = []
-        while True:
-            line = await stream.readline()
-            if not line:
-                break
-            output.append(line)
-            line_str = line.decode("utf-8", errors="replace").strip()
-            if line_str:
-                if is_err:
-                    logger.debug("pip stderr: {}", line_str)
-                else:
-                    logger.debug("pip stdout: {}", line_str)
-        return b"".join(output)
-
     async def _run_pip(cmd_list):
         proc = await asyncio.create_subprocess_exec(
             *cmd_list,
@@ -306,8 +275,8 @@ async def _install_plugin_source(package: str) -> JSONResponse:
             stderr=asyncio.subprocess.PIPE,
             **extra_kwargs,
         )
-        stdout_task = asyncio.create_task(_stream_output(proc.stdout, False))
-        stderr_task = asyncio.create_task(_stream_output(proc.stderr, True))
+        stdout_task = asyncio.create_task(_stream_pip_output(proc.stdout, False, "pip"))
+        stderr_task = asyncio.create_task(_stream_pip_output(proc.stderr, True, "pip"))
         stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
         await proc.wait()
 
@@ -326,8 +295,8 @@ async def _install_plugin_source(package: str) -> JSONResponse:
                 stderr=asyncio.subprocess.PIPE,
                 **extra_kwargs,
             )
-            stdout_task = asyncio.create_task(_stream_output(proc.stdout, False))
-            stderr_task = asyncio.create_task(_stream_output(proc.stderr, True))
+            stdout_task = asyncio.create_task(_stream_pip_output(proc.stdout, False, "pip"))
+            stderr_task = asyncio.create_task(_stream_pip_output(proc.stderr, True, "pip"))
             stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
             await proc.wait()
         return proc, stdout, stderr
@@ -338,12 +307,7 @@ async def _install_plugin_source(package: str) -> JSONResponse:
         if proc.returncode != 0:
             if tag != "main":
                 logger.warning("Pip install for tag {} failed, retrying with main branch...", tag)
-                if package == "shibaclaw-rag":
-                    install_target = (
-                        "shibaclaw[rag] @ git+https://github.com/RikyZ90/ShibaClaw.git@main"
-                    )
-                else:
-                    install_target = f"git+https://github.com/RikyZ90/ShibaClaw.git@main#subdirectory=plugins/{package}"
+                install_target = f"git+https://github.com/RikyZ90/ShibaClaw.git@main#subdirectory=plugins/{package}"
                 cmd[-1] = install_target
                 logger.info("Retrying pip install: {}", " ".join(cmd))
                 proc, stdout, stderr = await _run_pip(cmd)
@@ -374,6 +338,11 @@ async def api_install_plugin(request: Request) -> JSONResponse:
     if not package:
         return JSONResponse({"error": "package is required"}, status_code=400)
 
+    if package == "shibaclaw-rag":
+        return JSONResponse(
+            {"ok": False, "error": "RAG is removed from this build."}, status_code=400
+        )
+
     if not re.match(r"^shibaclaw-[a-zA-Z0-9_\-]+$", package):
         return JSONResponse(
             {"error": "Only shibaclaw official plugins can be installed"}, status_code=400
@@ -391,7 +360,7 @@ async def api_install_plugin(request: Request) -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "The RAG plugin is not bundled in this .exe version. Please update ShibaClaw to the latest version, or run from source with `uv sync --extra rag`.",
+                "error": "RAG is removed from this build.",
             },
             status_code=400,
         )
@@ -485,27 +454,12 @@ async def api_uninstall_plugin(request: Request) -> JSONResponse:
     if sys.platform == "win32":
         extra_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 
-    async def _stream_output(stream: asyncio.StreamReader, is_err: bool) -> bytes:
-        output = []
-        while True:
-            line = await stream.readline()
-            if not line:
-                break
-            output.append(line)
-            line_str = line.decode("utf-8", errors="replace").strip()
-            if line_str:
-                if is_err:
-                    logger.debug("pip uninstall stderr: {}", line_str)
-                else:
-                    logger.debug("pip uninstall stdout: {}", line_str)
-        return b"".join(output)
-
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, **extra_kwargs
         )
-        stdout_task = asyncio.create_task(_stream_output(proc.stdout, False))
-        stderr_task = asyncio.create_task(_stream_output(proc.stderr, True))
+        stdout_task = asyncio.create_task(_stream_pip_output(proc.stdout, False, "pip uninstall"))
+        stderr_task = asyncio.create_task(_stream_pip_output(proc.stderr, True, "pip uninstall"))
         stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
         await proc.wait()
 
@@ -523,8 +477,12 @@ async def api_uninstall_plugin(request: Request) -> JSONResponse:
                 stderr=asyncio.subprocess.PIPE,
                 **extra_kwargs,
             )
-            stdout_task = asyncio.create_task(_stream_output(proc.stdout, False))
-            stderr_task = asyncio.create_task(_stream_output(proc.stderr, True))
+            stdout_task = asyncio.create_task(
+                _stream_pip_output(proc.stdout, False, "pip uninstall")
+            )
+            stderr_task = asyncio.create_task(
+                _stream_pip_output(proc.stderr, True, "pip uninstall")
+            )
             stdout, stderr = await asyncio.gather(stdout_task, stderr_task)
             await proc.wait()
 

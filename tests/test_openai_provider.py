@@ -216,6 +216,40 @@ def test_merge_reasoning_details_replaces_repeated_streamed_blocks():
     assert accumulated == [{"type": "reasoning.encrypted", "data": "complete"}]
 
 
+@pytest.mark.asyncio
+async def test_session_label_installs_token_before_chat():
+    from shibaclaw.thinkers.github_copilot_provider import GithubCopilotThinker
+
+    seen: dict[str, str] = {}
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            seen["key"] = thinker._client.api_key
+            message = SimpleNamespace(content="ok", tool_calls=None, reasoning_content=None)
+            choice = SimpleNamespace(message=message, finish_reason="stop")
+            return SimpleNamespace(choices=[choice], usage=None)
+
+    thinker = object.__new__(GithubCopilotThinker)
+    thinker._client = SimpleNamespace(
+        api_key="dummy",
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )
+    thinker.default_model = "gpt-4o"
+    thinker._provider_name = None
+    thinker._gateway = None
+
+    async def fake_get_session_token():
+        return "copilot-session-token"
+
+    thinker._get_session_token = fake_get_session_token
+
+    response = await thinker.chat([{"role": "user", "content": "hi"}])
+
+    assert seen["key"] == "copilot-session-token"
+    assert response.content == "ok"
+    assert response.finish_reason == "stop"
+
+
 def test_github_copilot_get_available_models_refreshes_session_token():
     from shibaclaw.thinkers.github_copilot_provider import GithubCopilotThinker
 

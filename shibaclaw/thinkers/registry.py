@@ -383,7 +383,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         is_local=False,
         detect_by_key_prefix="",
         detect_by_base_keyword="",
-        default_api_base="https://api.x.ai/v1",
+        default_api_base="https://cli-chat-proxy.grok.com/v1",
         strip_model_prefix=False,
         model_overrides=(),
         is_oauth=True,
@@ -569,7 +569,11 @@ def get_model_reasoning_efforts(model_id: str) -> list[str]:
         return ["low", "medium", "high"]
 
     # 7. Kimi / Moonshot reasoning models
-    if "kimi-k1.5" in base_name or "kimi-k2" in base_name or ("kimi" in base_name and ("1.5" in base_name or "2" in base_name)):
+    if (
+        "kimi-k1.5" in base_name
+        or "kimi-k2" in base_name
+        or ("kimi" in base_name and ("1.5" in base_name or "2" in base_name))
+    ):
         return ["low", "medium", "high"]
 
     # 8. Zhipu GLM zero/reasoning models
@@ -588,4 +592,3 @@ def get_model_reasoning_efforts(model_id: str) -> list[str]:
         return ["low", "medium", "high"]
 
     return []
-

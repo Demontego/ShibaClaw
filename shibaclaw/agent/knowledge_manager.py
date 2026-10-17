@@ -1,95 +1,28 @@
 # host-anchor: shibaclaw/agent/knowledge_manager.py
+"""BM25 search over knowledge-base Markdown. Tantivy replaces the FAISS RAG stack."""
+
+from __future__ import annotations
+
 import json
-import logging
-import os
-import shutil
 import re
-import warnings
+import shutil
 import threading
-from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from types import SimpleNamespace
+from typing import Any
 
-# Defer langchain / filelock imports until RAG is actually used.
-_rag_available: Optional[bool] = None
-_rag_loaded = False
-_rag_load_lock = threading.Lock()
-
-_RAG_MSG = "RAG dependencies are not installed. Run: uv sync --extra rag"
-
-
-class Document:
-    """Stub; replaced by langchain_core.documents.Document when RAG loads."""
-
-
-BSHTMLLoader = CSVLoader = PyPDFLoader = TextLoader = FAISS = None  # type: ignore[assignment,misc]
-RecursiveCharacterTextSplitter = None  # type: ignore[assignment,misc]
-
-
-def _file_lock(path: str):
-    try:
-        from filelock import FileLock
-    except ImportError as e:
-        raise RuntimeError(
-            "filelock is required for Knowledge Bases. Run: uv sync --extra rag"
-        ) from e
-    return FileLock(path)
+_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
+_TEXT_SUFFIXES = {".md", ".txt", ".markdown"}
+_INDEX_LOCK = threading.Lock()
 
 
 def is_rag_available() -> bool:
-    """Check installed packages without importing the RAG/ML stack.
-
-    Called during gateway startup and by WebUI status/collection requests.
-    Importing loaders here also imports Transformers/PyTorch when installed,
-    which can stall a cold Windows launch before the gateway is listening.
-    """
-    global _rag_available
-    if _rag_available is not None:
-        return _rag_available
-    import importlib.util
-
-    importlib.invalidate_caches()
-    # Top-level names only: find_spec on a submodule imports its parent.
-    _rag_available = all(
-        importlib.util.find_spec(name) is not None
-        for name in (
-            "langchain", "langchain_core", "langchain_community",
-            "langchain_text_splitters", "faiss", "filelock",
-        )
-    )
-    return _rag_available
-
-
-def _load_rag_dependencies() -> None:
-    """Load RAG implementations on first indexing/search use, in the worker.
-
-    Publish the implementations together after successful imports. Concurrent
-    uploads/searches must not see a partially initialized set of globals.
-    """
-    global _rag_loaded, Document, BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader, FAISS, RecursiveCharacterTextSplitter
-    if _rag_loaded:
-        return
-    with _rag_load_lock:
-        if _rag_loaded:
-            return
-        if not is_rag_available():
-            raise RuntimeError(_RAG_MSG)
-        try:
-            from langchain_core.documents import Document as _Document
-            from langchain_community.document_loaders import (
-                BSHTMLLoader as _BSHTMLLoader,
-                CSVLoader as _CSVLoader,
-                PyPDFLoader as _PyPDFLoader,
-                TextLoader as _TextLoader,
-            )
-            from langchain_community.vectorstores import FAISS as _FAISS
-            from langchain_text_splitters import RecursiveCharacterTextSplitter as _Splitter
-        except Exception as exc:
-            raise RuntimeError(f"Unable to load RAG dependencies: {exc}") from exc
-        Document = _Document
-        BSHTMLLoader, CSVLoader, PyPDFLoader, TextLoader = _BSHTMLLoader, _CSVLoader, _PyPDFLoader, _TextLoader
-        FAISS, RecursiveCharacterTextSplitter = _FAISS, _Splitter
-        _rag_loaded = True
+    """True when Tantivy is importable. The name stays for existing callers."""
+    try:
+        import tantivy  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def __getattr__(name: str) -> Any:
@@ -98,274 +31,229 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-logger = logging.getLogger(__name__)
-
-@lru_cache(maxsize=4)
-def _get_embeddings(provider: str, api_key: str, api_base: str, model: str):
-    if not is_rag_available():
-        raise RuntimeError(_RAG_MSG)
-    
-    warnings.filterwarnings("ignore", category=UserWarning, module="huggingface_hub")
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-    os.environ["HUGGINGFACE_HUB_VERBOSITY"] = "error"
-    
-    if provider == "gemini":
-        if not api_key:
-            raise ValueError("No API key found for Gemini RAG provider. Please enter a key or configure Gemini in Settings.")
-        try:
-            from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        except ImportError:
-            raise RuntimeError("Missing Google RAG dependencies. Run: uv sync --extra rag")
-        mdl = model or "models/gemini-embedding-001"
-        return GoogleGenerativeAIEmbeddings(model=mdl, google_api_key=api_key)
-    
-    elif provider in ("openrouter", "openai", "custom"):
-        if not api_key and provider != "custom":
-            raise ValueError(f"No API key found for {provider.capitalize()} RAG provider. Please enter a key in Settings.")
-        try:
-            from langchain_openai import OpenAIEmbeddings
-        except ImportError:
-            raise RuntimeError(f"Missing {provider.capitalize()} RAG dependencies. Run: uv sync --extra rag")
-        mdl = model or ("openai/text-embedding-3-small" if provider == "openrouter" else "text-embedding-3-small")
-        base = api_base or ("https://openrouter.ai/api/v1" if provider == "openrouter" else None)
-        return OpenAIEmbeddings(openai_api_base=base, model=mdl, openai_api_key=api_key)
-        
-    elif provider in ("local", ""):
-        # Fallback to local HuggingFace
-        try:
-            from langchain_huggingface import HuggingFaceEmbeddings
-            return HuggingFaceEmbeddings(model_name=model or "all-MiniLM-L6-v2")
-        except ImportError:
-            raise RuntimeError(
-                "Local HuggingFace embeddings are not installed. "
-                "To use the 'local' provider, run: uv sync --extra rag-local"
-            )
-    else:
-        raise ValueError(f"Unknown RAG embedding provider: '{provider}'")
-
 class KnowledgeManager:
-    """Manages cross-session Knowledge Bases using FAISS and LangChain."""
+    def __init__(self, workspace_path: Path | str):
+        self.workspace_path = Path(workspace_path)
 
-    _faiss_cache: Dict[str, Any] = {}
+    def _root(self) -> Path:
+        return self.workspace_path / "memory" / "knowledge"
 
-    def __init__(self, workspace_path: Path):
-        self.workspace_path = workspace_path
-        self.base_dir = self.workspace_path / "memory" / "knowledge"
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        self._faiss_cache = KnowledgeManager._faiss_cache
+    def _collection_dir(self, collection_id: str) -> Path:
+        if not _ID_RE.fullmatch(collection_id):
+            raise ValueError(f"invalid collection id: {collection_id}")
+        root = self._root().resolve()
+        path = (root / collection_id).resolve()
+        if path != root and root not in path.parents:
+            raise ValueError(f"invalid collection id: {collection_id}")
+        return path
 
-    @cached_property
-    def text_splitter(self):
-        _load_rag_dependencies()
-        return RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-
-    @property
-    def embeddings(self):
-        # Lazy load embeddings to avoid blocking event loop on init
-        from shibaclaw.config.loader import load_config
-        cfg = load_config()
-        
-        provider = cfg.rag.provider.lower()
-        api_key = cfg.rag.resolve_api_key() or ""
-        
-        if not api_key and provider not in ("local", ""):
-            prov_cfg = getattr(cfg.providers, provider, None)
-            if prov_cfg:
-                api_key = prov_cfg.resolve_api_key(provider) or ""
-            if not api_key and provider == "gemini":
-                gem_cli = getattr(cfg.providers, "google_gemini_cli", None)
-                if gem_cli:
-                    api_key = gem_cli.resolve_api_key("google_gemini_cli") or ""
-                
-        api_base = cfg.rag.api_base or ""
-        model = cfg.rag.model or ""
-        
-        return _get_embeddings(provider, api_key, api_base, model)
-
-    def _sanitize_id(self, collection_id: str) -> str:
-        if not re.match(r"^[a-zA-Z0-9_-]+$", collection_id):
-            raise ValueError("Invalid collection ID format")
-        return collection_id
-
-    def _get_collection_dir(self, collection_id: str) -> Path:
-        cid = self._sanitize_id(collection_id)
-        return self.base_dir / cid
-
-    def list_collections(self) -> List[Dict[str, Any]]:
-        collections = []
-        for path in self.base_dir.iterdir():
-            if path.is_dir():
-                meta_file = path / "meta.json"
-                if meta_file.exists():
-                    try:
-                        with open(meta_file, "r", encoding="utf-8") as f:
-                            meta = json.load(f)
-                            collections.append(meta)
-                    except Exception as e:
-                        logger.error(f"Error reading meta for {path.name}: {e}")
-        return collections
-
-    def create_collection(self, collection_id: str, name: str, description: str = "") -> Dict[str, Any]:
-        coll_dir = self._get_collection_dir(collection_id)
-        if coll_dir.exists():
-            raise ValueError(f"Collection {collection_id} already exists")
-        coll_dir.mkdir(parents=True)
-        meta = {"id": collection_id, "name": name, "description": description, "files": []}
-        meta_file = coll_dir / "meta.json"
-        lock = _file_lock(f"{meta_file}.lock")
-        with lock:
-            with open(meta_file, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2)
-        return meta
-
-    def update_collection(self, collection_id: str, name: Optional[str] = None, description: Optional[str] = None) -> Dict[str, Any]:
-        coll_dir = self._get_collection_dir(collection_id)
-        if not coll_dir.exists():
-            raise ValueError(f"Collection {collection_id} does not exist")
-        meta_file = coll_dir / "meta.json"
-        lock = _file_lock(f"{meta_file}.lock")
-        with lock:
-            with open(meta_file, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-            if name is not None:
-                meta["name"] = name
-            if description is not None:
-                meta["description"] = description
-            with open(meta_file, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2)
-        return meta
-
-    def delete_collection(self, collection_id: str):
-        coll_dir = self._get_collection_dir(collection_id)
-        if coll_dir.exists():
-            shutil.rmtree(coll_dir, ignore_errors=True)
-        cid = self._sanitize_id(collection_id)
-        if cid in self._faiss_cache:
-            del self._faiss_cache[cid]
-
-    def _get_loader(self, file_path: Path):
-        _load_rag_dependencies()
-        ext = file_path.suffix.lower()
-        if ext == ".pdf":
-            return PyPDFLoader(str(file_path))
-        elif ext == ".csv":
-            return CSVLoader(str(file_path))
-        elif ext in [".html", ".htm"]:
-            return BSHTMLLoader(str(file_path))
-        else:
-            return TextLoader(str(file_path), autodetect_encoding=True)
-
-    def add_document(self, collection_id: str, file_path: Path, filename: str) -> None:
-        _load_rag_dependencies()
-        coll_dir = self._get_collection_dir(collection_id)
-        if not coll_dir.exists():
-            raise ValueError(f"Collection {collection_id} does not exist")
-            
-        # Copy file to collection
-        docs_dir = coll_dir / "docs"
-        docs_dir.mkdir(exist_ok=True)
-        safe_filename = Path(filename).name
-        dest_path = docs_dir / safe_filename
-        shutil.copy2(file_path, dest_path)
-        
-        try:
-            # Load and split
-            loader = self._get_loader(dest_path)
-            documents = loader.load()
-            chunks = self.text_splitter.split_documents(documents)
-            
-            # Update FAISS
-            faiss_dir = coll_dir / "index"
-            temp_faiss_dir = coll_dir / "index_tmp"
-            
-            if faiss_dir.exists():
-                vectorstore = FAISS.load_local(str(faiss_dir), self.embeddings, allow_dangerous_deserialization=True)
-                vectorstore.add_documents(chunks)
-            else:
-                vectorstore = FAISS.from_documents(chunks, self.embeddings)
-                
-            # Save to temporary directory first for atomic update
-            vectorstore.save_local(str(temp_faiss_dir))
-            
-            # Update cache and release file handles
-            cid = self._sanitize_id(collection_id)
-            self._faiss_cache.pop(cid, None)
-
-            # Atomic rename (replace existing safely)
-            if faiss_dir.exists():
-                backup_dir = coll_dir / "index_backup"
-                if backup_dir.exists():
-                    shutil.rmtree(backup_dir, ignore_errors=True)
-                try:
-                    faiss_dir.rename(backup_dir)
-                    temp_faiss_dir.rename(faiss_dir)
-                    shutil.rmtree(backup_dir, ignore_errors=True)
-                except Exception:
-                    # Windows file lock fallback: replace existing directly
-                    shutil.rmtree(faiss_dir, ignore_errors=True)
-                    temp_faiss_dir.rename(faiss_dir)
-            else:
-                temp_faiss_dir.rename(faiss_dir)
-            
-            self._faiss_cache[cid] = vectorstore
-            
-            # Update meta safely
-            meta_file = coll_dir / "meta.json"
-            lock = _file_lock(f"{meta_file}.lock")
-            with lock:
-                with open(meta_file, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                
-                if "files" not in meta:
-                    meta["files"] = []
-                    
-                if safe_filename not in meta["files"]:
-                    meta["files"].append(safe_filename)
-                    
-                with open(meta_file, "w", encoding="utf-8") as f:
-                    json.dump(meta, f, indent=2)
-                    
-        except Exception as e:
-            if dest_path.exists():
-                os.remove(dest_path)
-            if 'temp_faiss_dir' in locals() and temp_faiss_dir.exists():
-                shutil.rmtree(temp_faiss_dir, ignore_errors=True)
-            raise e
-
-    def search(self, collection_ids: List[str], query: str, k: int = 4) -> List[Document]:
-        _load_rag_dependencies()
-        results = []
-        for cid in collection_ids:
+    def list_collections(self) -> list[dict[str, Any]]:
+        root = self._root()
+        if not root.is_dir():
+            return []
+        found: list[dict[str, Any]] = []
+        for meta_path in sorted(root.glob("*/meta.json")):
             try:
-                cid = self._sanitize_id(cid)
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(meta, dict) and meta.get("id"):
+                found.append(meta)
+        self.sync_indexes()
+        return found
+
+    def sync_indexes(self) -> None:
+        """Drop leftover FAISS dirs and rebuild Tantivy from the collection files."""
+        root = self._root()
+        if not root.is_dir() or not is_rag_available():
+            return
+        for meta_path in sorted(root.glob("*/meta.json")):
+            collection = meta_path.parent
+            self._drop_legacy(collection)
+            sources = self._source_files(collection)
+            if sources and self._needs_rebuild(collection, sources):
+                self._rebuild(collection)
+
+    def _drop_legacy(self, collection: Path) -> None:
+        legacy = collection / "index"
+        if (legacy / "index.faiss").is_file() or (legacy / "index.pkl").is_file():
+            shutil.rmtree(legacy)
+        lock = collection / "meta.json.lock"
+        if lock.is_file():
+            lock.unlink()
+
+    def create_collection(
+        self, collection_id: str, name: str, description: str = ""
+    ) -> dict[str, Any]:
+        path = self._collection_dir(collection_id)
+        if (path / "meta.json").exists():
+            raise ValueError(f"collection already exists: {collection_id}")
+        (path / "docs").mkdir(parents=True, exist_ok=True)
+        meta = {
+            "id": collection_id,
+            "name": name,
+            "description": description,
+            "files": [],
+        }
+        (path / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        return meta
+
+    def update_collection(
+        self, collection_id: str, name: str | None = None, description: str | None = None
+    ) -> dict[str, Any]:
+        path = self._collection_dir(collection_id)
+        meta_path = path / "meta.json"
+        if not meta_path.is_file():
+            raise ValueError(f"unknown collection: {collection_id}")
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if name is not None:
+            meta["name"] = name
+        if description is not None:
+            meta["description"] = description
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        return meta
+
+    def delete_collection(self, collection_id: str) -> None:
+        path = self._collection_dir(collection_id)
+        if not path.is_dir():
+            raise ValueError(f"unknown collection: {collection_id}")
+        shutil.rmtree(path)
+
+    def add_document(self, collection_id: str, src: Path | str, filename: str) -> None:
+        path = self._collection_dir(collection_id)
+        if not (path / "meta.json").is_file():
+            raise ValueError(f"unknown collection: {collection_id}")
+        safe_name = Path(filename).name
+        if not safe_name or safe_name in {".", ".."}:
+            raise ValueError("invalid filename")
+        suffix = Path(safe_name).suffix.lower()
+        if suffix not in _TEXT_SUFFIXES:
+            raise ValueError("only Markdown and text files can be indexed")
+        docs = path / "docs"
+        docs.mkdir(parents=True, exist_ok=True)
+        dest = docs / safe_name
+        try:
+            shutil.copyfile(src, dest)
+            self._remember_file(path, safe_name)
+            self._rebuild(path)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            raise
+
+    def search(self, collection_ids: list[str], query: str, k: int = 5) -> list[Any]:
+        if not query or not str(query).strip():
+            return []
+        hits: list[Any] = []
+        for collection_id in collection_ids:
+            try:
+                path = self._collection_dir(collection_id)
             except ValueError:
                 continue
+            if not (path / "meta.json").is_file():
+                continue
+            hits.extend(self._search_one(path, str(query), k))
+        hits.sort(key=lambda item: item.metadata["score"], reverse=True)
+        return hits[:k]
 
-            if cid in self._faiss_cache:
-                vectorstore = self._faiss_cache[cid]
-            else:
-                faiss_dir = self._get_collection_dir(cid) / "index"
-                if faiss_dir.exists():
-                    try:
-                        vectorstore = FAISS.load_local(str(faiss_dir), self.embeddings, allow_dangerous_deserialization=True)
-                        self._faiss_cache[cid] = vectorstore
-                    except Exception as e:
-                        logger.error(f"Error loading collection {cid}: {e}")
-                        continue
-                else:
-                    continue
+    def _remember_file(self, collection: Path, filename: str) -> None:
+        meta_path = collection / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        files = list(meta.get("files") or [])
+        if filename not in files:
+            files.append(filename)
+        meta["files"] = files
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
-            try:
-                # Use similarity search with score to potentially sort them later
-                docs = vectorstore.similarity_search_with_score(query, k=k)
-                for doc, score in docs:
-                    doc.metadata["collection_id"] = cid
-                    doc.metadata["score"] = float(score)
-                    results.append((score, doc))
-            except Exception as e:
-                logger.error(f"Error searching collection {cid}: {e}")
-                    
-        # Sort by distance (lower is closer)
-        results.sort(key=lambda x: x[0])
-        # Return top k overall
-        return [doc for score, doc in results[:k]]
+    def _source_files(self, collection: Path) -> list[Path]:
+        docs = (collection / "docs").resolve()
+        if not docs.is_dir():
+            return []
+        found: list[Path] = []
+        for path in docs.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in _TEXT_SUFFIXES:
+                continue
+            resolved = path.resolve()
+            if docs == resolved or docs not in resolved.parents:
+                continue
+            found.append(path)
+        return found
+
+    def _needs_rebuild(self, collection: Path, sources: list[Path]) -> bool:
+        index_dir = collection / "tantivy"
+        if not (index_dir / "meta.json").is_file():
+            return True
+        stamp = (index_dir / ".stamp").stat().st_mtime if (index_dir / ".stamp").is_file() else 0
+        return any(src.stat().st_mtime > stamp for src in sources)
+
+    def _rebuild(self, collection: Path) -> None:
+        import tantivy
+
+        sources = self._source_files(collection)
+        index_dir = collection / "tantivy"
+        with _INDEX_LOCK:
+            if index_dir.exists():
+                shutil.rmtree(index_dir)
+            index_dir.mkdir(parents=True)
+            schema = (
+                tantivy.SchemaBuilder()
+                .add_text_field("path", stored=True)
+                .add_text_field("body", stored=True)
+                .build()
+            )
+            index = tantivy.Index(schema, path=str(index_dir))
+            writer = index.writer()
+            for src in sources:
+                rel = src.relative_to(collection / "docs").as_posix()
+                text = src.read_text(encoding="utf-8", errors="replace")
+                writer.add_document(tantivy.Document(path=rel, body=text))
+            writer.commit()
+            (index_dir / ".stamp").write_text("ok", encoding="utf-8")
+
+    def _search_one(self, collection: Path, query: str, k: int) -> list[Any]:
+        import tantivy
+
+        sources = self._source_files(collection)
+        if not sources:
+            return []
+        if self._needs_rebuild(collection, sources):
+            self._rebuild(collection)
+        index = tantivy.Index.open(str(collection / "tantivy"))
+        parsed = _parse_query(index, query)
+        if parsed is None:
+            return []
+        searcher = index.searcher()
+        hits: list[Any] = []
+        for score, address in searcher.search(parsed, k).hits:
+            doc = searcher.doc(address)
+            body = _field(doc, "body")
+            rel = _field(doc, "path") or "unknown"
+            # shortcut: whole file is returned, split snippets when a doc exceeds the prompt
+            hits.append(
+                SimpleNamespace(
+                    page_content=body,
+                    metadata={"source": f"{collection.name}/{rel}", "score": float(score)},
+                )
+            )
+        return hits
+
+
+def _field(doc: Any, name: str) -> str:
+    value = doc.get_first(name) if hasattr(doc, "get_first") else None
+    if value is None:
+        try:
+            value = doc[name]
+        except Exception:
+            return ""
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value or "")
+
+
+def _parse_query(index: Any, text: str) -> Any:
+    try:
+        return index.parse_query(text, ["body"])
+    except Exception:
+        words = re.findall(r"\w+", text, flags=re.UNICODE)
+        if not words:
+            return None
+        return index.parse_query(" OR ".join(words[:12]), ["body"])

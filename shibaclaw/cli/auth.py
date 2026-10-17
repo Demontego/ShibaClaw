@@ -40,6 +40,7 @@ def _is_oauth_authenticated(spec) -> bool:
 
     if spec.name == "xai":
         from shibaclaw.security.oauth_store import OAuthTokenStore
+
         store = OAuthTokenStore()
         token = store.load_token(spec.name)
         return bool(token and token.get("access_token"))
@@ -116,6 +117,7 @@ def provider_login(provider: str):
     get_console().print(f"{__logo__} OAuth Login - {spec.label}\n")
     handler()
 
+
 def provider_logout(provider: str):
     """Log out of an OAuth provider."""
     from shibaclaw.thinkers.registry import PROVIDERS
@@ -131,6 +133,7 @@ def provider_logout(provider: str):
         try:
             from oauth_cli_kit.providers import OPENAI_CODEX_PROVIDER
             from oauth_cli_kit.storage import FileTokenStorage
+
             storage = FileTokenStorage(token_filename=OPENAI_CODEX_PROVIDER.token_filename)
             token_path = storage.get_token_path()
             if os.path.exists(token_path):
@@ -144,6 +147,7 @@ def provider_logout(provider: str):
             os.remove(token_path)
     else:
         from shibaclaw.security.oauth_store import OAuthTokenStore
+
         store = OAuthTokenStore()
         store.delete_token(spec.name)
 
@@ -272,6 +276,7 @@ def _login_github_copilot() -> None:
         get_console().print(f"[red]Authentication error: {e}[/red]")
         raise typer.Exit(1)
 
+
 def _prompt_token_login(provider_name: str, display_name: str, instruction: str) -> None:
     get_console().print(f"[cyan]Starting authentication for {display_name}...[/cyan]\n")
     get_console().print(f"[dim]{instruction}[/dim]")
@@ -279,54 +284,65 @@ def _prompt_token_login(provider_name: str, display_name: str, instruction: str)
     if not token.strip():
         get_console().print("[red]✗ Authentication failed: token cannot be empty.[/red]")
         raise typer.Exit(1)
-        
+
     from shibaclaw.security.oauth_store import OAuthTokenStore
+
     store = OAuthTokenStore()
     store.save_token(provider_name, {"access_token": token.strip()})
     get_console().print(f"[green]✓ Successfully authenticated with {display_name}[/green]")
+
 
 @register_login("xai")
 def _login_xai() -> None:
     get_console().print("[cyan]Starting xAI Grok device flow...[/cyan]\n")
 
-    xai_client_id = "b1a00492-073a-47ea-816f-4c329264a828"
-    xai_device_code_url = "https://accounts.x.ai/oauth/device/code"
-    xai_access_token_url = "https://accounts.x.ai/oauth/token"
+    from shibaclaw.thinkers.xai import (
+        XAI_CLIENT_ID,
+        XAI_DEVICE_CODE_URL,
+        XAI_SCOPE,
+        XAI_TOKEN_URL,
+    )
 
     async def _run_flow():
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
-                    xai_device_code_url,
+                    XAI_DEVICE_CODE_URL,
                     headers={"Accept": "application/json"},
-                    json={"client_id": xai_client_id, "scope": "openid profile email offline_access"},
+                    data={"client_id": XAI_CLIENT_ID, "scope": XAI_SCOPE},
                     timeout=10,
                 )
                 resp_json = resp.json()
         except Exception as e:
-            get_console().print(f"[yellow]⚠️ Failed to connect to xAI device code API ({e}). Falling back to manual API key setup...[/yellow]")
+            get_console().print(
+                f"[yellow]⚠️ Failed to connect to xAI device code API ({e}). Falling back to manual API key setup...[/yellow]"
+            )
             token = typer.prompt("Access Token / API Key", hide_input=True)
             if not token.strip():
                 get_console().print("[red]✗ Authentication failed: key cannot be empty.[/red]")
                 raise typer.Exit(1)
             from shibaclaw.security.oauth_store import OAuthTokenStore
+
             OAuthTokenStore().save_token("xai", {"access_token": token.strip()})
             get_console().print("[green]✓ Successfully authenticated with xAI / Grok[/green]")
             return
 
         user_code = resp_json.get("user_code", "")
-        verification_uri = resp_json.get("verification_uri", "https://accounts.x.ai/oauth2/device")
+        verification_uri = resp_json.get("verification_uri", "https://auth.x.ai")
         device_code = resp_json.get("device_code", "")
         interval = resp_json.get("interval", 5)
         expires_in = resp_json.get("expires_in", 900)
 
         if not device_code or not user_code:
-            get_console().print("[yellow]⚠️ xAI device flow failed to initialize. Falling back to manual API key setup...[/yellow]")
+            get_console().print(
+                "[yellow]⚠️ xAI device flow failed to initialize. Falling back to manual API key setup...[/yellow]"
+            )
             token = typer.prompt("Access Token / API Key", hide_input=True)
             if not token.strip():
                 get_console().print("[red]✗ Authentication failed: key cannot be empty.[/red]")
                 raise typer.Exit(1)
             from shibaclaw.security.oauth_store import OAuthTokenStore
+
             OAuthTokenStore().save_token("xai", {"access_token": token.strip()})
             get_console().print("[green]✓ Successfully authenticated with xAI / Grok[/green]")
             return
@@ -341,10 +357,10 @@ def _login_xai() -> None:
             try:
                 async with httpx.AsyncClient() as c:
                     tr = await c.post(
-                        xai_access_token_url,
+                        XAI_TOKEN_URL,
                         headers={"Accept": "application/json"},
-                        json={
-                            "client_id": xai_client_id,
+                        data={
+                            "client_id": XAI_CLIENT_ID,
                             "device_code": device_code,
                             "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                         },
@@ -371,6 +387,7 @@ def _login_xai() -> None:
                 access_token = tj.get("access_token")
                 if access_token:
                     from shibaclaw.security.oauth_store import OAuthTokenStore
+
                     OAuthTokenStore().save_token("xai", tj)
                     get_console().print(
                         "[green]✓ Successfully authenticated with xAI / Grok[/green]"

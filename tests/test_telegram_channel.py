@@ -87,10 +87,7 @@ def test_derive_topic_session_key_private_dm_topics():
     private.chat.type = "private"
     private.chat_id = 10001
     private.message_thread_id = 6780867
-    assert (
-        TelegramChannel._derive_topic_session_key(private)
-        == "telegram:10001:topic:6780867"
-    )
+    assert TelegramChannel._derive_topic_session_key(private) == "telegram:10001:topic:6780867"
 
     unscoped = MagicMock()
     unscoped.chat.type = "private"
@@ -138,6 +135,7 @@ async def test_telegram_channel_progress_network_error_re_raises():
         await channel._edit_progress_message(chat_id=123, message_id=456, text="Hello...")
 
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=Warning)
         channel._call_with_retry = AsyncMock(side_effect=RetryAfter(10))
@@ -279,9 +277,7 @@ async def test_guest_message_sets_guest_metadata():
 @pytest.mark.asyncio
 async def test_guest_message_respects_allow_from():
     bus = MagicMock(spec=MessageBus)
-    config = TelegramConfig(
-        enabled=True, token="fake_token", guest_mode=True, allow_from=["111"]
-    )
+    config = TelegramConfig(enabled=True, token="fake_token", guest_mode=True, allow_from=["111"])
     channel = TelegramChannel(config, bus)
     channel._handle_message = AsyncMock()
 
@@ -479,6 +475,31 @@ async def test_rich_messages_falls_back_to_send_message():
 
 
 @pytest.mark.asyncio
+async def test_rich_message_retries_plain_markdown_after_blocks_fail():
+    bus = MagicMock(spec=MessageBus)
+    config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=False)
+    channel = TelegramChannel(config, bus)
+    channel._app = MagicMock()
+    channel._app.bot.do_api_request = AsyncMock(
+        side_effect=[RuntimeError("blocks rejected"), {"message_id": 9}]
+    )
+    channel._app.bot.send_message = AsyncMock()
+
+    msg = MagicMock()
+    msg.chat_id = "123"
+    msg.content = "Energy:\n\n$$E = mc^2$$\n\nDone."
+    msg.media = None
+    msg.metadata = {}
+
+    await channel.send(msg)
+
+    assert channel._app.bot.do_api_request.await_count == 2
+    second = channel._app.bot.do_api_request.await_args_list[1].kwargs["api_kwargs"]
+    assert second["rich_message"] == {"markdown": msg.content}
+    channel._app.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_rich_progress_uses_rich_draft_in_private():
     bus = MagicMock(spec=MessageBus)
     config = TelegramConfig(enabled=True, token="t", rich_messages=True, streaming=True)
@@ -525,11 +546,7 @@ def test_build_rich_message_body_table_uses_blocks():
 
 
 def test_build_rich_message_body_images_become_collage():
-    md = (
-        "Pics:\n\n"
-        "![a](https://example.com/a.jpg)\n"
-        "![b](https://example.com/b.jpg)\n"
-    )
+    md = "Pics:\n\n![a](https://example.com/a.jpg)\n![b](https://example.com/b.jpg)\n"
     body = build_rich_message_body(md)
     assert "blocks" in body
     collage = next(b for b in body["blocks"] if b["type"] == "collage")
@@ -751,12 +768,8 @@ def test_filter_tools_for_non_allowlisted():
         "future_plugin_tool", {"is_allowlisted": False}, "telegram"
     )
     assert brain._tool_blocked_for_non_allowlisted("exec", {"is_allowlisted": False}, "telegram")
-    assert not brain._tool_blocked_for_non_allowlisted(
-        "exec", {"is_allowlisted": True}, "telegram"
-    )
+    assert not brain._tool_blocked_for_non_allowlisted("exec", {"is_allowlisted": True}, "telegram")
     assert not brain._tool_blocked_for_non_allowlisted("exec", {}, "webui")
     # Telegram fail-closed: missing is_allowlisted → restricted
     assert brain._tool_blocked_for_non_allowlisted("exec", {}, "telegram")
-    assert not brain._tool_blocked_for_non_allowlisted(
-        "web_search", {}, "telegram"
-    )
+    assert not brain._tool_blocked_for_non_allowlisted("web_search", {}, "telegram")
