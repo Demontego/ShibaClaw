@@ -143,6 +143,11 @@ class OpenAIThinker(Thinker):
             "x-session-affinity": uuid.uuid4().hex,
             **(extra_headers or {}),
         }
+        if spec and spec.name == "xai":
+            from shibaclaw.thinkers.xai import xai_client_headers
+
+            for key, value in xai_client_headers(resolved_base).items():
+                default_headers.setdefault(key, value)
 
         if self._gateway and self._gateway.is_gateway:
             # Some gateways like OpenRouter recommend sending a referrer
