@@ -220,7 +220,12 @@ class DesktopRuntime:
                 self._start_gateway_monitor()
                 from shibaclaw.webui.gateway_client import gateway_client
                 import asyncio
-                gateway_client.configure(gateway_host, gateway_ws_port, "")
+                gateway_client.configure(
+                    gateway_host,
+                    gateway_ws_port,
+                    self.config.gateway.resolve_token(),
+                    ws_url=self.config.gateway.ws_url,
+                )
                 loop = None
                 if self._server_mgr is not None:
                     loop = getattr(self._server_mgr, "loop", None)

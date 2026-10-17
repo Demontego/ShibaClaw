@@ -35,17 +35,19 @@ class GatewayClient:
         self._host: str = ""
         self._port: int = 0
         self._token: str = ""
+        self._ws_url: str = ""
         self._should_run = False
 
     @property
     def connected(self) -> bool:
         return self._connected and self._ws is not None
 
-    def configure(self, host: str, port: int, token: str):
+    def configure(self, host: str, port: int, token: str, ws_url: str = ""):
         """Set connection parameters (called once at startup)."""
         self._host = host
         self._port = port
         self._token = token
+        self._ws_url = ws_url.strip()
 
     async def start(self):
         """Start the client and begin connecting."""
@@ -75,12 +77,13 @@ class GatewayClient:
 
     async def _connect_once(self) -> bool:
         """Attempt a single connection to the gateway WS."""
-        hosts = self._resolve_hosts()
-        if not hosts:
+        uris = [self._ws_url] if self._ws_url else [
+            f"ws://{host}:{self._port}" for host in self._resolve_hosts()
+        ]
+        if not uris or uris == [""]:
             return False
 
-        for host in hosts:
-            uri = f"ws://{host}:{self._port}"
+        for uri in uris:
             try:
                 ws = await asyncio.wait_for(
                     websockets.connect(
@@ -109,7 +112,7 @@ class GatewayClient:
 
                 self._ws = ws
                 self._connected = True
-                logger.info("🔌 Gateway WS connected to {}:{}", host, self._port)
+                logger.info("🔌 Gateway WS connected to {}", uri)
 
                 # Start receive loop
                 if self._recv_task and not self._recv_task.done():
@@ -118,7 +121,7 @@ class GatewayClient:
                 return True
 
             except Exception as e:
-                logger.debug("Gateway WS connect to {}:{} failed: {}", host, self._port, e)
+                logger.debug("Gateway WS connect to {} failed: {}", uri, e)
                 continue
         return False
 

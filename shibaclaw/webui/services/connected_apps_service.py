@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os as _os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -73,6 +74,7 @@ CONNECTED_APPS: dict[str, ConnectedAppDef] = {
 
 CONNECTED_APPS_KEY = "connected_apps"
 STRATA_KEY = "__strata__"
+_APP_META_KEYS = frozenset({"__backend__", "__strata__", "klavis"})
 DEFAULT_TRANSPORT = "streamableHttp"
 KLAVIS_API_BASE = "https://api.klavis.ai"
 LIMIT_ERROR_MSG = (
@@ -144,6 +146,72 @@ def remove_app_from_mcp(cfg_dict: dict, app_def: ConnectedAppDef) -> None:
     servers.pop(app_def.mcp_server_key, None)
 
 
+def slug_server_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")[:48]
+
+
+def catalog_app_for_name(name: str) -> ConnectedAppDef | None:
+    key = name.strip().casefold()
+    if not key:
+        return None
+    for app in CONNECTED_APPS.values():
+        if key in {app.id, app.name.casefold(), app.klavis_server_name.casefold()}:
+            return app
+    return None
+
+
+def custom_app_def(server_name: str, app_id: str | None = None) -> ConnectedAppDef:
+    name = server_name.strip()
+    return ConnectedAppDef(
+        id=app_id or slug_server_name(name),
+        name=name,
+        category="custom",
+        icon="extension",
+        description=f"Klavis server {name}.",
+        klavis_server_name=name,
+    )
+
+
+def with_custom_identity(app_def: ConnectedAppDef, state: dict) -> dict:
+    if app_def.id not in CONNECTED_APPS:
+        state["klavis_server_name"] = app_def.klavis_server_name
+        state["name"] = app_def.name
+    return state
+
+
+def mark_disconnected(prev: dict | None) -> dict:
+    state = {"enabled": False, "connected": False, "pending_oauth": False}
+    if isinstance(prev, dict) and isinstance(prev.get("klavis_server_name"), str):
+        state["klavis_server_name"] = prev["klavis_server_name"]
+        if isinstance(prev.get("name"), str):
+            state["name"] = prev["name"]
+    return state
+
+
+def resolve_app(cfg_dict: dict, app_id: str) -> ConnectedAppDef | None:
+    if app_id in CONNECTED_APPS:
+        return CONNECTED_APPS[app_id]
+    if app_id in _APP_META_KEYS:
+        return None
+    state = get_app_state(cfg_dict, app_id)
+    server = state.get("klavis_server_name") if isinstance(state, dict) else None
+    if not isinstance(server, str) or not server.strip():
+        return None
+    return custom_app_def(server, app_id)
+
+
+def visible_apps(cfg_dict: dict) -> list[ConnectedAppDef]:
+    apps = list(CONNECTED_APPS.values())
+    seen = {app.id for app in apps}
+    for key, state in get_apps_cfg(cfg_dict).items():
+        if key in seen or key in _APP_META_KEYS or not isinstance(state, dict):
+            continue
+        server = state.get("klavis_server_name")
+        if isinstance(server, str) and server.strip():
+            apps.append(custom_app_def(server, key))
+    return apps
+
+
 def build_app_response(app_def: ConnectedAppDef, app_state: dict) -> dict:
     return {
         "id": app_def.id,
@@ -193,8 +261,9 @@ def clear_stale_strata(cfg_dict: dict) -> None:
     if isinstance(apps_cfg, dict):
         apps_cfg.pop(STRATA_KEY, None)
         for k in list(apps_cfg.keys()):
-            if k not in ("__backend__", "__strata__"):
-                apps_cfg[k] = {"enabled": False, "connected": False, "pending_oauth": False}
+            if k not in _APP_META_KEYS:
+                prev = apps_cfg[k] if isinstance(apps_cfg[k], dict) else None
+                apps_cfg[k] = mark_disconnected(prev)
 
     tools = cfg_dict.get("tools")
     if isinstance(tools, dict):

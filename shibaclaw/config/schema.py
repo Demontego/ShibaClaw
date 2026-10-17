@@ -163,8 +163,27 @@ class GatewayConfig(Base):
     host: str = "127.0.0.1"
     port: int = 19999
     ws_port: int = 19998
+    token: str = ""
+    ws_url: str = ""
     heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
     rate_limit_per_minute: int = 0
+
+    def resolve_token(self) -> str:
+        """Env, then config, then the vault. Empty means the socket is open."""
+        env = os.environ.get("SHIBACLAW_GATEWAY_TOKEN", "").strip()
+        if env:
+            return env
+        if self.token.strip():
+            return self.token.strip()
+        try:
+            from shibaclaw.security.credential_manager import get_credential_manager
+
+            vault = get_credential_manager().get_secret("gateway", "token")
+            if isinstance(vault, str) and vault.strip():
+                return vault.strip()
+        except Exception:
+            pass
+        return ""
 
 
 class WebSearchConfig(Base):

@@ -15,6 +15,7 @@ from shibaclaw.webui.services.connected_apps_service import (
     CONNECTED_APPS_KEY,
     STRATA_KEY,
     KLAVIS_API_BASE,
+    ConnectedAppDef,
     cfg_to_dict,
     get_app_state,
     build_app_response,
@@ -27,6 +28,13 @@ from shibaclaw.webui.services.connected_apps_service import (
     remove_app_from_mcp,
     sync_app_to_mcp,
     is_klavis_server,
+    catalog_app_for_name,
+    custom_app_def,
+    slug_server_name,
+    resolve_app,
+    visible_apps,
+    with_custom_identity,
+    mark_disconnected,
 )
 
 
@@ -39,19 +47,21 @@ async def list_apps(request: Request) -> JSONResponse:
     cfg_dict = cfg_to_dict(cfg)
 
     result = []
-    for app_def in CONNECTED_APPS.values():
+    for app_def in visible_apps(cfg_dict):
         app_state = get_app_state(cfg_dict, app_def.id)
         result.append(build_app_response(app_def, app_state))
     return JSONResponse({"apps": result})
 
 
-async def connect_app(request: Request) -> JSONResponse:
-    """POST /api/apps/{app_id}/connect"""
-    app_id = request.path_params.get("app_id", "")
-    app_def = CONNECTED_APPS.get(app_id)
-    if not app_def:
-        return JSONResponse({"error": f"Unknown app: {app_id}"}, status_code=404)
+def _load_cfg_dict() -> dict:
+    cfg = agent_manager.config
+    if not cfg:
+        agent_manager.load_latest_config()
+        cfg = agent_manager.config
+    return cfg_to_dict(cfg)
 
+
+async def begin_connect(app_def: ConnectedAppDef) -> JSONResponse:
     klavis = get_klavis_client_clean()
     if not klavis.is_configured():
         return JSONResponse(
@@ -59,11 +69,8 @@ async def connect_app(request: Request) -> JSONResponse:
             status_code=503,
         )
 
-    cfg = agent_manager.config
-    if not cfg:
-        agent_manager.load_latest_config()
-        cfg = agent_manager.config
-    cfg_dict = cfg_to_dict(cfg)
+    cfg_dict = _load_cfg_dict()
+    app_id = app_def.id
 
     if CONNECTED_APPS_KEY not in cfg_dict or cfg_dict[CONNECTED_APPS_KEY] is None:
         cfg_dict[CONNECTED_APPS_KEY] = {}
@@ -105,11 +112,11 @@ async def connect_app(request: Request) -> JSONResponse:
     except Exception as exc:
         return JSONResponse({"error": f"Klavis error: {exc}"}, status_code=502)
 
-    cfg_dict[CONNECTED_APPS_KEY][app_id] = {
+    cfg_dict[CONNECTED_APPS_KEY][app_id] = with_custom_identity(app_def, {
         "enabled": False,
         "connected": False,
         "pending_oauth": True,
-    }
+    })
     
     err = await save_and_reload(cfg_dict)
     if err:
@@ -125,18 +132,40 @@ async def connect_app(request: Request) -> JSONResponse:
     })
 
 
+async def connect_app(request: Request) -> JSONResponse:
+    """POST /api/apps/{app_id}/connect"""
+    app_id = request.path_params.get("app_id", "")
+    app_def = resolve_app(_load_cfg_dict(), app_id)
+    if not app_def:
+        return JSONResponse({"error": f"Unknown app: {app_id}"}, status_code=404)
+    return await begin_connect(app_def)
+
+
+async def connect_named(request: Request) -> JSONResponse:
+    """POST /api/apps/custom — connect a Klavis server by its name."""
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    server_name = (body.get("server_name") or "").strip()
+    if not server_name or len(server_name) > 80 or any(ord(ch) < 32 for ch in server_name):
+        return JSONResponse({"error": "server_name is required"}, status_code=400)
+    app_def = catalog_app_for_name(server_name)
+    if app_def is None:
+        app_id = slug_server_name(server_name)
+        if not app_id or app_id in CONNECTED_APPS:
+            return JSONResponse({"error": "server_name is invalid"}, status_code=400)
+        app_def = custom_app_def(server_name, app_id)
+    return await begin_connect(app_def)
+
+
 async def disconnect_app(request: Request) -> JSONResponse:
     """DELETE /api/apps/{app_id}/connect"""
     app_id = request.path_params.get("app_id", "")
-    app_def = CONNECTED_APPS.get(app_id)
+    cfg_dict = _load_cfg_dict()
+    app_def = resolve_app(cfg_dict, app_id)
     if not app_def:
         return JSONResponse({"error": f"Unknown app: {app_id}"}, status_code=404)
-
-    cfg = agent_manager.config
-    if not cfg:
-        agent_manager.load_latest_config()
-        cfg = agent_manager.config
-    cfg_dict = cfg_to_dict(cfg)
 
     klavis = get_klavis_client_clean()
     if klavis.is_configured():
@@ -168,15 +197,10 @@ async def disconnect_app(request: Request) -> JSONResponse:
 async def cancel_connect_app(request: Request) -> JSONResponse:
     """POST /api/apps/{app_id}/cancel"""
     app_id = request.path_params.get("app_id", "")
-    app_def = CONNECTED_APPS.get(app_id)
+    cfg_dict = _load_cfg_dict()
+    app_def = resolve_app(cfg_dict, app_id)
     if not app_def:
         return JSONResponse({"error": f"Unknown app: {app_id}"}, status_code=404)
-
-    cfg = agent_manager.config
-    if not cfg:
-        agent_manager.load_latest_config()
-        cfg = agent_manager.config
-    cfg_dict = cfg_to_dict(cfg)
 
     apps_cfg = cfg_dict.get(CONNECTED_APPS_KEY) or {}
     if app_id in apps_cfg and apps_cfg[app_id].get("pending_oauth"):
@@ -213,15 +237,10 @@ async def cancel_connect_app(request: Request) -> JSONResponse:
 async def get_app_status(request: Request) -> JSONResponse:
     """GET /api/apps/{app_id}/status"""
     app_id = request.path_params.get("app_id", "")
-    app_def = CONNECTED_APPS.get(app_id)
+    cfg_dict = _load_cfg_dict()
+    app_def = resolve_app(cfg_dict, app_id)
     if not app_def:
         return JSONResponse({"error": f"Unknown app: {app_id}"}, status_code=404)
-
-    cfg = agent_manager.config
-    if not cfg:
-        agent_manager.load_latest_config()
-        cfg = agent_manager.config
-    cfg_dict = cfg_to_dict(cfg)
     app_state = dict(get_app_state(cfg_dict, app_id))
 
     if app_state.get("connected") and not app_state.get("pending_oauth"):
@@ -235,7 +254,9 @@ async def get_app_status(request: Request) -> JSONResponse:
                 status = await klavis.get_auth_status(strata_id, app_def.klavis_server_name)
                 if status.is_authenticated:
                     apps_cfg = cfg_dict.get(CONNECTED_APPS_KEY) or {}
-                    apps_cfg[app_id] = {"enabled": True, "connected": True, "pending_oauth": False}
+                    apps_cfg[app_id] = with_custom_identity(
+                        app_def, {"enabled": True, "connected": True, "pending_oauth": False}
+                    )
                     cfg_dict[CONNECTED_APPS_KEY] = apps_cfg
 
                     klavis_api_key = ""
@@ -364,7 +385,8 @@ async def reset_strata(request: Request) -> JSONResponse:
     apps_cfg = cfg_dict[CONNECTED_APPS_KEY]
     for k in list(apps_cfg.keys()):
         if k not in ("__backend__", "__strata__"):
-            apps_cfg[k] = {"enabled": False, "connected": False, "pending_oauth": False}
+            prev = apps_cfg[k] if isinstance(apps_cfg[k], dict) else None
+            apps_cfg[k] = mark_disconnected(prev)
 
     tools = cfg_dict.get("tools")
     if isinstance(tools, dict):

@@ -64,6 +64,7 @@
     storage:      'Storage',
     design:       'Design',
     crm:          'CRM / Finance',
+    custom:       'Other',
   };
 
   /* ── public entry point ─────────────────────────────────────────────── */
@@ -109,20 +110,6 @@
 
   /* ── render ───────────────────────────────────────────────────────────────── */
   function _renderPanel(container) {
-    const grouped = _groupByCategory(_apps);
-
-    const groupsHtml = Object.entries(grouped).map(([cat, apps]) => {
-      const label = CATEGORY_LABELS[cat] || cat;
-      const color = CAT_COLOR[cat] || '#888';
-      const cardsHtml = apps.map(a => _renderAppCard(a, color)).join('');
-      return `
-        <div class="ca-group">
-          <h3 class="ca-group__title" style="border-left:3px solid ${color};padding-left:8px">${_esc(label)}</h3>
-          <div class="ca-cards">${cardsHtml}</div>
-        </div>
-      `;
-    }).join('');
-
     const toggleClass = _backendConfigured ? 'ca-backend-toggle ca-backend-toggle--ok' : 'ca-backend-toggle';
     const toggleLabel = _backendConfigured
       ? '\u2699\uFE0F\u00a0Configured \u2713'
@@ -144,7 +131,13 @@
         ${_renderBackendForm()}
       </div>
 
-      <div class="ca-groups">${groupsHtml}</div>
+      <form id="ca-custom-form" style="display:flex;gap:8px;margin:0 0 20px;align-items:center">
+        <input id="ca-custom-name" placeholder="Klavis name: Slack, Notion, Microsoft Teams" autocomplete="off"
+          style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border,#444);background:transparent;color:inherit">
+        <button type="submit" class="btn btn-primary" id="ca-custom-btn">Connect</button>
+      </form>
+
+      <div class="ca-groups">${_groupsHtml()}</div>
 
       ${_renderConnectModal()}
     `;
@@ -252,6 +245,9 @@
 
     const backendSave = document.getElementById('ca-backend-save-btn');
     if (backendSave) backendSave.addEventListener('click', _saveBackend);
+
+    const customForm = document.getElementById('ca-custom-form');
+    if (customForm) customForm.addEventListener('submit', _connectNamed);
 
     const modalClose = document.getElementById('ca-modal-close');
     if (modalClose) modalClose.addEventListener('click', _closeModal);
@@ -375,6 +371,44 @@
   }
 
   /* ── connect / disconnect ──────────────────────────────────────────────── */
+  async function _connectNamed(ev) {
+    ev.preventDefault();
+    const input = document.getElementById('ca-custom-name');
+    const serverName = (input?.value || '').trim();
+    if (!serverName) return;
+    const key = 'name:' + serverName;
+    if (_connecting.has(key)) return;
+    _connecting.add(key);
+    _openModal('Connecting ' + serverName + '\u2026');
+    try {
+      const res = await authFetch('/api/apps/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server_name: serverName }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        _showModalStatus('error', 'Failed: ' + (data.error || 'Unknown error'));
+        return;
+      }
+      const appId = data.app_id || serverName;
+      if (input) input.value = '';
+      await _loadApps();
+      _rerenderGroups();
+      if (data.oauth_url) {
+        window.open(data.oauth_url, '_blank', 'noopener');
+        _showWaitingForLogin(appId, serverName, data.oauth_url);
+        _pollStatus(appId, serverName).catch(() => {});
+        return;
+      }
+      _showModalStatus('success', '\u2713 ' + serverName + ' connected successfully.');
+    } catch (e) {
+      _showModalStatus('error', 'Network error: ' + e.message);
+    } finally {
+      _connecting.delete(key);
+    }
+  }
+
   async function _connectApp(appId) {
     // Debounce: ignore if already connecting this app
     if (_connecting.has(appId)) return;
@@ -494,9 +528,32 @@
     _refreshCard(appId);
   }
 
+  function _groupsHtml() {
+    const grouped = _groupByCategory(_apps);
+    return Object.entries(grouped).map(([cat, apps]) => {
+      const label = CATEGORY_LABELS[cat] || cat;
+      const color = CAT_COLOR[cat] || '#888';
+      const cardsHtml = apps.map(a => _renderAppCard(a, color)).join('');
+      return `
+        <div class="ca-group">
+          <h3 class="ca-group__title" style="border-left:3px solid ${color};padding-left:8px">${_esc(label)}</h3>
+          <div class="ca-cards">${cardsHtml}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function _rerenderGroups() {
+    const host = document.querySelector('#connected-apps-container .ca-groups');
+    if (host) host.innerHTML = _groupsHtml();
+  }
+
   function _refreshCard(appId) {
     const cardEl = document.getElementById(`ca-card-${appId}`);
-    if (!cardEl) return;
+    if (!cardEl) {
+      _rerenderGroups();
+      return;
+    }
     const app = _apps.find(a => a.id === appId);
     if (!app) return;
     const color = CAT_COLOR[app.category] || '#888';

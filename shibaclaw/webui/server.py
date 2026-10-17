@@ -50,6 +50,7 @@ from .routers.automation import (
 from .routers.connected_apps import (
     cancel_connect_app,
     connect_app,
+    connect_named,
     disconnect_app,
     get_app_status,
     get_backend_status,
@@ -222,6 +223,7 @@ def create_app(
         # NOTE: /api/apps/backend MUST be before /api/apps/{app_id}/...
         # otherwise Starlette matches "backend" as an app_id path param.
         Route("/api/apps", list_apps, methods=["GET"]),
+        Route("/api/apps/custom", connect_named, methods=["POST"]),
         Route("/api/apps/backend", get_backend_status, methods=["GET"]),
         Route("/api/apps/backend", save_backend_settings, methods=["PUT"]),
         Route("/api/apps/{app_id}/connect", connect_app, methods=["POST"]),
@@ -341,7 +343,12 @@ async def _start_gateway_client() -> None:
             agent_manager.load_latest_config()
             cfg = agent_manager.config
         if cfg:
-            gateway_client.configure(cfg.gateway.host, cfg.gateway.ws_port, "")
+            gateway_client.configure(
+                cfg.gateway.host,
+                cfg.gateway.ws_port,
+                cfg.gateway.resolve_token(),
+                ws_url=cfg.gateway.ws_url,
+            )
 
             async def _on_session_notify(msg):
                 payload = msg.get("payload", {})

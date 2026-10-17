@@ -130,6 +130,13 @@ def web(
     gateway_port = cfg.gateway.port
     gateway_ws_port = cfg.gateway.ws_port
     if with_gateway:
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if is_tcp_port_available(gateway_host, gateway_port) and is_tcp_port_available(
+                gateway_host, gateway_ws_port
+            ):
+                break
+            time.sleep(0.2)
         if not is_tcp_port_available(gateway_host, gateway_port) or not is_tcp_port_available(
             gateway_host, gateway_ws_port
         ):

@@ -104,6 +104,7 @@ def is_tcp_port_available(host: str, port: int) -> bool:
     """Return True when *host:port* can be bound by the current process."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((host, port))
         return True
     except OSError:

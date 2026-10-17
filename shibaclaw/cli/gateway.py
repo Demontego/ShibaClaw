@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 import sys
 import time
 import uuid
@@ -116,7 +117,7 @@ async def gateway_command(
     sync_workspace_templates(config.workspace_path, silent=True)
 
     def _current_auth_token() -> str | None:
-        return None
+        return config.gateway.resolve_token() or None
 
     bus = MessageBus(rate_limit_per_minute=config.gateway.rate_limit_per_minute)
     provider = _make_provider(config, exit_on_error=False)
@@ -485,7 +486,8 @@ async def gateway_command(
                 await websocket.close(4001, "Expected hello")
                 return
             expected_token = _current_auth_token()
-            if expected_token and hello.get("token") != expected_token:
+            presented = hello.get("token") or ""
+            if expected_token and not secrets.compare_digest(presented, expected_token):
                 await websocket.send(json.dumps({"type": "error", "error": "unauthorized"}))
                 await websocket.close(4003, "Unauthorized")
                 return
@@ -1169,9 +1171,16 @@ async def gateway_command(
             finally:
                 writer.close()
 
-        health_srv = await asyncio.start_server(_health_handler, host, port)
+        health_srv = await asyncio.start_server(
+            _health_handler, host, port, reuse_address=True
+        )
         ws_server = await websockets.serve(
-            _ws_handler, host, ws_port, ping_interval=None, ping_timeout=None
+            _ws_handler,
+            host,
+            ws_port,
+            ping_interval=None,
+            ping_timeout=None,
+            reuse_address=True,
         )
         logger.info("🔌 Gateway WebSocket server listening on {}:{}", host, ws_port)
 

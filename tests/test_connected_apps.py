@@ -626,3 +626,33 @@ async def test_connect_app_saves_strata_id_immediately_on_failure():
         assert cfg_dict["connected_apps"]["__strata__"]["strata_id"] == "new-strata-123"
 
 
+def test_named_server_reuses_catalog_and_lists_custom():
+    from shibaclaw.webui.services.connected_apps_service import (
+        catalog_app_for_name,
+        mark_disconnected,
+        resolve_app,
+        slug_server_name,
+        visible_apps,
+    )
+
+    assert catalog_app_for_name("slack").id == "slack"
+    assert slug_server_name("Microsoft Teams") == "microsoft_teams"
+    cfg = _base_cfg({
+        "microsoft_teams": {
+            "connected": False,
+            "klavis_server_name": "Microsoft Teams",
+            "name": "Microsoft Teams",
+        }
+    })
+    ids = [app.id for app in visible_apps(cfg)]
+    assert "gmail" in ids
+    assert "microsoft_teams" in ids
+    assert "__strata__" not in ids
+    app = resolve_app(cfg, "microsoft_teams")
+    assert app is not None and app.klavis_server_name == "Microsoft Teams"
+    assert resolve_app(cfg, "missing") is None
+    kept = mark_disconnected({"klavis_server_name": "Microsoft Teams", "name": "Microsoft Teams"})
+    assert kept["connected"] is False
+    assert kept["klavis_server_name"] == "Microsoft Teams"
+
+

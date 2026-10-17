@@ -175,7 +175,9 @@ def restart_gateway_only(pre_start_hook: "Callable[[], None] | None" = None) -> 
         host = cfg.gateway.host or "127.0.0.1"
         port = cfg.gateway.port
         req = urllib.request.Request(
-            f"http://{host}:{port}/restart", method="POST"
+            f"http://{host}:{port}/restart",
+            method="POST",
+            headers={"Authorization": f"Bearer {cfg.gateway.resolve_token()}"},
         )
         with urllib.request.urlopen(req, timeout=5):
             pass
