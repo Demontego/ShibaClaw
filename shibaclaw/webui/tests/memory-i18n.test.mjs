@@ -47,11 +47,11 @@ function memoryFixture() {
     return { ...fixture, requests, alerts, confirmations, saveLabel, allowForget: value => { allowForget = value; } };
 }
 
-test('all eight locales provide every Memory label with matching placeholders', () => {
+test('all locales provide every Memory label with matching placeholders', () => {
     const { context: app } = browserFixture();
     const catalogs = app.__I18N_CATALOGS__;
     const keys = Object.keys(catalogs.en).filter(key => key.startsWith('memory.')).sort();
-    assert.equal(app.i18n.LOCALES.length, 8);
+    assert.equal(app.i18n.LOCALES.length, 9);
     assert.equal(keys.length, 27);
     const html = readFrontend('index.html');
     const modal = html.slice(html.indexOf('<div id="memory-modal"'), html.indexOf('<!-- ══ Connected Apps Modal'));
