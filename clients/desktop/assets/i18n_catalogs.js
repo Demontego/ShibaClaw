@@ -1,1 +1,0 @@
-../../../shibaclaw/webui/frontend/js/i18n_catalogs.js

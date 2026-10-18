@@ -9,6 +9,7 @@ function _discardStreamBubble(msgId) {
         bubble.remove();
     }
     if (state._streamBuffers) delete state._streamBuffers[mid];
+    if (state._streamStable) delete state._streamStable[mid];
 }
 
 function _finalizeStreamBubble(msgId) {
@@ -24,6 +25,7 @@ function _finalizeStreamBubble(msgId) {
         bubble.removeAttribute("id");
     }
     if (state._streamBuffers) delete state._streamBuffers[mid];
+    if (state._streamStable) delete state._streamStable[mid];
 }
 
 function _cancelScheduledStreamRender(msgId) {
@@ -43,16 +45,82 @@ function _scheduleStreamRender(msgId, bubble) {
         delete frames[mid];
         const target = (bubble && bubble.isConnected) ? bubble : document.getElementById("stream-bubble-" + mid);
         if (!target) return;
-        let plain = target.querySelector(".stream-plain");
-        if (!plain) {
-            target.replaceChildren();
-            plain = document.createElement("div");
-            plain.className = "stream-plain";
-            target.appendChild(plain);
-        }
-        plain.textContent = state._streamBuffers[mid] || "";
-        scrollToBottom();
+        _paintStreamBubble(target, mid);
     });
+}
+
+function _paintStreamTail(tail, text) {
+    let caret = tail.querySelector(".stream-caret");
+    if (!caret) {
+        caret = document.createElement("span");
+        caret.className = "stream-caret";
+        caret.setAttribute("aria-hidden", "true");
+    }
+    if (text.startsWith("```")) {
+        const held = tail.querySelector(".stream-tail-text");
+        if (held) held.remove();
+        let pre = tail.querySelector(".stream-fence");
+        if (!pre) {
+            pre = document.createElement("pre");
+            pre.className = "stream-fence";
+            pre.appendChild(document.createElement("code"));
+            tail.appendChild(pre);
+        }
+        const code = pre.querySelector("code");
+        code.textContent = text.replace(/^```[^\n]*\n?/, "");
+        code.appendChild(caret);
+        return;
+    }
+    const pre = tail.querySelector(".stream-fence");
+    if (pre) pre.remove();
+    tail.appendChild(caret);
+    let node = tail.querySelector(".stream-tail-text");
+    if (!node) {
+        node = document.createElement("span");
+        node.className = "stream-tail-text";
+        tail.insertBefore(node, caret);
+    }
+    node.textContent = text;
+}
+
+function _paintStreamBubble(target, mid) {
+    const text = (state._streamBuffers && state._streamBuffers[mid]) || "";
+    const cache = state._streamStable || (state._streamStable = {});
+    if (typeof _isHtmlDocument === "function" && _isHtmlDocument(text)) {
+        const frame = target.querySelector(".html-card-frame");
+        if (!frame) {
+            cache[mid] = text;
+            target.innerHTML = renderMarkdown(text);
+            enhanceCodeBlocks(target);
+            const caret = document.createElement("span");
+            caret.className = "stream-caret";
+            caret.setAttribute("aria-hidden", "true");
+            target.appendChild(caret);
+        } else if (cache[mid] !== text) {
+            cache[mid] = text;
+            frame.srcdoc = text.trim();
+        }
+        scrollToBottom();
+        return;
+    }
+    let body = target.querySelector(".stream-md");
+    let tail = target.querySelector(".stream-tail");
+    if (!body || !tail) {
+        target.replaceChildren();
+        body = document.createElement("div");
+        body.className = "stream-md";
+        tail = document.createElement("div");
+        tail.className = "stream-tail";
+        target.append(body, tail);
+    }
+    const split = splitStreamText(text);
+    if (cache[mid] !== split.stable) {
+        cache[mid] = split.stable;
+        body.innerHTML = split.stable ? renderMarkdown(split.stable) : "";
+        if (split.stable) enhanceCodeBlocks(body);
+    }
+    _paintStreamTail(tail, split.tail);
+    scrollToBottom();
 }
 
 function _adoptTypingBubble(mid) {
@@ -401,7 +469,9 @@ async function fetchStatus() {
             const versionEl = $("sidebar-version");
             if (versionEl && data.version) versionEl.textContent = "v" + data.version;
 
-            const isConfigured = (data.agent_configured || data.oauth_configured) && data.model;
+            // An empty default model is not a missing login. Codex and other
+            // OAuth providers stay authorized with provider "auto" and model "".
+            const isConfigured = Boolean(data.agent_configured || data.oauth_configured);
 
             // Popola il mini-widget in basso
             const chEl = document.getElementById("summary-channels");
@@ -583,6 +653,8 @@ function setStatusIndicator(mode) {
             statusText.textContent = tr("status.disconnected", "Disconnected");
             break;
     }
+    statusText.title = statusText.textContent;
+    statusText.textContent = "Gateway";
 }
 
 function setWorkingState(working) {

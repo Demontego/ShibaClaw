@@ -4,11 +4,11 @@ import { browserFixture, readFrontend } from './browser-fixture.mjs';
 
 const placeholders = value => [...value.matchAll(/\{([\w]+)\}/g)].map(match => match[1]).sort();
 
-test('all locales supply every workspace key with matching placeholders', () => {
+test('all eight locales supply every workspace key with matching placeholders', () => {
     const { context: app } = browserFixture();
     const catalogs = app.__I18N_CATALOGS__;
     const locales = Array.from(app.i18n.LOCALES, locale => locale.id);
-    assert.equal(locales.length, 9);
+    assert.equal(locales.length, 8);
     const keys = Object.keys(catalogs.en).filter(key => key.startsWith('workspace.')).sort();
     assert.ok(keys.length > 0);
     const used = new Set();

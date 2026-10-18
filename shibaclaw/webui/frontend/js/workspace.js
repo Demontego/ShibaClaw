@@ -30,7 +30,7 @@
             themeBtn.title = label;
             themeBtn.setAttribute("aria-label", label);
         }
-        const color = document.documentElement.dataset.theme === "light" ? "#fcfbf9" : "#191918";
+        const color = document.documentElement.dataset.theme === "light" ? "#e7c2a4" : "#191918";
         const meta = document.getElementById("theme-color");
         if (meta) meta.setAttribute("content", color);
     }
@@ -829,10 +829,6 @@
             try { localStorage.setItem("shibaclaw_theme", theme); } catch (_) { /* optional storage */ }
             applyTheme();
         });
-        // The same profile selector keeps its existing handlers and session metadata.
-        const profile = document.getElementById("profile-selector");
-        const actions = document.querySelector(".input-actions");
-        if (profile && actions) actions.prepend(profile);
         const plus = document.getElementById("btn-composer-plus");
         const composer = document.querySelector(".workspace-composer");
         const setPlusOpen = (open) => {
@@ -841,7 +837,7 @@
         };
         plus?.addEventListener("click", (event) => {
             event.stopPropagation();
-            setPlusOpen(!composer?.classList.contains("plus-open"));
+            document.getElementById("file-input")?.click();
         });
         document.addEventListener("click", (event) => {
             if (composer?.classList.contains("plus-open") && !event.target.closest(".workspace-composer")) {

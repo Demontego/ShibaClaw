@@ -63,7 +63,7 @@ test('plugin interface translations cover every supported locale', () => {
             assert.ok(catalog[key], `${locale} is missing ${key}`);
         }
     }
-    const sections = read('i18n_catalogs.js').split(/^  "(?:en|zh-CN|es|pt-BR|ja|de|fr|it|ru)": \{/m).slice(1);
+    const sections = read('i18n_catalogs.js').split(/^  "(?:en|zh-CN|es|pt-BR|ja|de|fr|ru)": \{/m).slice(1);
     for (const section of sections) {
         const names = [...section.matchAll(/^    "(apps\.[^"]+)":/gm)].map(match => match[1]);
         assert.equal(new Set(names).size, names.length, 'plugin translation keys must not be duplicated');

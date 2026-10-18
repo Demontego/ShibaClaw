@@ -94,3 +94,14 @@ def test_sync_session_knowledge_bases_keeps_custom_pins_on_switch(tmp_path: Path
 
     assert pm.sync_session_knowledge_bases(meta, "new", "old") is True
     assert meta["knowledge_bases"] == ["custom", "new-default"]
+
+
+def test_profile_id_from_label(tmp_path: Path):
+    from shibaclaw.webui.routers.profiles import _profile_id_from_label, _unique_profile_id
+
+    assert _profile_id_from_label("Web Research") == "web-research"
+    russian = _profile_id_from_label("Исследователь")
+    assert russian.startswith("agent-")
+    assert len(russian) >= 2
+    pm = _pm(tmp_path, {"web-research": {"label": "Web Research"}})
+    assert _unique_profile_id(pm, "Web Research") == "web-research-2"

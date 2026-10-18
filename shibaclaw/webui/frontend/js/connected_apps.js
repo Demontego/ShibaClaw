@@ -40,11 +40,29 @@
     google:       '#4285F4',
     microsoft:    '#00A4EF',
     productivity: '#6B21A8',
+    communication:'#0EA5E9',
+    meetings:     '#0284C7',
+    projects:     '#7C3AED',
     dev:          '#E36209',
+    databases:    '#0F766E',
+    search:       '#2563EB',
+    ai:           '#9333EA',
+    media:        '#DB2777',
     storage:      '#0F766E',
     design:       '#A855F7',
+    documents:    '#64748B',
     crm:          '#16A34A',
+    sales:        '#CA8A04',
+    payments:     '#635BFF',
+    finance:      '#15803D',
+    custom:       '#888888',
   };
+
+  const CATEGORY_ORDER = [
+    'google', 'microsoft', 'productivity', 'communication', 'meetings', 'projects',
+    'dev', 'databases', 'search', 'ai', 'media', 'design', 'storage', 'documents',
+    'crm', 'sales', 'payments', 'finance', 'custom',
+  ];
 
   /* ── state ──────────────────────────────────────────────────────────────── */
   let _apps = [];
@@ -57,13 +75,24 @@
   const _activePollControllers = {};
 
   const CATEGORY_LABELS = {
-    google:       'Google Services',
-    microsoft:    'Microsoft 365',
+    google:       'Google',
+    microsoft:    'Microsoft',
     productivity: 'Productivity',
+    communication:'Communication',
+    meetings:     'Meetings',
+    projects:     'Projects',
     dev:          'Development',
+    databases:    'Databases',
+    search:       'Search',
+    ai:           'AI',
+    media:        'Media',
     storage:      'Storage',
     design:       'Design',
-    crm:          'CRM / Finance',
+    documents:    'Documents',
+    crm:          'CRM',
+    sales:        'Sales',
+    payments:     'Payments',
+    finance:      'Finance',
     custom:       'Other',
   };
 
@@ -530,7 +559,13 @@
 
   function _groupsHtml() {
     const grouped = _groupByCategory(_apps);
-    return Object.entries(grouped).map(([cat, apps]) => {
+    const keys = Object.keys(grouped).sort((a, b) => {
+      const ia = CATEGORY_ORDER.indexOf(a);
+      const ib = CATEGORY_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    return keys.map((cat) => {
+      const apps = grouped[cat];
       const label = CATEGORY_LABELS[cat] || cat;
       const color = CAT_COLOR[cat] || '#888';
       const cardsHtml = apps.map(a => _renderAppCard(a, color)).join('');

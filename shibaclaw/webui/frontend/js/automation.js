@@ -36,12 +36,12 @@ async function loadAutomationPanel() {
             authFetch(`/api/file-get?path=TASK.md&_t=${Date.now()}`).catch(() => ({ok: false}))
         ]);
 
-        if (!statusRes.ok || !jobsRes.ok) {
+        if (!statusRes.ok || (!jobsRes.ok && jobsRes.status !== 503)) {
             throw new Error(`API Error: ${statusRes.status} / ${jobsRes.status}`);
         }
 
         const statusData = await statusRes.json();
-        const jobsData = await jobsRes.json();
+        const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
 
         let globalHb = null;
         // Hide system heartbeat job from UI natively, but save a ref to it

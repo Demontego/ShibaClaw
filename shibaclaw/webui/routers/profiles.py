@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -20,6 +21,26 @@ def _get_pm() -> ProfileManager | None:
 
 
 _PROFILE_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,48}[a-zA-Z0-9]$")
+
+
+def _profile_id_from_label(label: str) -> str:
+    parts = re.findall(r"[A-Za-z0-9]+", label.lower())
+    slug = "-".join(parts)[:50].strip("-")
+    if _PROFILE_ID_RE.match(slug):
+        return slug
+    return f"agent-{format(time.time_ns(), 'x')[-6:]}"
+
+
+def _unique_profile_id(pm: ProfileManager, label: str) -> str:
+    base = _profile_id_from_label(label)
+    if not pm.get_profile(base):
+        return base
+    stem = base[:44].rstrip("-")
+    for n in range(2, 50):
+        candidate = f"{stem}-{n}"
+        if _PROFILE_ID_RE.match(candidate) and not pm.get_profile(candidate):
+            return candidate
+    return base
 
 
 async def api_profiles_list(request: Request):
@@ -48,8 +69,8 @@ async def api_profiles_create(request: Request):
     if not pm:
         return JSONResponse({"error": "No config"}, status_code=400)
     data = await request.json()
-    profile_id = data.get("id", "").strip()
     label = data.get("label", "").strip()
+    profile_id = data.get("id", "").strip() or _unique_profile_id(pm, label)
     description = data.get("description", "").strip()
     soul = data.get("soul", "").strip()
     avatar = data.get("avatar", "").strip() or None

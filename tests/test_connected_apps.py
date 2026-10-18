@@ -212,6 +212,25 @@ def test_dev_apps_category():
         assert CONNECTED_APPS[app_id].category == "dev"
 
 
+def test_extra_plugins_keep_their_category():
+    assert CONNECTED_APPS["discord"].category == "communication"
+    assert CONNECTED_APPS["discord"].klavis_server_name == "Discord"
+    assert CONNECTED_APPS["asana"].category == "projects"
+    assert CONNECTED_APPS["fireflies"].category == "meetings"
+    assert CONNECTED_APPS["postgres"].category == "databases"
+    assert CONNECTED_APPS["brave_search"].category == "search"
+    assert CONNECTED_APPS["paypal"].category == "payments"
+    assert CONNECTED_APPS["quickbooks"].category == "finance"
+    assert CONNECTED_APPS["docusign"].category == "documents"
+    known = {
+        "google", "microsoft", "productivity", "communication", "meetings", "projects",
+        "dev", "databases", "search", "ai", "media", "design", "storage", "documents",
+        "crm", "sales", "payments", "finance", "custom",
+    }
+    for app in CONNECTED_APPS.values():
+        assert app.category in known, app.id
+
+
 # ── 9. defaults ───────────────────────────────────────────────────────────────
 
 def test_default_klavis_endpoint():

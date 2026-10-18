@@ -340,6 +340,61 @@ function addTimestamp(group, dateStr) {
 
 
 // ── Markdown Rendering ────────────────────────────────────────
+function splitStreamText(text) {
+    const src = String(text || "");
+    let i = 0;
+    let fence = false;
+    let safe = 0;
+    while (i < src.length) {
+        if (src.startsWith("```", i)) {
+            fence = !fence;
+            i += 3;
+            continue;
+        }
+        if (!fence && src[i] === "\n") safe = i + 1;
+        i += 1;
+    }
+    return { stable: src.slice(0, safe), tail: src.slice(safe) };
+}
+
+function _isHtmlDocument(text) {
+    const t = String(text || "").trim();
+    return /^<!doctype\s+html\b/i.test(t) || /^<html[\s>]/i.test(t);
+}
+
+function _htmlCardMarkup(doc) {
+    const bytes = new TextEncoder().encode(String(doc));
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 1) bin += String.fromCharCode(bytes[i]);
+    return `<div class="html-card" data-html="${btoa(bin)}"></div>`;
+}
+
+function mountHtmlCards(container) {
+    if (!container || !container.querySelectorAll) return;
+    container.querySelectorAll(".html-card[data-html]").forEach((el) => {
+        if (el.querySelector("iframe")) return;
+        let html = "";
+        try {
+            const bin = atob(el.dataset.html || "");
+            const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+            html = new TextDecoder().decode(bytes);
+        } catch (e) {
+            return;
+        }
+        el.removeAttribute("data-html");
+        const label = document.createElement("div");
+        label.className = "html-card-label";
+        label.textContent = "HTML";
+        const frame = document.createElement("iframe");
+        frame.className = "html-card-frame";
+        frame.setAttribute("sandbox", "");
+        frame.referrerPolicy = "no-referrer";
+        frame.title = "HTML";
+        frame.srcdoc = html;
+        el.replaceChildren(label, frame);
+    });
+}
+
 function renderMarkdown(text) {
     if (!text) return "";
 
@@ -363,11 +418,22 @@ function renderMarkdown(text) {
         content = content.replace(/\[image:\s*[^\]]+\]/gi, "").trim();
     }
 
+    if (typeof content === "string" && _isHtmlDocument(content)) {
+        return _htmlCardMarkup(content);
+    }
+
     if (typeof marked !== "undefined") {
         try {
             let processedContent = content;
             const codeBlocks = [];
             const inlineCodes = [];
+            const htmlCards = [];
+
+            processedContent = processedContent.replace(/```(?:html|htm)\s*\n([\s\S]*?)```/gi, (match, body) => {
+                if (!_isHtmlDocument(body)) return match;
+                htmlCards.push(body.trim());
+                return "\n\n%%HTMLCARD_" + (htmlCards.length - 1) + "%%\n\n";
+            });
 
             processedContent = processedContent.replace(/```[\s\S]*?```/g, (match) => {
                 codeBlocks.push(match);
@@ -437,7 +503,12 @@ function renderMarkdown(text) {
                     ADD_ATTR: ['target']
                 });
             }
-            
+
+            finalHtml = finalHtml.replace(/%%HTMLCARD_(\d+)%%/g, (match, id) => {
+                const doc = htmlCards[Number(id)];
+                return doc ? _htmlCardMarkup(doc) : "";
+            });
+
             return finalHtml;
         } catch (e) {
             console.error("Markdown parse error:", e);
@@ -460,6 +531,7 @@ function enhanceMarkdownTables(container) {
 
 function enhanceCodeBlocks(container) {
     enhanceMarkdownTables(container);
+    mountHtmlCards(container);
 
     container.querySelectorAll("pre").forEach((pre) => {
         const code = pre.querySelector("code");

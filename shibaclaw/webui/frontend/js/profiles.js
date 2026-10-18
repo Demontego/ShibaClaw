@@ -147,6 +147,20 @@ document.addEventListener("click", (e) => {
     }
 });
 
+function profileIdFromLabel(label) {
+    const slug = (label.toLowerCase().match(/[a-z0-9]+/g) || []).join("-").slice(0, 50).replace(/-+$/g, "");
+    if (/^[a-z0-9][a-z0-9_-]{0,48}[a-z0-9]$/.test(slug)) return slug;
+    return `agent-${Date.now().toString(16).slice(-6)}`;
+}
+
+function profileText(key, en, ru) {
+    if (typeof t === "function") {
+        const value = t(key);
+        if (value && value !== key) return value;
+    }
+    return (document.documentElement.lang || "").startsWith("ru") ? ru : en;
+}
+
 async function openProfileModal(profileId = null) {
     closeProfileDropdown();
     let profile = {};
@@ -158,40 +172,30 @@ async function openProfileModal(profileId = null) {
 
     const overlay = document.createElement("div");
     overlay.className = "modal-backdrop active";
+    const title = profileId
+        ? profileText("profiles.configure_title", "Configure profile", "Настроить профиль")
+        : profileText("profiles.create_title", "Create profile", "Создать профиль");
     overlay.innerHTML = `
         <div class="modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
             <div class="modal-header">
-                <h2 id="profile-modal-title">${escapeHtml(profileId ? (typeof t === "function" ? t("profiles.configure_title") : "Configure profile") : (typeof t === "function" ? t("profiles.create_title") : "Create profile"))}</h2>
+                <h2 id="profile-modal-title">${escapeHtml(title)}</h2>
                 <button class="modal-close" type="button" aria-label="Close">×</button>
             </div>
             <form class="modal-body">
-                <div class="form-group"><label for="profile-modal-id">${escapeHtml(typeof t === "function" ? t("profiles.id") : "ID")}</label><input class="form-input" id="profile-modal-id" required ${profileId ? "readonly" : ""}></div>
-                <div class="form-group"><label for="profile-modal-label">${escapeHtml(typeof t === "function" ? t("profiles.label") : "Label")}</label><input class="form-input" id="profile-modal-label" required></div>
-                <div class="form-group"><label for="profile-modal-description">${escapeHtml(typeof t === "function" ? t("profiles.description") : "Description")}</label><input class="form-input" id="profile-modal-description"></div>
-                <div class="form-group"><label for="profile-modal-soul">${escapeHtml(typeof t === "function" ? t("profiles.soul") : "SOUL.md")}</label><textarea class="form-input" id="profile-modal-soul" rows="6"></textarea></div>
-                <div class="form-group"><label for="profile-modal-disabled-tools">Disabled tools (comma-separated)</label><input class="form-input" id="profile-modal-disabled-tools" placeholder="exec, write_file"></div>
-                <div class="form-group"><label for="profile-modal-enabled-tools">Enabled tools (comma-separated)</label><input class="form-input" id="profile-modal-enabled-tools" placeholder="web_search, web_fetch"></div>
-                <div class="form-group"><label for="profile-modal-temperature">Temperature</label><input class="form-input" id="profile-modal-temperature" type="number" min="0" max="2" step="0.1"></div>
-                <div class="form-group"><label for="profile-modal-knowledge-bases">Knowledge bases (comma-separated IDs)</label><input class="form-input" id="profile-modal-knowledge-bases" placeholder="docs, product-notes"></div>
+                <div class="form-group"><label for="profile-modal-label">${escapeHtml(profileText("profiles.name", "Name", "Имя"))}</label><input class="form-input" id="profile-modal-label" required></div>
+                <div class="form-group"><label for="profile-modal-soul">${escapeHtml(profileText("profiles.task", "What this agent does", "Задача агента"))}</label><textarea class="form-input" id="profile-modal-soul" rows="4" required></textarea></div>
                 <div id="profile-modal-error" role="alert"></div>
                 <div class="modal-footer">
-                    <button class="btn-secondary" type="button">${escapeHtml(typeof t === "function" ? t("common.cancel") : "Cancel")}</button>
-                    <button class="btn-primary" type="submit">${escapeHtml(typeof t === "function" ? t("common.save") : "Save")}</button>
+                    <button class="btn-secondary" type="button">${escapeHtml(profileText("common.cancel", "Cancel", "Отмена"))}</button>
+                    <button class="btn-primary" type="submit">${escapeHtml(profileText("common.save", "Save", "Сохранить"))}</button>
                 </div>
             </form>
         </div>`;
     document.body.appendChild(overlay);
 
     const input = (id) => overlay.querySelector(`#profile-modal-${id}`);
-    const csv = (value) => Array.isArray(value) ? value.join(", ") : "";
-    input("id").value = profile.id || "";
     input("label").value = profile.label || "";
-    input("description").value = profile.description || "";
     input("soul").value = profile.soul || "";
-    input("disabled-tools").value = csv(profile.disabled_tools);
-    input("enabled-tools").value = csv(profile.enabled_tools);
-    input("temperature").value = profile.temperature ?? "";
-    input("knowledge-bases").value = csv(profile.knowledge_bases);
 
     const close = () => overlay.remove();
     overlay.querySelector(".modal-close").addEventListener("click", close);
@@ -201,21 +205,14 @@ async function openProfileModal(profileId = null) {
     });
     overlay.querySelector("form").addEventListener("submit", async (event) => {
         event.preventDefault();
-        const list = (name) => {
-            const values = input(name).value.split(",").map((item) => item.trim()).filter(Boolean);
-            return values.length ? values : null;
-        };
-        const payload = {
-            id: input("id").value.trim(),
-            label: input("label").value.trim(),
-            description: input("description").value.trim(),
-            soul: input("soul").value,
-            disabled_tools: list("disabled-tools"),
-            enabled_tools: list("enabled-tools"),
-            temperature: input("temperature").value === "" ? null : Number(input("temperature").value),
-            knowledge_bases: list("knowledge-bases"),
-        };
-        const response = await authFetch(
+        const label = input("label").value.trim();
+        const brief = input("soul").value.trim();
+        const payload = { label, soul: brief };
+        if (!profileId) {
+            payload.id = profileIdFromLabel(label);
+            payload.description = brief;
+        }
+        let response = await authFetch(
             profileId ? `/api/profiles/${encodeURIComponent(profileId)}` : "/api/profiles",
             {
                 method: profileId ? "PUT" : "POST",
@@ -223,14 +220,23 @@ async function openProfileModal(profileId = null) {
                 body: JSON.stringify(payload),
             }
         );
+        if (!profileId && response.status === 409 && payload.id) {
+            payload.id = `${payload.id.slice(0, 44).replace(/-+$/g, "")}-${Date.now().toString(16).slice(-4)}`;
+            response = await authFetch("/api/profiles", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+        }
         if (!response.ok) {
             const body = await response.json().catch(() => ({}));
-            overlay.querySelector("#profile-modal-error").textContent = body.error || (typeof t === "function" ? t("profiles.save_fail") : "Unable to save profile.");
+            overlay.querySelector("#profile-modal-error").textContent = body.error || profileText("profiles.save_fail", "Unable to save profile.", "Не удалось сохранить профиль.");
             return;
         }
+        const saved = await response.json().catch(() => ({}));
         await fetchProfiles();
         close();
-        if (!profileId) await switchProfile(payload.id);
+        if (!profileId) await switchProfile(saved.id || "");
     });
 }
 

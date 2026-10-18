@@ -3,7 +3,7 @@
    Brand accent: Shiba Gold #dbaa79
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap');
 
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root {
@@ -66,7 +66,7 @@
     --chat-width: 860px;
 
     /* Typography */
-    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body: Inter, "Noto Sans SC", "Noto Sans JP", "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Yu Gothic UI", sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
     /* Z-index scale — semantic, no magic numbers */

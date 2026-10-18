@@ -14,7 +14,6 @@
         { id: "ja", label: "日本語", short: "JA" },
         { id: "de", label: "Deutsch", short: "DE" },
         { id: "fr", label: "Français", short: "FR" },
-        { id: "it", label: "Italiano", short: "IT" },
         { id: "ru", label: "Русский", short: "RU" },
     ];
 

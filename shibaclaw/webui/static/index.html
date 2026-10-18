@@ -20,14 +20,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap"
         rel="stylesheet">
 
     <!-- Google Material Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
     <!-- Styles -->
-    <link rel="stylesheet" href="/static/bundle.css?v=1792239799456">
+    <link rel="stylesheet" href="/static/bundle.css?v=202610181738">
 
     <!-- WebSocket adapter and Marked.js -->
     <script src="/static/vendor/marked.min.js"></script>
@@ -85,8 +85,7 @@
                                 data-i18n-title="workspace.workspace_summary" title="Workspace status"
                                 onclick="toggleWorkspaceStatus(event)">
                                 <div class="status-dot disconnected" id="status-dot"></div>
-                                <span class="status-text" id="status-text"
-                                    data-i18n="status.connecting">Connecting...</span>
+                                <span class="status-text" id="status-text">Gateway</span>
                                 <button class="btn-restart" id="btn-restart" onclick="restartGateway()"
                                     data-i18n-title="restart.gateway" data-i18n-aria="restart.gateway"
                                     title="Restart Gateway" tabindex="-1" aria-label="Restart Gateway">
@@ -245,6 +244,87 @@
                         </button>
                         <div class="profile-dropdown" id="profile-dropdown"></div>
                     </div>
+<!-- Model Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="model-selector-wrapper"
+                                    style="position: relative;">
+                                    <button class="btn-input-action" id="btn-model-select"
+                                        data-i18n-title="chat.model_title" title="Change active model for session">
+                                        <span class="material-icons-round">auto_awesome</span>
+                                        <span id="active-model-display" data-i18n="common.default">Default</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 4px; font-size: 16px;">expand_more</span>
+                                    </button>
+                                <div class="model-dropdown-menu" id="model-dropdown-menu" style="display: none;">
+                                    <input type="text" id="model-search-input" placeholder="Search models..."
+                                        data-i18n-placeholder="common.search_models"
+                                        data-i18n-aria="common.search_models" autocomplete="off"
+                                        aria-label="Search models...">
+                                    <div class="model-list" id="model-list-container">
+                                        <!-- Models injected here -->
+                                        <div style="padding: 10px; color: var(--text-2); text-align: center; font-size: 0.85rem;"
+                                            data-i18n="chat.loading_models">
+                                            Loading models...</div>
+                                    </div>
+                                </div>
+                                
+                                </div>
+                                <!-- Reasoning Effort Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="reasoning-selector-wrapper"
+                                    style="position: relative;">
+                                    <button class="btn-input-action" id="btn-reasoning-select"
+                                        data-i18n-title="chat.reasoning_title"
+                                        title="Change reasoning effort for active session">
+                                        <span class="material-icons-round">psychology</span>
+                                        <span id="active-reasoning-display">Effort: Default</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 2px; font-size: 16px;">expand_more</span>
+                                    </button>
+                                    <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
+                                        style="display: none; min-width: 150px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary); backdrop-filter: blur(12px);">
+                                        <div
+                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span
+                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
+                                                data-i18n="chat.reasoning_effort">Reasoning Effort</span>
+                                        </div>
+                                        <div class="model-dropdown-list" id="reasoning-dropdown-list"
+                                            style="max-height: 200px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
+                                            <!-- populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Knowledge Base Selector Dropdown -->
+                                <div class="model-selector-wrapper" id="kb-selector-wrapper"
+                                    style="position: relative;">
+                                    <button class="btn-input-action" id="btn-kb-select" data-i18n-title="chat.kb_title"
+                                        title="Select active Knowledge Bases">
+                                        <span class="material-icons-round">library_books</span>
+                                        <span id="active-kb-display">KBs (0)</span>
+                                        <span class="material-icons-round"
+                                            style="margin-left: 2px; font-size: 16px;">expand_more</span>
+                                    </button>
+                                    <div class="model-dropdown-menu premium-dropdown" id="kb-dropdown-menu"
+                                        style="display: none; min-width: 170px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary);">
+                                        <div
+                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
+                                            <span
+                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
+                                                data-i18n="chat.collections">Collections</span>
+                                            <span class="material-icons-round"
+                                                onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';"
+                                                style="font-size: 15px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;"
+                                                onmouseover="this.style.color='var(--text-color)'"
+                                                onmouseout="this.style.color='var(--text-muted)'"
+                                                data-i18n-title="chat.manage_collections"
+                                                title="Manage Collections">settings</span>
+                                        </div>
+                                        <div class="model-dropdown-list" id="kb-dropdown-list"
+                                            style="max-height: 220px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
+                                            <!-- populated dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+
                 </div>
                 <div class="subagent-feedback-container" id="subagent-feedback-container" style="display:none;">
                     <div class="subagent-avatar" id="subagent-avatar-btn" data-i18n-title="chrome.active_subagents"
@@ -358,8 +438,8 @@
                     <div class="workspace-composer">
                         <div class="input-container">
                             <button class="btn-attach" id="btn-composer-plus" type="button" aria-expanded="false"
-                                data-i18n-aria="chat.composer_plus" data-i18n-title="chat.composer_plus"
-                                title="Add" aria-label="Add">
+                                data-i18n-aria="chat.attach" data-i18n-title="chat.attach"
+                                title="Attach files or images" aria-label="Attach files or images">
                                 <span class="material-icons-round">add</span>
                             </button>
                             <button class="btn-attach" id="btn-mic" data-i18n-title="chat.voice"
@@ -396,85 +476,6 @@
                                     <span class="material-icons-round">attach_file</span>
                                     <span data-i18n="chat.attach">Attach files or images</span>
                                 </button>
-                                <!-- Model Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="model-selector-wrapper"
-                                    style="position: relative;">
-                                    <button class="btn-input-action" id="btn-model-select"
-                                        data-i18n-title="chat.model_title" title="Change active model for session">
-                                        <span class="material-icons-round">auto_awesome</span>
-                                        <span id="active-model-display" data-i18n="common.default">Default</span>
-                                        <span class="material-icons-round"
-                                            style="margin-left: 4px; font-size: 16px;">arrow_drop_up</span>
-                                    </button>
-                                </div>
-                                <!-- Reasoning Effort Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="reasoning-selector-wrapper"
-                                    style="position: relative;">
-                                    <button class="btn-input-action" id="btn-reasoning-select"
-                                        data-i18n-title="chat.reasoning_title"
-                                        title="Change reasoning effort for active session">
-                                        <span class="material-icons-round">psychology</span>
-                                        <span id="active-reasoning-display">Effort: Default</span>
-                                        <span class="material-icons-round"
-                                            style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
-                                    </button>
-                                    <div class="model-dropdown-menu premium-dropdown" id="reasoning-dropdown-menu"
-                                        style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 150px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary); backdrop-filter: blur(12px);">
-                                        <div
-                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                            <span
-                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
-                                                data-i18n="chat.reasoning_effort">Reasoning Effort</span>
-                                        </div>
-                                        <div class="model-dropdown-list" id="reasoning-dropdown-list"
-                                            style="max-height: 200px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
-                                            <!-- populated dynamically -->
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- Knowledge Base Selector Dropdown -->
-                                <div class="model-selector-wrapper" id="kb-selector-wrapper"
-                                    style="position: relative;">
-                                    <button class="btn-input-action" id="btn-kb-select" data-i18n-title="chat.kb_title"
-                                        title="Select active Knowledge Bases">
-                                        <span class="material-icons-round">library_books</span>
-                                        <span id="active-kb-display">KBs (0)</span>
-                                        <span class="material-icons-round"
-                                            style="margin-left: 2px; font-size: 16px;">arrow_drop_up</span>
-                                    </button>
-                                    <div class="model-dropdown-menu premium-dropdown" id="kb-dropdown-menu"
-                                        style="display: none; bottom: calc(100% + 8px); top: auto; min-width: 170px; width: max-content; padding: 4px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.45); overflow: hidden; background: var(--bg-secondary);">
-                                        <div
-                                            style="padding: 6px 10px 4px 10px; display: flex; justify-content: space-between; align-items: center;">
-                                            <span
-                                                style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); font-weight: 600;"
-                                                data-i18n="chat.collections">Collections</span>
-                                            <span class="material-icons-round"
-                                                onclick="openModal('knowledge-modal'); document.getElementById('kb-dropdown-menu').style.display = 'none';"
-                                                style="font-size: 15px; color: var(--text-muted); cursor: pointer; transition: color 0.2s;"
-                                                onmouseover="this.style.color='var(--text-color)'"
-                                                onmouseout="this.style.color='var(--text-muted)'"
-                                                data-i18n-title="chat.manage_collections"
-                                                title="Manage Collections">settings</span>
-                                        </div>
-                                        <div class="model-dropdown-list" id="kb-dropdown-list"
-                                            style="max-height: 220px; overflow-y: auto; padding: 2px; display: flex; flex-direction: column; gap: 1px;">
-                                            <!-- populated dynamically -->
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="model-dropdown-menu" id="model-dropdown-menu" style="display: none;">
-                                    <input type="text" id="model-search-input" placeholder="Search models..."
-                                        data-i18n-placeholder="common.search_models"
-                                        data-i18n-aria="common.search_models" autocomplete="off"
-                                        aria-label="Search models...">
-                                    <div class="model-list" id="model-list-container">
-                                        <!-- Models injected here -->
-                                        <div style="padding: 10px; color: var(--text-2); text-align: center; font-size: 0.85rem;"
-                                            data-i18n="chat.loading_models">
-                                            Loading models...</div>
-                                    </div>
-                                </div>
                                 <button class="btn-input-action" id="btn-context" onclick="openModal('context-modal')"
                                     data-i18n-title="chat.context_title" title="View context">
                                     <span class="material-icons-round">psychology</span>
@@ -1248,17 +1249,17 @@
             </div>
             <div class="modal-body" style="display:flex; flex-direction:column; gap:12px;">
                 <div class="field-row" style="flex-direction:column; align-items:stretch;">
-                    <label data-i18n="password.current">Current Password</label>
+                    <label for="cp-old" data-i18n="password.current">Current Password</label>
                     <input type="password" id="cp-old" class="form-input" placeholder="Current password"
                         data-i18n-placeholder="password.ph_current">
                 </div>
                 <div class="field-row" style="flex-direction:column; align-items:stretch;">
-                    <label data-i18n="password.new">New Password</label>
+                    <label for="cp-new" data-i18n="password.new">New Password</label>
                     <input type="password" id="cp-new" class="form-input" placeholder="New password (min 6 chars)"
                         data-i18n-placeholder="password.ph_new">
                 </div>
                 <div class="field-row" style="flex-direction:column; align-items:stretch;">
-                    <label data-i18n="password.confirm">Confirm New Password</label>
+                    <label for="cp-confirm" data-i18n="password.confirm">Confirm New Password</label>
                     <input type="password" id="cp-confirm" class="form-input" placeholder="Confirm new password"
                         data-i18n-placeholder="password.ph_confirm">
                 </div>
@@ -1825,9 +1826,9 @@
                 <p style="margin-bottom:16px; color:var(--text-muted)" data-i18n="kb.desc">Manage collections of
                     documents for the agent to
                     reference.</p>
-                <div style="display:flex; gap:8px; margin-bottom: 16px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom: 16px;">
                     <input type="text" id="kb-new-name" class="form-input" placeholder="New collection name"
-                        data-i18n-placeholder="kb.new_ph" style="flex:1">
+                        data-i18n-placeholder="kb.new_ph" data-i18n-aria="kb.new_ph" style="flex:1">
                     <button class="btn-primary" onclick="createKB()" style="width: auto; min-width: 80px;"
                         id="kb-btn-create" data-i18n="kb.create">Create</button>
                 </div>
@@ -1892,7 +1893,7 @@
         </div>
     </div>
 
-    <script src="/static/bundle.js?v=1792248820187"></script>
+    <script src="/static/bundle.js?v=202610181738"></script>
     <script src="/static/js/evolve.js?v=1792239799456"></script>
     <script src="/static/js/chat_history_window.js?v=1792239799456"></script>
 </body>
